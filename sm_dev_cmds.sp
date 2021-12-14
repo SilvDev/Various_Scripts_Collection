@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.30"
+#define PLUGIN_VERSION 		"1.31"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,10 @@
 
 ========================================================================================
 	Change Log:
+
+1.31 (14-Dec-2021)
+	- Added command "sm_users" to report total bots and clients that connected and the last UserID index.
+	- Changed command "sm_listens" to output more information about sounds. Thanks to "Marttt" for writing.
 
 1.30 (23-Nov-2021)
 	- Blocked various in-game commands from being used on the server.
@@ -242,7 +246,7 @@ bool g_bFirst = true;
 int g_sprite;
 
 bool g_bDirector = true, g_bAll, g_bNB, g_bNospawn, g_bDamage;
-int g_iGAMETYPE, g_iEntsSpit[MAXPLAYERS], g_iLedge[MAXPLAYERS], g_iDamageRequestor;
+int g_iGAMETYPE, g_iEntsSpit[MAXPLAYERS], g_iLedge[MAXPLAYERS], g_iDamageRequestor, g_iTotalBots, g_iTotalPlays, g_iLastUserID;
 float g_vAng[MAXPLAYERS+1][3], g_vPos[MAXPLAYERS+1][3];
 
 ConVar sb_hold_position, sb_stop, sv_cheats, mp_gamemode, z_background_limit, z_boomer_limit, z_charger_limit, z_common_limit, z_hunter_limit, z_jockey_limit, z_minion_limit, z_smoker_limit, z_spitter_limit, director_no_bosses, director_no_mobs, director_no_specials;
@@ -350,6 +354,7 @@ public void OnPluginStart()
 	RegAdminCmd("sm_delweps",		CmdDelWeps,		ADMFLAG_ROOT, "[#userid|name] delete weapons from targeted clients, or no args = self.");
 	RegAdminCmd("sm_getspeed",		CmdSpeed,		ADMFLAG_ROOT, "<#userid|name> Get the speed of the specified clients.");
 	RegAdminCmd("sm_clients",		CmdClients,		ADMFLAG_ROOT, "Lists client indexes/userids and some other data.");
+	RegAdminCmd("sm_users",			CmdUsers,		ADMFLAG_ROOT, "Prints the total amount of bots and clients who had connected and the last UserID to have connected.");
 	RegAdminCmd("sm_ice",			CmdFreeze,		ADMFLAG_ROOT, "[entity]. Freeze / unfreeze aim target or specified entity.");
 	RegAdminCmd("sm_damage",		CmdDamage,		ADMFLAG_ROOT, "<client index>. Track damage info deal to this client or by this client. -1 or empty to track everybody.");
 	RegAdminCmd("sm_solid",			CmdSolid,		ADMFLAG_ROOT, "<flags>. Returns the SolidType_t flags from a flag value.");
@@ -2455,6 +2460,12 @@ public Action CmdClients(int client, int args)
 	return Plugin_Handled;
 }
 
+public Action CmdUsers(int client, int args)
+{
+	ReplyToCommand(client, "[SM] Total Bots: %d. Total Clients: %d. Last UserID: %d", g_iTotalBots, g_iTotalPlays, g_iLastUserID);
+	return Plugin_Handled;
+}
+
 public Action CmdFreeze(int client, int args)
 {
 	if( !client )
@@ -2782,6 +2793,13 @@ public Action CmdAdm(int client, int args)
 
 public void OnClientPutInServer(int client)
 {
+	if( IsFakeClient(client) )
+		g_iTotalBots++;
+	else
+		g_iTotalPlays++;
+
+	g_iLastUserID = GetClientUserId(client);
+
 	g_iAdmin[client] = 0;
 
 	if( g_bDamage )
@@ -3561,13 +3579,29 @@ public Action CmdListen(int client, int args)
 
 public Action SoundHookA(char sample[PLATFORM_MAX_PATH], int &entity, float &volume, int &level, int &pitch, float pos[3], int &flags, float &delay)
 {
-	PrintToChatAll("%s", sample);
+	PrintToChatAll("\x05A_Sample: \x01%s", sample);
+	PrintToChatAll("\x0A_Sent: \x01%d \x05vol: \x01%.2f \x05lvl: \x01%d \x05pch: \x01%d \x05flg: \x01%d", entity, volume, level, pitch, flags);
+
 	return Plugin_Continue;
 }
 
 public Action SoundHookN(int clients[64], int &numClients, char sample[PLATFORM_MAX_PATH], int &entity, int &channel, float &volume, int &level, int &pitch, int &flags)
 {
-	PrintToChatAll("%s", sample);
+	static char strchannel[19];
+	if( channel == -1 ) strchannel = "REPLACE";
+	if( channel == 0 ) strchannel = "AUTO";
+	if( channel == 1 ) strchannel = "WEAPON";
+	if( channel == 2 ) strchannel = "VOICE";
+	if( channel == 3 ) strchannel = "ITEM";
+	if( channel == 4 ) strchannel = "BODY";
+	if( channel == 5 ) strchannel = "STREAM";
+	if( channel == 6 ) strchannel = "STATIC";
+	if( channel == 7 ) strchannel = "VOICE_BASE";
+	if( channel == 135 ) strchannel = "USER_BASE";
+
+	PrintToChatAll("\x05N_Sample: \x01%s", sample);
+	PrintToChatAll("\x0N_Sent: \x01%d \x05num: \x01%d \x05cnl: \x01%d %s \x05vol: \x01%.2f \x05lvl: \x01%d \x05pch: \x01%d \x05flg: \x01%d", entity, numClients, channel, strchannel, volume, level, pitch, flags);
+
 	return Plugin_Continue;
 }
 
