@@ -1,6 +1,6 @@
 /*
 *	Special Infected Ability Movement
-*	Copyright (C) 2020 Silvers
+*	Copyright (C) 2022 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.8"
+#define PLUGIN_VERSION 		"1.9"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.9 (02-Feb-2022)
+	- Added cvar "l4d_infected_movement_bots" to control which bots this plugin enables for. Requested by "Alexmy".
 
 1.8 (30-Sep-2020)
 	- Fixed compile errors on SM 1.11.
@@ -73,8 +76,8 @@
 #define CVAR_FLAGS			FCVAR_NOTIFY
 
 
-ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarSmoker, g_hCvarType, g_hSpeedSmoke, g_hSpeedSpit, g_hSpeedTank, g_hSpeedSmokeDef, g_hSpeedSpitDef, g_hSpeedTankDef;
-int g_iCvarAllow, g_iCvarSmoker, g_iCvarType, g_iClassTank;
+ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarBots, g_hCvarSmoker, g_hCvarType, g_hSpeedSmoke, g_hSpeedSpit, g_hSpeedTank, g_hSpeedSmokeDef, g_hSpeedSpitDef, g_hSpeedTankDef;
+int g_iCvarAllow, g_iCvarBots, g_iCvarSmoker, g_iCvarType, g_iClassTank;
 bool g_bCvarAllow, g_bMapStarted, g_bLeft4Dead2;
 float g_fSpeedSmoke, g_fSpeedSmokeDef, g_fSpeedSpit, g_fSpeedSpitDef, g_fSpeedTank, g_fSpeedTankDef;
 float g_fTime[MAXPLAYERS+1];
@@ -119,12 +122,13 @@ public void OnPluginStart()
 	g_hCvarModes =		CreateConVar(	"l4d_infected_movement_modes",			"",				"Turn on the plugin in these game modes, separate by commas (no spaces). (Empty = all).", CVAR_FLAGS );
 	g_hCvarModesOff =	CreateConVar(	"l4d_infected_movement_modes_off",		"",				"Turn off the plugin in these game modes, separate by commas (no spaces). (Empty = none).", CVAR_FLAGS );
 	g_hCvarModesTog =	CreateConVar(	"l4d_infected_movement_modes_tog",		"0",			"Turn on the plugin in these game modes. 0=All, 1=Coop, 2=Survival, 4=Versus, 8=Scavenge. Add numbers together.", CVAR_FLAGS );
+	g_hCvarBots =		CreateConVar(	"l4d_infected_movement_bots",			"7",			"These Special Infected bots can use: 1=Smoker, 2=Spitter, 4=Tank, 7=All. Add numbers together.", CVAR_FLAGS );
 	g_hCvarSmoker =		CreateConVar(	"l4d_infected_movement_smoker",			"2",			"0=Only on shooting. 1=Smokers can move while pulling someone. 2=Smokers can also move when someone is hanging from the tongue.", CVAR_FLAGS );
 	g_hSpeedSmoke =		CreateConVar(	"l4d_infected_movement_speed_smoker",	"250",			"How fast can Smokers move while using their ability.", CVAR_FLAGS );
 	g_hSpeedTank =		CreateConVar(	"l4d_infected_movement_speed_tank",		"250",			"How fast can Tanks move while using their ability.", CVAR_FLAGS );
 	if( g_bLeft4Dead2 )
 		g_hSpeedSpit =	CreateConVar(	"l4d_infected_movement_speed_spitter",	"250",			"How fast can Spitters move while using their ability.", CVAR_FLAGS );
-	g_hCvarType =		CreateConVar(	"l4d_infected_movement_type",			"7",			"These Special Infected can use: 1=Smoker, 2=Spitter, 4=Tank, 7=All.", CVAR_FLAGS );
+	g_hCvarType =		CreateConVar(	"l4d_infected_movement_type",			"7",			"These Special Infected players can use: 1=Smoker, 2=Spitter, 4=Tank, 7=All. Add numbers together.", CVAR_FLAGS );
 	CreateConVar(						"l4d_infected_movement_version",		PLUGIN_VERSION, "Ability Movement plugin version.", FCVAR_NOTIFY|FCVAR_DONTRECORD);
 	AutoExecConfig(true,				"l4d_infected_movement");
 
@@ -134,6 +138,7 @@ public void OnPluginStart()
 	g_hCvarModes.AddChangeHook(ConVarChanged_Allow);
 	g_hCvarModesOff.AddChangeHook(ConVarChanged_Allow);
 	g_hCvarModesTog.AddChangeHook(ConVarChanged_Allow);
+	g_hCvarBots.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarType.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarSmoker.AddChangeHook(ConVarChanged_Cvars);
 	g_hSpeedSmoke.AddChangeHook(ConVarChanged_Cvars);
@@ -197,7 +202,8 @@ void GetCvars()
 	g_fSpeedTank = g_hSpeedTank.FloatValue;
 	g_fSpeedTankDef = g_hSpeedTankDef.FloatValue;
 	g_iCvarSmoker = g_hCvarSmoker.IntValue;
-	g_iCvarType = g_hCvarType.IntValue;
+	g_iCvarType = g_hCvarBots.IntValue;
+	g_iCvarBots = g_hCvarType.IntValue;
 }
 
 void IsAllowed()
@@ -347,7 +353,15 @@ public void Event_Use(Event event, const char[] name, bool dontBroadcast)
 		case 8: class = 2;
 		default: class = 99;
 	}
-	if( !(g_iCvarType & (1 << class)) ) return;
+
+	if( IsFakeClient(client) )
+	{
+		if( !(g_iCvarBots & (1 << class)) ) return;
+	}
+	else
+	{
+		if( !(g_iCvarType & (1 << class)) ) return;
+	}
 
 
 	// Bots check
