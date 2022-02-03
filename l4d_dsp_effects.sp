@@ -1,6 +1,6 @@
 /*
 *	DSP Effects
-*	Copyright (C) 2021 Silvers
+*	Copyright (C) 2022 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.3"
+#define PLUGIN_VERSION 		"1.4"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.4 (02-Feb-2022)
+	- Fixed invalid client errors. Thanks to "sonic155" for reporting.
 
 1.3 (20-Nov-2021)
 	- Fixed ledge hanging distorting sound. Thanks to "TypicalType" for reporting.
@@ -138,7 +141,7 @@ void ResetPlugin()
 {
 	for( int i = 1; i <= MaxClients; i++ )
 	{
-		if( g_bSetDSP[i] )
+		if( g_bSetDSP[i] && IsClientInGame(i) )
 		{
 			SetEffects(i, 1);
 			g_bSetDSP[i] = false;
