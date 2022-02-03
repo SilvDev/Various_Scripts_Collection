@@ -1,6 +1,6 @@
 /*
 *	Reload Interrupt
-*	Copyright (C) 2021 Silvers
+*	Copyright (C) 2022 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.9"
+#define PLUGIN_VERSION 		"1.10"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.10 (15-Jan-2022)
+	- Fixed L4D1 not reading reserve ammo correctly. Thanks to "ZBzibing" for reporting.
 
 1.9 (27-Oct-2021)
 	- Fixed the plugin wiping reserve ammo if it was turned off during gameplay.
@@ -78,7 +81,7 @@
 
 ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarRestart, g_hCvarWeapons;
 bool g_bCvarAllow, g_bMapStarted, g_bLeft4Dead2;
-int g_iCvarRestart, g_iOffsetAmmo, g_iCvarWeapons;
+int g_iCvarRestart, g_iOffsetAmmo, g_iPrimaryAmmoType, g_iCvarWeapons;
 int g_iForceTicks;		// How many times to force the IN_RELOAD buttons (otherwise some weapons e.g. shotguns will not auto reload after multiple shots).
 
 int g_iLastAmmo[MAXPLAYERS+1];
@@ -87,7 +90,6 @@ int g_iLastHook[MAXPLAYERS+1];
 int g_iWasShoot[MAXPLAYERS+1];
 int g_iAutoReload[MAXPLAYERS+1];
 
-StringMap g_hWeaponOffsets;
 StringMap g_hWeaponClasses;
 StringMap g_hWeaponAllowed;
 
@@ -211,28 +213,7 @@ public void OnPluginStart()
 
 	// Offsets to setting reserve ammo
 	g_iOffsetAmmo = FindSendPropInfo("CTerrorPlayer", "m_iAmmo");
-
-	g_hWeaponOffsets = new StringMap();
-	g_hWeaponOffsets.SetValue("weapon_rifle", 12);
-	g_hWeaponOffsets.SetValue("weapon_smg", 20);
-	g_hWeaponOffsets.SetValue("weapon_pumpshotgun", 28);
-	g_hWeaponOffsets.SetValue("weapon_shotgun_chrome", 28);
-	g_hWeaponOffsets.SetValue("weapon_autoshotgun", 32);
-	g_hWeaponOffsets.SetValue("weapon_hunting_rifle", 36);
-
-	if( g_bLeft4Dead2 )
-	{
-		g_hWeaponOffsets.SetValue("weapon_rifle_sg552", 12);
-		g_hWeaponOffsets.SetValue("weapon_rifle_desert", 12);
-		g_hWeaponOffsets.SetValue("weapon_rifle_ak47", 12);
-		g_hWeaponOffsets.SetValue("weapon_smg_silenced", 20);
-		g_hWeaponOffsets.SetValue("weapon_smg_mp5", 20);
-		g_hWeaponOffsets.SetValue("weapon_shotgun_spas", 32);
-		g_hWeaponOffsets.SetValue("weapon_sniper_scout", 40);
-		g_hWeaponOffsets.SetValue("weapon_sniper_military", 40);
-		g_hWeaponOffsets.SetValue("weapon_sniper_awp", 40);
-		// g_hWeaponOffsets.SetValue("weapon_grenade_launcher", 68);
-	}
+	g_iPrimaryAmmoType = FindSendPropInfo("CBaseCombatWeapon", "m_iPrimaryAmmoType");
 
 	// Indexes for sounds
 	g_hWeaponClasses = new StringMap();
@@ -668,10 +649,8 @@ void OnSwitchWeapon(int client, int weapon)
 	}
 	else
 	{
-		offset = 0;
-		g_hWeaponOffsets.GetValue(sWeapon, offset);
-
-		if( offset )
+		offset = GetEntData(weapon, g_iPrimaryAmmoType) * 4; // Thanks to "Root" or whoever for this method of not hard-coding offsets: https://github.com/zadroot/AmmoManager/blob/master/scripting/ammo_manager.sp
+		if( offset && (!g_bLeft4Dead2 || offset != 68) )
 		{
 			g_iAutoReload[client] = (offset == 28 || offset == 32) ? 3 : 1;
 			g_iLastHook[client] = EntIndexToEntRef(weapon);
@@ -782,17 +761,14 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 		g_iWasShoot[client]--;
 		buttons |= IN_RELOAD;
 	}
+
+	return Plugin_Continue;
 }
 
 // Reserve ammo
 int GetOrSetPlayerAmmo(int client, int iWeapon, int iAmmo = -1)
 {
-	char sWeapon[32];
-	GetEdictClassname(iWeapon, sWeapon, sizeof(sWeapon));
-
-	int offset;
-	g_hWeaponOffsets.GetValue(sWeapon, offset);
-
+	int offset = GetEntData(iWeapon, g_iPrimaryAmmoType) * 4; // Thanks to "Root" or whoever for this method of not hard-coding offsets: https://github.com/zadroot/AmmoManager/blob/master/scripting/ammo_manager.sp
 	if( offset )
 	{
 		if( iAmmo != -1 ) SetEntData(client, g_iOffsetAmmo + offset, iAmmo);
