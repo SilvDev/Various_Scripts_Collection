@@ -1,6 +1,6 @@
 /*
 *	Damaged Grenades Explode
-*	Copyright (C) 2021 Silvers
+*	Copyright (C) 2022 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.5"
+#define PLUGIN_VERSION 		"1.7"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,12 @@
 
 ========================================================================================
 	Change Log:
+
+1.7 (27-Jan-2022)
+	- Fixed copy paste mistake from last update sometimes throwing errors.
+
+1.6 (26-Jan-2022)
+	- Fixed spawners detonating when no grenades are visible. Thanks to "Shao" for reporting.
 
 1.5 (23-Oct-2021)
 	- Fixed error from invalid clients.
@@ -214,7 +220,7 @@ void IsAllowed()
 				entity = -1;
 				while( (entity = FindEntityByClassname(entity, "weapon_molotov_spawn")) != INVALID_ENT_REFERENCE )
 				{
-					SDKHook(entity, SDKHook_OnTakeDamage, OnTakeDamageM);
+					SDKHook(entity, SDKHook_OnTakeDamage, OnTakeDamageM_Spawn);
 					SetEntProp(entity, Prop_Data, "m_takedamage", 1);
 				}
 			}
@@ -233,7 +239,7 @@ void IsAllowed()
 				entity = -1;
 				while( (entity = FindEntityByClassname(entity, "weapon_pipe_bomb_spawn")) != INVALID_ENT_REFERENCE )
 				{
-					SDKHook(entity, SDKHook_OnTakeDamage, OnTakeDamageP);
+					SDKHook(entity, SDKHook_OnTakeDamage, OnTakeDamageP_Spawn);
 					SetEntProp(entity, Prop_Data, "m_takedamage", 1);
 				}
 			}
@@ -252,7 +258,7 @@ void IsAllowed()
 				entity = -1;
 				while( (entity = FindEntityByClassname(entity, "weapon_vomitjar_spawn")) != INVALID_ENT_REFERENCE )
 				{
-					SDKHook(entity, SDKHook_OnTakeDamage, OnTakeDamageV);
+					SDKHook(entity, SDKHook_OnTakeDamage, OnTakeDamageV_Spawn);
 					SetEntProp(entity, Prop_Data, "m_takedamage", 1);
 				}
 			}
@@ -272,7 +278,7 @@ void IsAllowed()
 		entity = -1;
 		while( (entity = FindEntityByClassname(entity, "weapon_molotov_spawn")) != INVALID_ENT_REFERENCE )
 		{
-			SDKUnhook(entity, SDKHook_OnTakeDamage, OnTakeDamageM);
+			SDKUnhook(entity, SDKHook_OnTakeDamage, OnTakeDamageM_Spawn);
 			SetEntProp(entity, Prop_Data, "m_takedamage", 0);
 		}
 
@@ -285,7 +291,7 @@ void IsAllowed()
 		entity = -1;
 		while( (entity = FindEntityByClassname(entity, "weapon_pipe_bomb_spawn")) != INVALID_ENT_REFERENCE )
 		{
-			SDKUnhook(entity, SDKHook_OnTakeDamage, OnTakeDamageP);
+			SDKUnhook(entity, SDKHook_OnTakeDamage, OnTakeDamageP_Spawn);
 			SetEntProp(entity, Prop_Data, "m_takedamage", 0);
 		}
 
@@ -298,7 +304,7 @@ void IsAllowed()
 		entity = -1;
 		while( (entity = FindEntityByClassname(entity, "weapon_vomitjar_spawn")) != INVALID_ENT_REFERENCE )
 		{
-			SDKUnhook(entity, SDKHook_OnTakeDamage, OnTakeDamageV);
+			SDKUnhook(entity, SDKHook_OnTakeDamage, OnTakeDamageV_Spawn);
 			SetEntProp(entity, Prop_Data, "m_takedamage", 0);
 		}
 
@@ -362,7 +368,10 @@ public void OnEntityCreated(int entity, const char[] classname)
 	{
 		if( g_bCvarSpawn || classname[14] == 0 )
 		{
-			SDKHook(entity, SDKHook_OnTakeDamage, OnTakeDamageM);
+			if( classname[14] == 0 )
+				SDKHook(entity, SDKHook_OnTakeDamage, OnTakeDamageM);
+			else
+				SDKHook(entity, SDKHook_OnTakeDamage, OnTakeDamageM_Spawn);
 
 			if( g_bCvarSpawn && classname[14] != 0 )
 				RequestFrame(OnFrameSpawn, EntIndexToEntRef(entity));
@@ -373,7 +382,10 @@ public void OnEntityCreated(int entity, const char[] classname)
 	{
 		if( g_bCvarSpawn || classname[16] == 0 )
 		{
-			SDKHook(entity, SDKHook_OnTakeDamage, OnTakeDamageP);
+			if( classname[16] == 0 )
+				SDKHook(entity, SDKHook_OnTakeDamage, OnTakeDamageP);
+			else
+				SDKHook(entity, SDKHook_OnTakeDamage, OnTakeDamageP_Spawn);
 
 			if( g_bCvarSpawn && classname[16] != 0 )
 				RequestFrame(OnFrameSpawn, EntIndexToEntRef(entity));
@@ -384,7 +396,10 @@ public void OnEntityCreated(int entity, const char[] classname)
 	{
 		if( g_bCvarSpawn || classname[15] == 0 )
 		{
-			SDKHook(entity, SDKHook_OnTakeDamage, OnTakeDamageV);
+			if( classname[15] == 0 )
+				SDKHook(entity, SDKHook_OnTakeDamage, OnTakeDamageV);
+			else
+				SDKHook(entity, SDKHook_OnTakeDamage, OnTakeDamageV_Spawn);
 
 			if( g_bCvarSpawn && classname[15] != 0 )
 				RequestFrame(OnFrameSpawn, EntIndexToEntRef(entity));
@@ -403,16 +418,43 @@ public void OnFrameSpawn(int entity)
 public Action OnTakeDamageM(int entity, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
 	OnTakeDamageFunction(entity, attacker, inflictor, damagetype, TYPE_MOLO);
+	return Plugin_Continue;
 }
 
 public Action OnTakeDamageP(int entity, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
 	OnTakeDamageFunction(entity, attacker, inflictor, damagetype, TYPE_PIPE);
+	return Plugin_Continue;
 }
 
 public Action OnTakeDamageV(int entity, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
 	OnTakeDamageFunction(entity, attacker, inflictor, damagetype, TYPE_VOMI);
+	return Plugin_Continue;
+}
+
+public Action OnTakeDamageM_Spawn(int entity, int &attacker, int &inflictor, float &damage, int &damagetype)
+{
+	int flag = GetEntProp(entity, Prop_Data, "m_spawnflags");
+	if( flag & (1<<3) || GetEntProp(entity, Prop_Data, "m_itemCount") >= 1 )
+		OnTakeDamageFunction(entity, attacker, inflictor, damagetype, TYPE_MOLO);
+	return Plugin_Continue;
+}
+
+public Action OnTakeDamageP_Spawn(int entity, int &attacker, int &inflictor, float &damage, int &damagetype)
+{
+	int flag = GetEntProp(entity, Prop_Data, "m_spawnflags");
+	if( flag & (1<<3) || GetEntProp(entity, Prop_Data, "m_itemCount") >= 1 )
+		OnTakeDamageFunction(entity, attacker, inflictor, damagetype, TYPE_PIPE);
+	return Plugin_Continue;
+}
+
+public Action OnTakeDamageV_Spawn(int entity, int &attacker, int &inflictor, float &damage, int &damagetype)
+{
+	int flag = GetEntProp(entity, Prop_Data, "m_spawnflags");
+	if( flag & (1<<3) || GetEntProp(entity, Prop_Data, "m_itemCount") >= 1 )
+		OnTakeDamageFunction(entity, attacker, inflictor, damagetype, TYPE_VOMI);
+	return Plugin_Continue;
 }
 
 void OnTakeDamageFunction(int entity, int attacker, int inflictor, int damagetype, int type)
@@ -476,7 +518,7 @@ public Action TimerDetonate(Handle timer, DataPack dPack)
 	// Verify entity
 	int entity = dPack.ReadCell();
 	entity = EntRefToEntIndex(entity);
-	if( entity == INVALID_ENT_REFERENCE ) return;
+	if( entity == INVALID_ENT_REFERENCE ) return Plugin_Continue;
 
 	// Read
 	int type = dPack.ReadCell();
@@ -484,6 +526,8 @@ public Action TimerDetonate(Handle timer, DataPack dPack)
 	float vPos[3];
 	GetEntPropVector(entity, Prop_Data, "m_vecOrigin", vPos);
 	ExplodeEntity(client, entity, type, vPos);
+
+	return Plugin_Continue;
 }
 
 
