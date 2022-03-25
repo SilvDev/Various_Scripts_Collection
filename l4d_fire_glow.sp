@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.7"
+#define PLUGIN_VERSION 		"1.8"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.8 (25-Mar-2022)
+	- Better fade in and out timing.
 
 1.7 (22-Mar-2022)
 	- Changed the method for fading lights in and out hopefully preventing random server crash.
@@ -365,9 +368,10 @@ public Action TimerCreate(Handle timer, any target)
 			RequestFrame(OnFrameFade);
 		}
 
-		g_iTick[index] = 1;
-		g_fFaderEnd[index] = GetGameTime() + fInfernoTime - flTickInterval * iTickRate - 1.0;
-		g_fFaderStart[index] = GetGameTime() + flTickInterval * iTickRate + 1.0;
+		g_iTick[index] = 7;
+		g_fFaderEnd[index] = GetGameTime() + fInfernoTime - (flTickInterval * iTickRate);
+		g_fFaderStart[index] = GetGameTime() + flTickInterval * iTickRate + 2.0;
+		g_fFaderTick[index] = GetGameTime() - 1.0;
 
 		/* Old method (causes rare crash with too many inputs)
 		// Fade in
@@ -389,7 +393,7 @@ public Action TimerCreate(Handle timer, any target)
 		AcceptEntityInput(entity, "FireUser2");
 		*/
 
-		Format(sTemp, sizeof(sTemp), "OnUser3 !self:Kill::%f:-1", fInfernoTime);
+		Format(sTemp, sizeof(sTemp), "OnUser3 !self:Kill::%f:-1", fInfernoTime + 1.0);
 		SetVariantString(sTemp);
 		AcceptEntityInput(entity, "AddOutput");
 		AcceptEntityInput(entity, "FireUser3");
