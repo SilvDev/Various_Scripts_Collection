@@ -1,6 +1,6 @@
 /*
 *	No Reload Animation Fix - Picking Up Same Weapon
-*	Copyright (C) 2021 Silvers
+*	Copyright (C) 2022 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.3"
+#define PLUGIN_VERSION 		"1.4"
 
 /*======================================================================================
 	Plugin Info:
@@ -32,8 +32,11 @@
 ========================================================================================
 	Change Log:
 
+1.4 (29-Mar-2022)
+	- Fixed not always detecting the correct current weapon. Thanks to "Forgetest" for fixing.
+
 1.3 (02-Nov-2021)
-	- Fixed including the different weapon skins as the same weapon. Thanks to "tRololo312312" for reporting.
+	- Fixed treating different weapon skins as the same weapon. Thanks to "tRololo312312" for reporting.
 
 1.2 (06-Jul-2021)
 	- Fixed throwing errors about invalid entity. Thanks to "HarryPotter" for reporting.
@@ -50,6 +53,7 @@
 #pragma newdecls required
 
 #include <sourcemod>
+#include <sdktools>
 #include <sdkhooks>
 
 int g_iClipAmmo[MAXPLAYERS+1];
@@ -122,7 +126,7 @@ public void WeaponCanUse(int client, int weapon)
 	if( GetClientTeam(client) == 2 )
 	{
 		// Validate weapon
-		int current = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
+		int current = GetPlayerWeaponSlot(client, 0);
 		if( current == -1 ) return;
 
 		// Identical skin
