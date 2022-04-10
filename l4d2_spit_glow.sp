@@ -285,7 +285,7 @@ public Action TimerCreate(Handle timer, any target)
 		if( index == -1 )
 			return Plugin_Continue;
 
-		char sTemp[32];
+		static char sTemp[64];
 		int entity = CreateEntityByName("light_dynamic");
 		if( entity == -1)
 		{
