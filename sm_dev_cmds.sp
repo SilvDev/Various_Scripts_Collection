@@ -1,6 +1,6 @@
 /*
 *	Dev Cmds
-*	Copyright (C) 2021 Silvers
+*	Copyright (C) 2022 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.31"
+#define PLUGIN_VERSION 		"1.32"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,10 @@
 
 ========================================================================================
 	Change Log:
+
+1.32 (10-Apr-2022)
+	- Changed command "sm_ent" to allow aiming at clients. Requested by "Sreaper".
+	- Changed command "sm_weapons" to include the currently held object/item/weapon.
 
 1.31 (14-Dec-2021)
 	- Added command "sm_users" to report total bots and clients that connected and the last UserID index.
@@ -1620,7 +1624,7 @@ public Action CmdEnt(int client, int args)
 	}
 
 	int entity = GetClientAimTarget(client, false);
-	if( entity > MaxClients )
+	if( entity > 0 )
 	{
 		char sName[64], sClass[64];
 		GetEdictClassname(entity, sClass, sizeof(sClass));
@@ -2166,6 +2170,14 @@ public Action CmdWeapons(int client, int args)
 	}
 
 	ReplyToCommand(client, "Showing weapons for: %N", target);
+
+	weapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
+	if( weapon != -1 )
+	{
+		GetEdictClassname(weapon, classname, sizeof(classname));
+		ReplyToCommand(client, "Held = %d. %s", weapon, classname);
+	}
+
 	for( int i = 0; i <= 5; i++ )
 	{
 		weapon = GetPlayerWeaponSlot(target, i);
@@ -4443,7 +4455,7 @@ stock void SetEntitySolid(int entity, bool doSolid)
 	else
 	{
 		if( m_nSolidType != 0 )
-			SetEntProp(entity, Prop_Send,	"m_nSolidType",		SOLID_NONE,	1);
+			SetEntProp(entity, Prop_Send,	"m_nSolidType",		view_as<int>(SOLID_NONE),	1);
 			
 		if( m_usSolidFlags & FSOLID_NOT_SOLID == 0 )
 			SetEntProp(entity, Prop_Send,	"m_usSolidFlags", 	m_usSolidFlags | FSOLID_NOT_SOLID,	2);
