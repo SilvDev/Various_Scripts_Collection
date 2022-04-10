@@ -1,6 +1,6 @@
 /*
 *	First Map - Skip Intro Cutscenes
-*	Copyright (C) 2021 Silvers
+*	Copyright (C) 2022 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION		"1.12"
+#define PLUGIN_VERSION		"1.14"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.13 (10-Apr-2022)
+	- Fixed the "l4d_skip_intro_modes_tog" cvar always turning off the plugin. Thanks to "Thefollors" for reporting.
 
 1.12 (01-Dec-2021)
 	- Changes to fix warnings when compiling on SourceMod 1.11.
@@ -152,6 +155,16 @@ public void OnPluginStart()
 public void OnConfigsExecuted()
 {
 	IsAllowed();
+}
+
+public void OnMapStart()
+{
+	g_bMapStarted = true;
+}
+
+public void OnMapEnd()
+{
+	g_bMapStarted = false;
 }
 
 public void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
