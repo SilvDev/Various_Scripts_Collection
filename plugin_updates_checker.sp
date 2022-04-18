@@ -1,6 +1,6 @@
 /*
 *	Plugin Updates Checker
-*	Copyright (C) 2021 Silvers
+*	Copyright (C) 2022 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.4"
+#define PLUGIN_VERSION 		"1.5"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.5 (18-Apr-2022)
+	- Fixed some servers not displaying the updates and throwing an error. Thanks to "Psyk0tik" for reporting and testing.
 
 1.4 (07-Nov-2021)
 	- No longer checks for updates every map change.
@@ -589,7 +592,10 @@ void GetMainList(char[] response)
 	{
 		end = StrContains(response[pos], "\n");
 		if( end == -1 ) end = (len - pos) + 1;
-		response[pos + end] = 0;
+		if( pos + end < len )
+			response[pos + end] = 0;
+		else
+			response[len] = 0;
 
 		strcopy(sLine, sizeof(sLine), response[pos]);
 		TrimString(sLine);
