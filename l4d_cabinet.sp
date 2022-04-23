@@ -33,7 +33,7 @@
 	Change Log:
 
 1.12 (23-Apr-2022)
-	- Fixed cabinets spawning all the same items in the second round of Versus modes.
+	- Fixed cabinets spawning all the same items in the second round of Versus modes. Thanks to "dahyun4220" for reporting.
 	- Compatibility support for SourceMod 1.11. Fixed various warnings.
 
 1.11 (01-Jul-2021)
