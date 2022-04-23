@@ -1,6 +1,6 @@
 /*
 *	Weapon Spawn
-*	Copyright (C) 2021 Silvers
+*	Copyright (C) 2022 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.7"
+#define PLUGIN_VERSION 		"1.8"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.8 (23-Apr-2022)
+	- Changes to allow "CSS" weapons to spawn multiple copies with the "l4d_weapon_spawn_count" cvar. Thanks to "vikingo12" for reporting.
 
 1.7 (15-Feb-2021)
 	- Added new command "sm_weapon_spawn_mov" for direct console control of position. Thanks to "eyeonus" for scripting.
@@ -560,21 +563,22 @@ public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
 	if( g_iPlayerSpawn == 1 && g_iRoundStart == 0 )
-		CreateTimer(1.0, tmrStart, _, TIMER_FLAG_NO_MAPCHANGE);
+		CreateTimer(1.0, TimerStart, _, TIMER_FLAG_NO_MAPCHANGE);
 	g_iRoundStart = 1;
 }
 
 public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 {
 	if( g_iPlayerSpawn == 0 && g_iRoundStart == 1 )
-		CreateTimer(1.0, tmrStart, _, TIMER_FLAG_NO_MAPCHANGE);
+		CreateTimer(1.0, TimerStart, _, TIMER_FLAG_NO_MAPCHANGE);
 	g_iPlayerSpawn = 1;
 }
 
-public Action tmrStart(Handle timer)
+public Action TimerStart(Handle timer)
 {
 	ResetPlugin();
 	LoadSpawns();
+	return Plugin_Continue;
 }
 
 
@@ -695,8 +699,8 @@ void CreateSpawn(const float vOrigin[3], const float vAngles[3], int index = 0, 
 		{
 			model = GetRandomInt(0, MAX_WEAPONS2-1);
 
-			if( model == 15 || model == 18 )		model = GetRandomInt(0, 14);
-			else if( model == 19 || model == 21 )	model = GetRandomInt(22, 28);
+			// if( model == 15 || model == 18 )		model = GetRandomInt(0, 14);
+			// else if( model == 19 || model == 21 )	model = GetRandomInt(22, 28);
 		} else {
 			model = GetRandomInt(0, MAX_WEAPONS-1);
 		}
@@ -708,12 +712,8 @@ void CreateSpawn(const float vOrigin[3], const float vAngles[3], int index = 0, 
 	int iCount = g_iCvarCount;
 	if( iCount != 1 )
 	{
-		if( model != 15 && model != 18 && model != 19 && model != 21 )
-			StrCat(classname, sizeof(classname), "_spawn");
-		else
-			iCount = 1;
+		StrCat(classname, sizeof(classname), "_spawn");
 	}
-
 
 	int entity_weapon = -1;
 	entity_weapon = CreateEntityByName(classname);
@@ -823,6 +823,8 @@ public int ListMenuHandler(Menu menu, MenuAction action, int client, int index)
 
 		g_hMenuList.Display(client, MENU_TIME_FOREVER);
 	}
+
+	return 0;
 }
 
 public Action CmdSpawnerTemp(int client, int args)
@@ -1266,6 +1268,8 @@ public int AngMenuHandler(Menu menu, MenuAction action, int client, int index)
 			SetAngle(client, index);
 		ShowMenuAng(client);
 	}
+
+	return 0;
 }
 
 void SetAngle(int client, int index)
@@ -1382,6 +1386,8 @@ public int PosMenuHandler(Menu menu, MenuAction action, int client, int index)
 			SetOrigin(client, index);
 		ShowMenuPos(client);
 	}
+
+	return 0;
 }
 
 void SetOrigin(int client, int index)
@@ -1613,7 +1619,7 @@ void RemoveSpawn(int index)
 		client = GetEntPropEnt(entity, Prop_Send, "m_hOwnerEntity");
 		if( client < 0 || client > MaxClients || !IsClientInGame(client) )
 		{
-			AcceptEntityInput(entity, "kill");
+			RemoveEntity(entity);
 		}
 	}
 }
