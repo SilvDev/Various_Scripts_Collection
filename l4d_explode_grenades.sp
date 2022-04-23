@@ -1,5 +1,5 @@
 /*
-*	Damaged Grenades Explode
+*	Damage Explodes Grenades
 *	Copyright (C) 2022 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
@@ -18,12 +18,12 @@
 
 
 
-#define PLUGIN_VERSION 		"1.7"
+#define PLUGIN_VERSION 		"1.8"
 
 /*======================================================================================
 	Plugin Info:
 
-*	Name	:	[L4D & L4D2] Damaged Grenades Explode
+*	Name	:	[L4D & L4D2] Damage Explodes Grenades
 *	Author	:	SilverShot (idea by backwards)
 *	Descrp	:	Detonates grenades on the ground when damaged: shot, or something nearby explodes or ignites them.
 *	Link	:	https://forums.alliedmods.net/showthread.php?t=334500
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.8 (23-Apr-2022)
+	- Compatibility update for "PipeBomb Damage Modifier" plugin. Thanks to "Shao" for reporting.
 
 1.7 (27-Jan-2022)
 	- Fixed copy paste mistake from last update sometimes throwing errors.
@@ -75,7 +78,7 @@
 #define MODEL_PROPANE		"models/props_junk/propanecanister001a.mdl"
 
 ConVar g_hCvarAllow, g_hCvarBoom, g_hCvarSpawn, g_hCvarTime, g_hCvarType, g_hCvarTypes, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog;
-bool g_bCvarAllow, g_bLeft4Dead2, g_bMapStarted, g_bCvarBoom, g_bCvarSpawn;
+bool g_bCvarAllow, g_bLeft4Dead2, g_bMapStarted, g_bExploding, g_bCvarBoom, g_bCvarSpawn;
 float g_fCvarTime;
 int g_iCvarType, g_iCvarTypes;
 
@@ -405,6 +408,18 @@ public void OnEntityCreated(int entity, const char[] classname)
 				RequestFrame(OnFrameSpawn, EntIndexToEntRef(entity));
 		}
 	}
+
+	else if( g_bExploding && strcmp(classname, "pipe_bomb_projectile") == 0 )
+	{
+		g_bExploding = false;
+		SDKHook(entity, SDKHook_SpawnPost, OnSpawnPost);
+	}
+}
+
+
+public void OnSpawnPost(int entity)
+{
+	SetEntProp(entity, Prop_Data, "m_iHammerID", 19712806);
 }
 
 // Frame delay required to enable damage so OnTakeDamage picks up the grenades being shot
@@ -577,7 +592,7 @@ void CreateExplosion(int client, float vPos[3], const char[] sModelName)
 	{
 		DispatchKeyValue(entity, "model", sModelName);
 
-		// Hide from view (multiple hides still show the gascan for a split second sometimes, but works better than only using 1 of them)
+		// Hide from view (multiple hides still show the gascan/propane tank for a split second sometimes, but works better than only using 1 of them)
 		SDKHook(entity, SDKHook_SetTransmit, OnTransmitExplosive);
 
 		// Hide from view
@@ -604,6 +619,8 @@ void CreateExplosion(int client, float vPos[3], const char[] sModelName)
 		SetEntPropFloat(entity, Prop_Data, "m_flLastPhysicsInfluenceTime", GetGameTime());
 
 		// Explode
+		g_bExploding = true;
 		AcceptEntityInput(entity, "Break");
+		g_bExploding = false;
 	}
 }
