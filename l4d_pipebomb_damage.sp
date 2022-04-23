@@ -1,6 +1,6 @@
 /*
 *	PipeBomb Damage Modifier
-*	Copyright (C) 2021 Silvers
+*	Copyright (C) 2022 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.6"
+#define PLUGIN_VERSION 		"1.7"
 
 /*======================================================================================
 	Plugin Info:
@@ -32,8 +32,11 @@
 ========================================================================================
 	Change Log:
 
+1.7 (23-Apr-2022)
+	- Compatibility update for the "Damaged Grenades Explode" plugin. Thanks to "Shao" for reporting.
+
 1.6 (14-Jul-2021)
-	- Compatibility update for "Bots Ignore PipeBombs and Shoot" plugin.
+	- Compatibility update for the "Bots Ignore PipeBombs and Shoot" plugin.
 
 1.5 (15-May-2020)
 	- Fixed 1.3 changes breaking the plugin from working.
@@ -71,7 +74,7 @@
 
 ConVar g_hCvarAllow, g_hDecayDecay, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarSpecial, g_hCvarSelf, g_hCvarSurvivor, g_hCvarTank;
 float g_fCvarSpecial, g_fCvarSelf, g_fCvarSurvivor, g_fCvarTank, g_fGameTime;
-bool g_bCvarAllow, g_bMapStarted, g_bLeft4Dead2, g_bPipebombIgnore;
+bool g_bCvarAllow, g_bMapStarted, g_bLeft4Dead2;
 int g_iClassTank;
 
 
@@ -99,11 +102,6 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 		return APLRes_SilentFailure;
 	}
 	return APLRes_Success;
-}
-
-public void OnAllPluginsLoaded()
-{
-	g_bPipebombIgnore = FindConVar("l4d_pipebomb_ignore_version") != null;
 }
 
 public void OnPluginStart()
@@ -316,16 +314,18 @@ public void HookClients(bool hook)
 
 public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
-	if( inflictor > MaxClients && damagetype & (DMG_BLAST|DMG_BLAST_SURFACE) && g_fGameTime != GetGameTime() )
+	if( inflictor > MaxClients && damagetype & (DMG_BLAST|DMG_BLAST_SURFACE) )
 	{
 		char classname[22];
 		GetEdictClassname(inflictor, classname, sizeof(classname));
-		if( strcmp(classname, "pipe_bomb_projectile") == 0 || (g_bPipebombIgnore && strcmp(classname, "prop_physics") == 0 && GetEntProp(inflictor, Prop_Data, "m_iHammerID") == 19712806) )
+
+		if( (g_fGameTime != GetGameTime() && strcmp(classname, "pipe_bomb_projectile") == 0) || GetEntProp(inflictor, Prop_Data, "m_iHammerID") == 19712806 ) // 19712806 used by "Damaged Grenades Explode" and "Bots Ignore PipeBombs and Shoot" to identify damage
 		{
 			int team = GetClientTeam(victim);
 			if( team == 3 )
 			{
 				int class = GetEntProp(victim, Prop_Send, "m_zombieClass");
+
 				if( class == g_iClassTank )
 					damage *= g_fCvarTank;
 				else
