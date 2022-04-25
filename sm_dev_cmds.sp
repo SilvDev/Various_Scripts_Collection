@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.32"
+#define PLUGIN_VERSION 		"1.33"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,10 @@
 
 ========================================================================================
 	Change Log:
+
+1.33 (25-Apr-2022)
+	- Changed commands "sm_prop*" to get or set entity indexes which contain "m_h" in the keyname. Requested by "Sreaper".
+	- Changed command "sm_users" to count the last UserID better.
 
 1.32 (10-Apr-2022)
 	- Changed command "sm_ent" to allow aiming at clients. Requested by "Sreaper".
@@ -2810,7 +2814,8 @@ public void OnClientPutInServer(int client)
 	else
 		g_iTotalPlays++;
 
-	g_iLastUserID = GetClientUserId(client);
+	int user = GetClientUserId(client);
+	if( user > g_iLastUserID ) g_iLastUserID = user;
 
 	g_iAdmin[client] = 0;
 
@@ -2966,9 +2971,9 @@ void PropertyValue(int client, int entity, int args, const char sProp[64], const
 			if( proptype == PropField_Integer )
 			{
 				if( client )
-					PrintToChat(client, "\x05%d\x01) \x03Prop_Send\x01 integer \"%s\" \"%s\" is \x05%d", entity, sClass, sProp, GetEntProp(entity, Prop_Send, sProp));
+					PrintToChat(client, "\x05%d\x01) \x03Prop_Send\x01 integer \"%s\" \"%s\" is \x05%d", entity, sClass, sProp, strncmp(sProp, "m_h", 3) == 0 ? GetEntPropEnt(entity, Prop_Send, sProp) : GetEntProp(entity, Prop_Send, sProp));
 				else
-					ReplyToCommand(client, "%d) Prop_Send integer \"%s\" \"%s\" is %d", entity, sClass, sProp, GetEntProp(entity, Prop_Send, sProp));
+					ReplyToCommand(client, "%d) Prop_Send integer \"%s\" \"%s\" is %d", entity, sClass, sProp, strncmp(sProp, "m_h", 3) == 0 ? GetEntPropEnt(entity, Prop_Send, sProp) : GetEntProp(entity, Prop_Send, sProp));
 			}
 			else if( proptype == PropField_Entity )
 			{
@@ -3029,9 +3034,9 @@ void PropertyValue(int client, int entity, int args, const char sProp[64], const
 			if( proptype == PropField_Integer )
 			{
 				if( client )
-					PrintToChat(client, "\x05%d\x01) \x05Prop_Data\x01 integer \"%s\" \"%s\" is \x05%d", entity, sClass, sProp, GetEntProp(entity, Prop_Data, sProp));
+					PrintToChat(client, "\x05%d\x01) \x05Prop_Data\x01 integer \"%s\" \"%s\" is \x05%d", entity, sClass, sProp, strncmp(sProp, "m_h", 3) == 0 ? GetEntPropEnt(entity, Prop_Data, sProp) : GetEntProp(entity, Prop_Data, sProp));
 				else
-					ReplyToCommand(client, "%d) Prop_Data integer \"%s\" \"%s\" is %d", entity, sClass, sProp, GetEntProp(entity, Prop_Data, sProp));
+					ReplyToCommand(client, "%d) Prop_Data integer \"%s\" \"%s\" is %d", entity, sClass, sProp, strncmp(sProp, "m_h", 3) == 0 ? GetEntPropEnt(entity, Prop_Data, sProp) : GetEntProp(entity, Prop_Data, sProp));
 			}
 			else if( proptype == PropField_Entity )
 			{
@@ -3096,7 +3101,11 @@ void PropertyValue(int client, int entity, int args, const char sProp[64], const
 			if( proptype == PropField_Integer )
 			{
 				int value = StringToInt(sValue);
-				SetEntProp(entity, Prop_Send, sProp, value);
+
+				if( strncmp(sProp, "m_h", 3) == 0 )
+					SetEntPropEnt(entity, Prop_Send, sProp, value);
+				else
+					SetEntProp(entity, Prop_Send, sProp, value);
 
 				if( client )
 					PrintToChat(client, "\x05%d\x01) Set \x03Prop_Send\x01 integer \"%s\" \"%s\" to \x05%d", entity, sClass, sProp, value);
