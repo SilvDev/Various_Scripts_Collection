@@ -1,6 +1,6 @@
 /*
 *	Glare
-*	Copyright (C) 2021 Silvers
+*	Copyright (C) 2022 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"2.7"
+#define PLUGIN_VERSION 		"2.8"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,10 @@
 
 ========================================================================================
 	Change Log:
+
+2.8 (29-Apr-2022)
+	- Added cvar "l4d_glare_bots" to control if bots can use the Glare Beams. Requested by "Voevoda".
+	- Fixed cvar "l4d_glare_default" to only affect new players who haven't set a glare color. Thanks to "Voevoda" for reporting.
 
 2.7 (18-Sep-2021)
 	- Menu now returns to the page it was on before selecting an option.
@@ -116,8 +120,8 @@
 #define ATTACHMENT_POINT		"flashlight"
 
 
-ConVar g_hCvarAllow, g_hCvarAlpha, g_hCvarColor, g_hCvarCustom, g_hCvarDefault, g_hCvarHalo, g_hCvarLength, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarTransmit, g_hCvarWidth;
-int g_iCvarAlpha, g_iCvarColor, g_iCvarCustom, g_iCvarDefault, g_iCvarLength, g_iCvarTransmit, g_iCvarWidth;
+ConVar g_hCvarAllow, g_hCvarAlpha, g_hCvarBots, g_hCvarColor, g_hCvarCustom, g_hCvarDefault, g_hCvarHalo, g_hCvarLength, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarTransmit, g_hCvarWidth;
+int g_iCvarAlpha, g_iCvarBots, g_iCvarColor, g_iCvarCustom, g_iCvarDefault, g_iCvarLength, g_iCvarTransmit, g_iCvarWidth;
 bool g_bCvarAllow, g_bMapStarted, g_bLateLoad, g_bLeft4Dead2, g_bAttachments;
 float g_fCvarHalo;
 Handle g_hCookie;
@@ -207,6 +211,7 @@ public void OnPluginStart()
 	LoadTranslations("core.phrases");
 
 	g_hCvarAllow =			CreateConVar(	"l4d_glare_allow",		"1",			"0=Plugin off, 1=Plugin on.", CVAR_FLAGS );
+	g_hCvarBots =			CreateConVar(	"l4d_glare_bots",		"2",			"Can bots have Glare beams? 0=Off. 1=Give using the _color cvar. 2=Give random color.", CVAR_FLAGS );
 	g_hCvarAlpha =			CreateConVar(	"l4d_glare_bright",		"155.0",		"Brightness of the beam.", CVAR_FLAGS );
 	g_hCvarColor =			CreateConVar(	"l4d_glare_color",		"250 250 200",	"The beam color. RGB (red, green, blue) values (0-255).", CVAR_FLAGS );
 	g_hCvarCustom =			CreateConVar(	"l4d_glare_custom",		"2",			"0=Use servers glare color. 1=Allow clients to customise the glare color. 2=Save and restore clients custom glare color.", CVAR_FLAGS );
@@ -227,6 +232,7 @@ public void OnPluginStart()
 	g_hCvarModes.AddChangeHook(ConVarChanged_Allow);
 	g_hCvarModesOff.AddChangeHook(ConVarChanged_Allow);
 	g_hCvarModesTog.AddChangeHook(ConVarChanged_Allow);
+	g_hCvarBots.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarAlpha.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarColor.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarCustom.AddChangeHook(ConVarChanged_Cvars);
@@ -290,13 +296,17 @@ public void OnPluginEnd()
 public void OnClientConnected(int client)
 {
 	g_iGlareColor[client] = g_iCvarColor;
-	if( g_iCvarDefault == 0 )
-		g_iLightState[client] = LIGHT_DEFAULT;
+
+	if( g_iCvarBots == 2 && IsFakeClient(client) )
+	{
+		g_iLightState[client] = LIGHT_ON;
+		g_iGlareColor[client] = GetRandomInt(0, 16776960);
+	}
 }
 
 public void OnClientCookiesCached(int client)
 {
-	if( g_iCvarCustom == 2 )
+	if( g_iCvarCustom == 2 && !IsFakeClient(client) )
 	{
 		char sCookie[10];
 		GetClientCookie(client, g_hCookie, sCookie, sizeof(sCookie));
@@ -320,6 +330,10 @@ public void OnClientCookiesCached(int client)
 				if( g_iPlayerEnum[client] == 0 && IsClientInGame(client) && GetEntProp(client, Prop_Send, "m_fEffects") == 4 )
 					CreateTimer(0.1, TimerLightOn, g_iLightIndex[client]);
 			}
+		}
+		else if( g_iCvarDefault == 0 )
+		{
+			g_iLightState[client] = LIGHT_DEFAULT;
 		}
 	}
 }
@@ -473,13 +487,14 @@ public int Menu_Light(Menu menu, MenuAction action, int client, int index)
 			if( index == 0 )
 			{
 				DeleteLight(client);
-				g_iLightState[client] = GetEntProp(client, Prop_Send, "m_fEffects") == 4 ? LIGHT_ON : LIGHT_OFF;
+				g_iLightState[client] = LIGHT_DEFAULT;
 
 				if( g_iCvarCustom == 2 )
 				{
 					SetClientCookie(client, g_hCookie, "0");
 				}
-				return;
+
+				return 0;
 			}
 
 			// Create
@@ -487,6 +502,7 @@ public int Menu_Light(Menu menu, MenuAction action, int client, int index)
 			menu.GetItem(index, sColor, sizeof(sColor));
 
 			g_iGlareColor[client] = GetColor(sColor);
+			g_iLightState[client] = GetEntProp(client, Prop_Send, "m_fEffects") == 4 ? LIGHT_ON : LIGHT_OFF;
 
 			if( g_iCvarCustom == 2 )
 			{
@@ -511,6 +527,8 @@ public int Menu_Light(Menu menu, MenuAction action, int client, int index)
 			}
 		}
 	}
+
+	return 0;
 }
 
 
@@ -550,6 +568,7 @@ void GetCvars()
 	g_iCvarColor = GetColor(sColor);
 	g_iCvarCustom = g_hCvarCustom.IntValue;
 	g_iCvarDefault = g_hCvarDefault.IntValue;
+	g_iCvarBots = g_hCvarBots.IntValue;
 	g_iCvarAlpha = g_hCvarAlpha.IntValue;
 	g_fCvarHalo = g_hCvarHalo.FloatValue;
 	g_iCvarLength = g_hCvarLength.IntValue;
@@ -596,7 +615,7 @@ void IsAllowed()
 		{
 			for( int i = 1; i <= MaxClients; i++ )
 			{
-				if( IsClientInGame(i) && !IsFakeClient(i) )
+				if( IsClientInGame(i) )
 				{
 					OnClientConnected(i);
 					OnClientCookiesCached(i);
@@ -609,6 +628,7 @@ void IsAllowed()
 
 	else if( g_bCvarAllow == true && (bCvarAllow == false || bAllowMode == false || g_bAttachments == false) )
 	{
+		g_bLateLoad = true;
 		g_bCvarAllow = false;
 		UnhookEvents();
 
@@ -742,7 +762,7 @@ void UnhookEvents()
 
 public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
-	for( int i = 1; i < MAXPLAYERS; i++ )
+	for( int i = 1; i <= MAXPLAYERS; i++ )
 	{
 		g_iPlayerEnum[i] = 0;
 		g_iWeaponIndex[i] = 0;
@@ -758,7 +778,7 @@ public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 	{
 		for( int i = 1; i <= MaxClients; i++ )
 		{
-			if( IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i) )
+			if( IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i) && !IsFakeClient(i) )
 			{
 				SetView(i, false);
 			}
@@ -862,7 +882,7 @@ public Action TimerDetect(Handle timer)
 
 	for( int i = 1; i <= MaxClients; i++ )
 	{
-		if( g_iLightIndex[i] && g_bDetected[i] == false && IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i) )
+		if( g_iLightIndex[i] && g_bDetected[i] == false && IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i) && !IsFakeClient(i) )
 		{
 			if( GetEntPropFloat(i, Prop_Send, "m_TimeForceExternalView") > GetGameTime() )
 				SetView(i, true);
@@ -872,7 +892,7 @@ public Action TimerDetect(Handle timer)
 	}
 
 	return Plugin_Continue;
-}
+}	
 
 public void TP_OnThirdPersonChanged(int client, bool bIsThirdPerson)
 {
@@ -911,11 +931,11 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 {
 	if( g_bCvarAllow )
 	{
-		if( g_iLightState[client] == LIGHT_DEFAULT ) return;
+		if( g_iLightState[client] == LIGHT_DEFAULT ) return Plugin_Continue;
 
 		int entity = g_iLightIndex[client];
 
-		if( GetClientTeam(client) == 2 && IsPlayerAlive(client) )
+		if( GetClientTeam(client) == 2 && IsPlayerAlive(client) && (g_iCvarBots || !IsFakeClient(client)) )
 		{
 			if( IsValidEntRef(entity) == false )
 			{
@@ -937,7 +957,7 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 						g_iPlayerEnum[client] |= ENUM_BLOCK;
 						AcceptEntityInput(entity, "LightOff");
 						g_iLightState[client] = LIGHT_OFF;
-						return;
+						return Plugin_Continue;
 					}
 
 					g_iPlayerEnum[client] &= ~ENUM_BLOCK;
@@ -998,6 +1018,8 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 				DeleteLight(client);
 		}
 	}
+
+	return Plugin_Continue;
 }
 
 public void Attachments_OnWeaponSwitch(int client, int weapon, int ent_views, int ent_world)
@@ -1094,6 +1116,8 @@ public Action TimerLightOn(Handle timer, any entity)
 	{
 		AcceptEntityInput(entity, "LightOn");
 	}
+
+	return Plugin_Continue;
 }
 
 bool IsValidEntRef(int entity)
