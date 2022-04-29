@@ -1,6 +1,6 @@
 /*
 *	Tongue Damage
-*	Copyright (C) 2021 Silvers
+*	Copyright (C) 2022 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.6"
+#define PLUGIN_VERSION 		"1.7"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,10 @@
 
 ========================================================================================
 	Change Log:
+
+1.7 (29-Apr-2022)
+	- Added cvar "l4d_tongue_damage_frames" to control if God Frames can protect a Survivor while being dragged (requires the "God Frames Patch" plugin).
+	- Plugin now optionally uses the "God Frames Patch" plugin to prevent damaging Survivors with God Frames. Thanks to "vikingo12" for reporting.
 
 1.6 (21-Jul-2021)
 	- Better more optimized method to prevent timer errors happening.
@@ -67,7 +71,7 @@
 #define CVAR_FLAGS			FCVAR_NOTIFY
 
 
-ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarDamage, g_hCvarTime;
+ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarDamage, g_hCvarFrames, g_hCvarTime;
 bool g_bCvarAllow, g_bMapStarted;
 bool g_bChoking[MAXPLAYERS+1], g_bBlockReset[MAXPLAYERS+1];
 Handle g_hTimers[MAXPLAYERS+1];
@@ -104,6 +108,7 @@ public void OnPluginStart()
 	g_hCvarModesOff =		CreateConVar(	"l4d_tongue_damage_modes_off",		"",					"Turn off the plugin in these game modes, separate by commas (no spaces). (Empty = none).", CVAR_FLAGS );
 	g_hCvarModesTog =		CreateConVar(	"l4d_tongue_damage_modes_tog",		"3",				"Turn on the plugin in these game modes. 0=All, 1=Coop, 2=Survival, 4=Versus, 8=Scavenge. Add numbers together.", CVAR_FLAGS );
 	g_hCvarDamage =			CreateConVar(	"l4d_tongue_damage_damage",			"5.0",				"How much damage to apply.", CVAR_FLAGS );
+	g_hCvarFrames =			CreateConVar(	"l4d_tongue_damage_frames",			"1",				"0=Damage Survivors when God Frames are active. 1=Allow God Frames to protect Survivors. (Requires the \"God Frames Patch\" plugin)", CVAR_FLAGS );
 	g_hCvarTime =			CreateConVar(	"l4d_tongue_damage_time",			"0.5",				"How often to damage players.", CVAR_FLAGS );
 	CreateConVar(							"l4d_tongue_damage_version",		PLUGIN_VERSION,		"Tongue Damage plugin version.", FCVAR_NOTIFY|FCVAR_DONTRECORD);
 	AutoExecConfig(true,					"l4d_tongue_damage");
@@ -331,12 +336,6 @@ public Action TimerDamage(Handle timer, any client)
 
 				g_bBlockReset[client] = true;
 				HurtEntity(client, attacker, g_hCvarDamage.FloatValue);
-				if( g_bBlockReset[client] == false )
-				{
-					g_hTimers[client] = null;
-					return Plugin_Stop;
-				}
-
 				g_bBlockReset[client] = false;
 				return Plugin_Continue;
 			}
@@ -347,7 +346,21 @@ public Action TimerDamage(Handle timer, any client)
 	return Plugin_Stop;
 }
 
+bool g_bTongueDamage;
 void HurtEntity(int victim, int client, float damage)
 {
+	g_bTongueDamage = true;
 	SDKHooks_TakeDamage(victim, client, client, damage, DMG_SLASH);
+	g_bTongueDamage = false;
+}
+
+public Action OnTakeDamage_Invulnerable(int client, int attacker, float &damage, float &damagetype)
+{
+	if( g_bTongueDamage && g_hCvarFrames.BoolValue )
+	{
+		damage = 0.0;
+		return Plugin_Changed;
+	}
+
+	return Plugin_Continue;
 }
