@@ -1,6 +1,6 @@
 /*
 *	Survivor Bot Holdout
-*	Copyright (C) 2021 Silvers
+*	Copyright (C) 2022 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.8"
+#define PLUGIN_VERSION 		"1.9"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,10 @@
 
 ========================================================================================
 	Change Log:
+
+1.9 (29-Apr-2022)
+	- Changed commands "sm_holdout" and "sm_holdout_temp" to accept the parameter "0" to spawn bots with random weapons.
+	- Thanks to "kot4404" for the idea and some code.
 
 1.8 (21-Sep-2021)
 	- Now spawns L4D2 Survivors as holdout Survivors!
@@ -114,6 +118,8 @@ ConVar g_hCvarAllow, g_hCvarFreeze, g_hCvarLasers, g_hCvarMPGameMode, g_hCvarMin
 int g_iAmmoPile[MAX_SURVIVORS], g_iCvarFreeze, g_iCvarLasers, g_iCvarMiniGun, g_iCvarPile, g_iCvarThrow, g_iCvarTimeMax, g_iCvarTimeMin, g_iDeathModel[MAXPLAYERS+1], g_iLogicTimer, g_iMiniGun, g_iOffsetAmmo, g_iPrimaryAmmoType, g_iPlayerSpawn, g_iRoundStart, g_iSurvivors[MAX_SURVIVORS], g_iType, g_iWeapons[MAX_SURVIVORS];
 bool g_bCvarAllow, g_bMapStarted, g_bLoaded;
 bool g_bBlocked;
+
+char g_sWeaponNames[15][23] = {"autoshotgun", "shotgun_chrome", "pumpshotgun", "shotgun_spas", "smg", "smg_mp5", "smg_silenced", "rifle_ak47", "rifle_sg552", "rifle", "rifle_desert", "hunting_rifle", "sniper_military", "sniper_awp", "sniper_scout"};
 
 char g_sLines_Nick[17][] =
 {
@@ -229,8 +235,8 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 
 public void OnPluginStart()
 {
-	RegAdminCmd("sm_holdout",		CmdHoldoutSave,		ADMFLAG_ROOT,	"Saves to the config for auto spawning or Deletes if already saved. Usage: sm_holdout <1=Francis, 2=Louis, 3=Zoey, 4=Bill, 5=Nick, 6=Rochelle, 7=Coach, 8=Ellis> [weapon name, eg: rifle_ak47].");
-	RegAdminCmd("sm_holdout_temp",	CmdHoldoutTemp,		ADMFLAG_ROOT,	"Spawn a temporary survivor (not saved). Usage: sm_holdout_temp <1=Francis, 2=Louis, 3=Zoey, 4=Bill, 5=Nick, 6=Rochelle, 7=Coach, 8=Ellis> [weapon name, eg: rifle_ak47].");
+	RegAdminCmd("sm_holdout",		CmdHoldoutSave,		ADMFLAG_ROOT,	"Saves to the config for auto spawning or Deletes if already saved. Usage: sm_holdout <1=Francis, 2=Louis, 3=Zoey, 4=Bill, 5=Nick, 6=Rochelle, 7=Coach, 8=Ellis> [weapon name, eg: rifle_ak47 or 0 for random weapon].");
+	RegAdminCmd("sm_holdout_temp",	CmdHoldoutTemp,		ADMFLAG_ROOT,	"Spawn a temporary survivor (not saved). Usage: sm_holdout_temp <1=Francis, 2=Louis, 3=Zoey, 4=Bill, 5=Nick, 6=Rochelle, 7=Coach, 8=Ellis> [weapon name, eg: rifle_ak47 or 0 for random weapon].");
 	RegAdminCmd("sm_holdout_give",	CmdHoldoutGive,		ADMFLAG_ROOT,	"Makes one of the survivors give an item.");
 
 	g_hCvarAllow = CreateConVar(	"l4d2_holdout_allow",			"1",			"0=Plugin off, 1=Plugin on.", CVAR_FLAGS );
@@ -680,6 +686,8 @@ public Action TimerStart(Handle timer)
 {
 	ResetPlugin();
 	LoadSurvivors();
+
+	return Plugin_Continue;
 }
 
 void LoadSurvivors()
@@ -1240,6 +1248,13 @@ void SpawnSurvivor(int type, float vPos[3], float vAng[3], char sWeapon[64])
 	if( sWeapon[0] )
 	{
 		char sTemp[64];
+
+		if( sWeapon[0] == '0' ) // Random weapon
+		{
+			int index = GetRandomInt(0, sizeof(g_sWeaponNames) - 1);
+			sWeapon = g_sWeaponNames[index];
+		}
+
 		Format(sTemp, sizeof(sTemp), "weapon_%s", sWeapon);
 
 		entity = CreateEntityByName(sTemp);
@@ -1290,7 +1305,7 @@ void SpawnSurvivor(int type, float vPos[3], float vAng[3], char sWeapon[64])
 }
 
 // Stops teleporting players of the same survivor type when spawning a holdout bot
-g_iAvoidChar[MAXPLAYERS+1] = {-1,...};
+int g_iAvoidChar[MAXPLAYERS+1] = {-1, ...};
 void AvoidCharacter(int type, bool avoid)
 {
 	for( int i = 1; i <= MaxClients; i++ )
@@ -1356,6 +1371,8 @@ public Action TimerMove(Handle timer, any client)
 		SetEntityMoveType(client, MOVETYPE_NONE);
 		TeleportEntity(client, NULL_VECTOR, NULL_VECTOR, view_as<float>({ 0.0, 0.0, 0.0 }));
 	}
+
+	return Plugin_Continue;
 }
 
 bool IsValidEntRef(int iEnt)
