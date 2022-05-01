@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.8"
+#define PLUGIN_VERSION 		"1.9"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.9 (01-May-2022)
+	- L4D2: Added cvar "l4d_explode_grenades_upgrade" to control if upgrade ammo can detonate grenades. Requested by "Voevoda".
 
 1.8 (23-Apr-2022)
 	- Compatibility update for "PipeBomb Damage Modifier" plugin. Thanks to "Shao" for reporting.
@@ -77,16 +80,22 @@
 #define	MODEL_GASCAN		"models/props_junk/gascan001a.mdl"
 #define MODEL_PROPANE		"models/props_junk/propanecanister001a.mdl"
 
-ConVar g_hCvarAllow, g_hCvarBoom, g_hCvarSpawn, g_hCvarTime, g_hCvarType, g_hCvarTypes, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog;
+ConVar g_hCvarAllow, g_hCvarBoom, g_hCvarSpawn, g_hCvarTime, g_hCvarType, g_hCvarTypes, g_hCvarUpgrade, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog;
 bool g_bCvarAllow, g_bLeft4Dead2, g_bMapStarted, g_bExploding, g_bCvarBoom, g_bCvarSpawn;
 float g_fCvarTime;
-int g_iCvarType, g_iCvarTypes;
+int g_iCvarType, g_iCvarTypes, g_iCvarUpgrade;
 
 enum
 {
 	TYPE_MOLO = 1,
 	TYPE_PIPE,
 	TYPE_VOMI
+}
+
+enum
+{
+	AMMO_INCEN = 1,
+	AMMO_EXPLO
 }
 
 
@@ -127,6 +136,8 @@ public void OnPluginStart()
 	g_hCvarTime =			CreateConVar(	"l4d_explode_grenades_time",			"5.0",			"After how many seconds does an ignited grenade detonate.", CVAR_FLAGS );
 	g_hCvarType =			CreateConVar(	"l4d_explode_grenades_type",			"7",			"Which types of grenades can ignite and then detonate. 1=Molotovs, 2=PipeBombs, 4=Vomit Jars. 7=All. Add numbers together.", CVAR_FLAGS );
 	g_hCvarTypes =			CreateConVar(	"l4d_explode_grenades_types",			"7",			"Which types of grenades can take damage and detonate. 1=Molotovs, 2=PipeBombs, 4=Vomit Jars. 7=All. Add numbers together.", CVAR_FLAGS );
+	if( g_bLeft4Dead2 )
+		g_hCvarUpgrade =	CreateConVar(	"l4d_explode_grenades_upgrade",			"3",			"Which types of upgrade ammo can detonate grenades. 0=None. 1=Incendiary ammo. 2=Explosive ammo. 3=Both.", CVAR_FLAGS );
 	CreateConVar(							"l4d_explode_grenades_version",			PLUGIN_VERSION,	"Damaged Grenades Explode plugin version.", FCVAR_NOTIFY|FCVAR_DONTRECORD);
 	AutoExecConfig(true,					"l4d_explode_grenades");
 
@@ -141,6 +152,8 @@ public void OnPluginStart()
 	g_hCvarTime.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarType.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarTypes.AddChangeHook(ConVarChanged_Cvars);
+	if( g_bLeft4Dead2 )
+		g_hCvarUpgrade.AddChangeHook(ConVarChanged_Cvars);
 
 	RegAdminCmd("sm_fire", CmdFire, ADMFLAG_ROOT, "Ignites the aimed entity. For testing");
 }
@@ -195,6 +208,8 @@ void GetCvars()
 	g_fCvarTime = g_hCvarTime.FloatValue;
 	g_iCvarType = g_hCvarType.IntValue;
 	g_iCvarTypes = g_hCvarTypes.IntValue;
+	if( g_bLeft4Dead2 )
+		g_iCvarUpgrade = g_hCvarUpgrade.IntValue;
 }
 
 void IsAllowed()
@@ -475,6 +490,18 @@ public Action OnTakeDamageV_Spawn(int entity, int &attacker, int &inflictor, flo
 void OnTakeDamageFunction(int entity, int attacker, int inflictor, int damagetype, int type)
 {
 	if( damagetype == DMG_CLUB ) return;
+
+	if( g_bLeft4Dead2 )
+	{
+		if( !g_iCvarUpgrade || ((g_iCvarUpgrade & AMMO_INCEN) == 0 || (g_iCvarUpgrade & AMMO_EXPLO) == 0) )
+		{
+			if( g_iCvarUpgrade & AMMO_INCEN == 0 && damagetype & DMG_BULLET && damagetype & DMG_BURN )
+				return;
+
+			if( g_iCvarUpgrade & AMMO_EXPLO == 0 && damagetype & DMG_BULLET && damagetype & DMG_BLAST && damagetype & DMG_PHYSGUN )
+				return;
+		}
+	}
 
 	if( damagetype & DMG_BURN && g_iCvarType & type )
 	{
