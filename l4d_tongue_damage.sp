@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.7"
+#define PLUGIN_VERSION 		"1.8"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,12 @@
 
 ========================================================================================
 	Change Log:
+
+1.8 (01-May-2022)
+	- Added cvar "l4d_tongue_damage_time_delay" to add a delay between being grabbed and when damage can start hurting players. Requested by "vikingo12".
+	- Plugin now optionally uses the "Left4DHooks" plugin to prevent damaging Survivors with God Frames. Requested by "vikingo12".
+	- Not sure if God Frames stuff is actually required.
+	- Thanks to "vikingo12" for testing.
 
 1.7 (29-Apr-2022)
 	- Added cvar "l4d_tongue_damage_frames" to control if God Frames can protect a Survivor while being dragged (requires the "God Frames Patch" plugin).
@@ -71,10 +77,22 @@
 #define CVAR_FLAGS			FCVAR_NOTIFY
 
 
-ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarDamage, g_hCvarFrames, g_hCvarTime;
-bool g_bCvarAllow, g_bMapStarted;
+ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarDamage, g_hCvarFrames, g_hCvarTimeDelay, g_hCvarTimeDmg;
+bool g_bCvarAllow, g_bMapStarted, g_bLeft4DHooks, g_bTongueDamage;
 bool g_bChoking[MAXPLAYERS+1], g_bBlockReset[MAXPLAYERS+1];
+float g_fDelay[MAXPLAYERS+1];
 Handle g_hTimers[MAXPLAYERS+1];
+
+// ==================================================
+// 				LEFT 4 DHOOKS - OPTIONAL
+// ==================================================
+enum CountdownTimer
+{
+	CTimer_Null = 0 /**< Invalid Timer when lookup fails */
+};
+
+native float CTimer_GetRemainingTime(CountdownTimer timer);
+native CountdownTimer L4D2Direct_GetInvulnerabilityTimer(int client);
 
 
 
@@ -98,7 +116,22 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 		strcopy(error, err_max, "Plugin only supports Left 4 Dead 1 & 2.");
 		return APLRes_SilentFailure;
 	}
+
+	MarkNativeAsOptional("L4D2Direct_GetInvulnerabilityTimer");
+
 	return APLRes_Success;
+}
+
+public void OnLibraryAdded(const char[] sName)
+{
+	if( strcmp(sName, "left4dhooks") == 0 )
+		g_bLeft4DHooks = true;
+}
+
+public void OnLibraryRemoved(const char[] sName)
+{
+	if( strcmp(sName, "left4dhooks") == 0 )
+		g_bLeft4DHooks = false;
 }
 
 public void OnPluginStart()
@@ -108,8 +141,9 @@ public void OnPluginStart()
 	g_hCvarModesOff =		CreateConVar(	"l4d_tongue_damage_modes_off",		"",					"Turn off the plugin in these game modes, separate by commas (no spaces). (Empty = none).", CVAR_FLAGS );
 	g_hCvarModesTog =		CreateConVar(	"l4d_tongue_damage_modes_tog",		"3",				"Turn on the plugin in these game modes. 0=All, 1=Coop, 2=Survival, 4=Versus, 8=Scavenge. Add numbers together.", CVAR_FLAGS );
 	g_hCvarDamage =			CreateConVar(	"l4d_tongue_damage_damage",			"5.0",				"How much damage to apply.", CVAR_FLAGS );
-	g_hCvarFrames =			CreateConVar(	"l4d_tongue_damage_frames",			"1",				"0=Damage Survivors when God Frames are active. 1=Allow God Frames to protect Survivors. (Requires the \"God Frames Patch\" plugin)", CVAR_FLAGS );
-	g_hCvarTime =			CreateConVar(	"l4d_tongue_damage_time",			"0.5",				"How often to damage players.", CVAR_FLAGS );
+	g_hCvarFrames =			CreateConVar(	"l4d_tongue_damage_frames",			"0",				"0=Damage Survivors when God Frames are active. 1=Allow God Frames to protect Survivors. (Requires \"Left4DHooks\" or the \"God Frames Patch\" plugin).", CVAR_FLAGS );
+	g_hCvarTimeDmg =		CreateConVar(	"l4d_tongue_damage_time",			"0.5",				"How often to damage players.", CVAR_FLAGS );
+	g_hCvarTimeDelay =		CreateConVar(	"l4d_tongue_damage_time_delay",		"0.0",				"How long after grabbing a Survivor until damage is allowed.", CVAR_FLAGS );
 	CreateConVar(							"l4d_tongue_damage_version",		PLUGIN_VERSION,		"Tongue Damage plugin version.", FCVAR_NOTIFY|FCVAR_DONTRECORD);
 	AutoExecConfig(true,					"l4d_tongue_damage");
 
@@ -241,6 +275,7 @@ void ResetPlugin()
 	{
 		delete g_hTimers[i];
 		g_bBlockReset[i] = false;
+		g_fDelay[i] = 0.0;
 	}
 }
 
@@ -259,6 +294,7 @@ public void OnClientDisconnect(int client)
 {
 	delete g_hTimers[client];
 	g_bBlockReset[client] = false;
+	g_fDelay[client] = 0.0;
 }
 
 public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
@@ -292,7 +328,8 @@ public void Event_GrabStart(Event event, const char[] name, bool dontBroadcast)
 		if( g_bCvarAllow )
 		{
 			delete g_hTimers[client];
-			g_hTimers[client] = CreateTimer(g_hCvarTime.FloatValue, TimerDamage, userid, TIMER_REPEAT);
+			g_fDelay[client] = GetGameTime() + g_hCvarTimeDelay.FloatValue;
+			g_hTimers[client] = CreateTimer(g_hCvarTimeDmg.FloatValue, TimerDamage, userid, TIMER_REPEAT);
 		}
 	}
 }
@@ -318,7 +355,7 @@ public Action TimerDamage(Handle timer, any client)
 	client = GetClientOfUserId(client);
 	if( client && IsClientInGame(client) && IsPlayerAlive(client) )
 	{
-		if( g_bChoking[client] )
+		if( g_bChoking[client] || (g_hCvarTimeDelay.FloatValue && g_fDelay[client] >= GetGameTime()) )
 			return Plugin_Continue;
 
 		if( GetEntProp(client, Prop_Send, "m_isHangingFromTongue") != 1 )
@@ -334,6 +371,16 @@ public Action TimerDamage(Handle timer, any client)
 				// Invalid timer handle e745136f (error 1) during timer end, displayed function is timer callback, not the stack trace
 				// Unable to call function "TimerDamage" due to above error(s).
 
+				if( g_hCvarFrames.BoolValue && g_bLeft4DHooks )
+				{
+					CountdownTimer cTimer = L4D2Direct_GetInvulnerabilityTimer(client); // left4dhooks
+					if( cTimer != CTimer_Null && CTimer_GetRemainingTime(cTimer) > 0.0 )
+					{
+						// Don't cause damage if invulnerable God Frames allowed
+						return Plugin_Continue;
+					}
+				}
+
 				g_bBlockReset[client] = true;
 				HurtEntity(client, attacker, g_hCvarDamage.FloatValue);
 				g_bBlockReset[client] = false;
@@ -346,7 +393,6 @@ public Action TimerDamage(Handle timer, any client)
 	return Plugin_Stop;
 }
 
-bool g_bTongueDamage;
 void HurtEntity(int victim, int client, float damage)
 {
 	g_bTongueDamage = true;
