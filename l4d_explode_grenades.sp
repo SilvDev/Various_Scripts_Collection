@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.9"
+#define PLUGIN_VERSION 		"1.10"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,10 @@
 
 ========================================================================================
 	Change Log:
+
+1.10 (04-May-2022)
+	- Added cvars "l4d_explode_grenades_delay_molo", "l4d_explode_grenades_delay_pipe" and "l4d_explode_grenades_delay_vomi" to delay explosion. Requested by "Voevoda".
+	- Added cvar "l4d_explode_grenades_detonate" to determine if grenades can explode after being picked up.
 
 1.9 (01-May-2022)
 	- L4D2: Added cvar "l4d_explode_grenades_upgrade" to control if upgrade ammo can detonate grenades. Requested by "Voevoda".
@@ -80,9 +84,9 @@
 #define	MODEL_GASCAN		"models/props_junk/gascan001a.mdl"
 #define MODEL_PROPANE		"models/props_junk/propanecanister001a.mdl"
 
-ConVar g_hCvarAllow, g_hCvarBoom, g_hCvarSpawn, g_hCvarTime, g_hCvarType, g_hCvarTypes, g_hCvarUpgrade, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog;
-bool g_bCvarAllow, g_bLeft4Dead2, g_bMapStarted, g_bExploding, g_bCvarBoom, g_bCvarSpawn;
-float g_fCvarTime;
+ConVar g_hCvarAllow, g_hCvarBoom, g_hCvarDelayM, g_hCvarDelayP, g_hCvarDelayV, g_hCvarExplode, g_hCvarSpawn, g_hCvarTime, g_hCvarType, g_hCvarTypes, g_hCvarUpgrade, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog;
+bool g_bCvarAllow, g_bLeft4Dead2, g_bMapStarted, g_bExploding, g_bCvarBoom, g_bCvarExplode, g_bCvarSpawn;
+float g_fCvarTime, g_fCvarDelayM, g_fCvarDelayP, g_fCvarDelayV;
 int g_iCvarType, g_iCvarTypes, g_iCvarUpgrade;
 
 enum
@@ -132,6 +136,11 @@ public void OnPluginStart()
 	g_hCvarModesOff =		CreateConVar(	"l4d_explode_grenades_modes_off",		"",				"Turn off the plugin in these game modes, separate by commas (no spaces). (Empty = none).", CVAR_FLAGS );
 	g_hCvarModesTog =		CreateConVar(	"l4d_explode_grenades_modes_tog",		"0",			"Turn on the plugin in these game modes. 0=All, 1=Coop, 2=Survival, 4=Versus, 8=Scavenge. Add numbers together.", CVAR_FLAGS );
 	g_hCvarBoom =			CreateConVar(	"l4d_explode_grenades_boomer",			"0",			"0=Off. 1=Boomer explosions can also explode grenades.", CVAR_FLAGS );
+	g_hCvarDelayM =			CreateConVar(	"l4d_explode_grenades_delay_molo",		"1.5",			"0.0=Instant. Delay exploding when damaged.", CVAR_FLAGS );
+	g_hCvarDelayP =			CreateConVar(	"l4d_explode_grenades_delay_pipe",		"1.5",			"0.0=Instant. Delay exploding when damaged.", CVAR_FLAGS );
+	if( g_bLeft4Dead2 )
+		g_hCvarDelayV =		CreateConVar(	"l4d_explode_grenades_delay_vomi",		"0.0",			"0.0=Instant. Delay exploding when damaged.", CVAR_FLAGS );
+	g_hCvarExplode =		CreateConVar(	"l4d_explode_grenades_detonate",		"1",			"0=No explosion when picking up a damaged grenade. 1=Explode after the _delay cvars when picking up a damaged grenade .", CVAR_FLAGS );
 	g_hCvarSpawn =			CreateConVar(	"l4d_explode_grenades_spawners",		"1",			"0=Off. 1=On. Should _spawn grenades (those which can have multiple grenades in 1 spawn) be allowed to ignite or explode.", CVAR_FLAGS );
 	g_hCvarTime =			CreateConVar(	"l4d_explode_grenades_time",			"5.0",			"After how many seconds does an ignited grenade detonate.", CVAR_FLAGS );
 	g_hCvarType =			CreateConVar(	"l4d_explode_grenades_type",			"7",			"Which types of grenades can ignite and then detonate. 1=Molotovs, 2=PipeBombs, 4=Vomit Jars. 7=All. Add numbers together.", CVAR_FLAGS );
@@ -148,6 +157,11 @@ public void OnPluginStart()
 	g_hCvarModesTog.AddChangeHook(ConVarChanged_Allow);
 	g_hCvarAllow.AddChangeHook(ConVarChanged_Allow);
 	g_hCvarBoom.AddChangeHook(ConVarChanged_Cvars);
+	g_hCvarDelayM.AddChangeHook(ConVarChanged_Cvars);
+	g_hCvarDelayP.AddChangeHook(ConVarChanged_Cvars);
+	if( g_bLeft4Dead2 )
+		g_hCvarDelayV.AddChangeHook(ConVarChanged_Cvars);
+	g_hCvarExplode.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarSpawn.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarTime.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarType.AddChangeHook(ConVarChanged_Cvars);
@@ -204,6 +218,11 @@ public void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char
 void GetCvars()
 {
 	g_bCvarBoom = g_hCvarBoom.BoolValue;
+	g_fCvarDelayM = g_hCvarDelayM.FloatValue;
+	g_fCvarDelayP = g_hCvarDelayP.FloatValue;
+	if( g_bLeft4Dead2 )
+		g_fCvarDelayV = g_hCvarDelayV.FloatValue;
+	g_bCvarExplode = g_hCvarExplode.BoolValue;
 	g_bCvarSpawn = g_hCvarSpawn.BoolValue;
 	g_fCvarTime = g_hCvarTime.FloatValue;
 	g_iCvarType = g_hCvarType.IntValue;
@@ -221,6 +240,8 @@ void IsAllowed()
 	if( g_bCvarAllow == false && bCvarAllow == true && bAllowMode == true )
 	{
 		g_bCvarAllow = true;
+
+		HookEvent("item_pickup",	Event_Pickup);
 
 		// Late load/enable - Hook entities
 		int entity = -1;
@@ -285,6 +306,8 @@ void IsAllowed()
 
 	else if( g_bCvarAllow == true && (bCvarAllow == false || bAllowMode == false) )
 	{
+		UnhookEvent("item_pickup",	Event_Pickup);
+
 		// Disable - Unhook entities
 		int entity = -1;
 
@@ -374,6 +397,29 @@ bool IsAllowedGameMode()
 	return true;
 }
 
+
+
+// ====================================================================================================
+//					EQUIP
+// ====================================================================================================
+public void Event_Pickup(Event event, const char[] name, bool dontBroadcast)
+{
+	if( !g_bCvarExplode )
+	{
+		int client = GetClientOfUserId(event.GetInt("userid"));
+		int weapon = GetPlayerWeaponSlot(client, 2);
+		
+		if( weapon != -1 )
+		{
+			int flame = GetEntPropEnt(weapon, Prop_Send, "m_hEffectEntity");
+			if( flame != -1 )
+			{
+				RemoveEntity(flame);
+				SetEntPropEnt(weapon, Prop_Send, "m_hEffectEntity", -1);
+			}
+		}
+	}
+}
 
 
 // ====================================================================================================
@@ -531,6 +577,36 @@ void OnTakeDamageFunction(int entity, int attacker, int inflictor, int damagetyp
 			return;
 		}
 
+		// Delay explosion
+		float delay;
+
+		switch( type )
+		{
+			case TYPE_MOLO: delay = g_fCvarDelayM;
+			case TYPE_PIPE: delay = g_fCvarDelayP;
+			case TYPE_VOMI: delay = g_fCvarDelayV;
+		}
+
+		if( delay )
+		{
+			if( type != TYPE_VOMI )
+				IgniteEntity(entity, delay);
+
+			DataPack dPack;
+			CreateDataTimer(delay, TimerDetonate, dPack, TIMER_FLAG_NO_MAPCHANGE);
+			if( attacker > 0 )
+			{
+				dPack.WriteCell(attacker <= MaxClients ? GetClientUserId(attacker) : EntIndexToEntRef(attacker));
+			} else {
+				dPack.WriteCell(0);
+			}
+
+			dPack.WriteCell(EntIndexToEntRef(entity));
+			dPack.WriteCell(type);
+
+			return;
+		}
+
 		// Unhook
 		switch( type )
 		{
@@ -565,8 +641,35 @@ public Action TimerDetonate(Handle timer, DataPack dPack)
 	// Read
 	int type = dPack.ReadCell();
 
+	// Explode when held?
 	float vPos[3];
-	GetEntPropVector(entity, Prop_Data, "m_vecOrigin", vPos);
+
+	if( HasEntProp(entity, Prop_Send, "m_hOwner") )
+	{
+		int owner = GetEntPropEnt(entity, Prop_Send, "m_hOwner");
+		if( owner != -1 )
+		{
+			if( !g_bCvarExplode )
+			{
+				return Plugin_Continue;
+			}
+			else
+			{
+				GetClientAbsOrigin(owner, vPos);
+				vPos[2] += 50.0;
+			}
+		}
+		else
+		{
+			GetEntPropVector(entity, Prop_Data, "m_vecOrigin", vPos);
+		}
+	}
+	else
+	{
+		GetEntPropVector(entity, Prop_Data, "m_vecOrigin", vPos);
+	}
+
+	// Pop
 	ExplodeEntity(client, entity, type, vPos);
 
 	return Plugin_Continue;
