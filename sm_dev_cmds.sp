@@ -3037,9 +3037,9 @@ void PropertyValue(int client, int entity, int args, const char sProp[64], const
 			if( proptype == PropField_Integer )
 			{
 				if( client )
-					PrintToChat(client, "\x05%d\x01) \x05Prop_Data\x01 integer \"%s\" \"%s\" is \x05%d", entity, sClass, sProp, strncmp(sProp, "m_x", 3) == 0 ? GetEntPropEnt(entity, Prop_Data, sProp) : GetEntProp(entity, Prop_Data, sProp));
+					PrintToChat(client, "\x05%d\x01) \x05Prop_Data\x01 integer \"%s\" \"%s\" is \x05%d", entity, sClass, sProp, GetEntProp(entity, Prop_Data, sProp));
 				else
-					ReplyToCommand(client, "%d) Prop_Data integer \"%s\" \"%s\" is %d", entity, sClass, sProp, strncmp(sProp, "m_x", 3) == 0 ? GetEntPropEnt(entity, Prop_Data, sProp) : GetEntProp(entity, Prop_Data, sProp));
+					ReplyToCommand(client, "%d) Prop_Data integer \"%s\" \"%s\" is %d", entity, sClass, sProp, GetEntProp(entity, Prop_Data, sProp));
 			}
 			else if( proptype == PropField_Entity )
 			{
@@ -3105,10 +3105,7 @@ void PropertyValue(int client, int entity, int args, const char sProp[64], const
 			{
 				int value = StringToInt(sValue);
 
-				if( strncmp(sProp, "m_x", 3) == 0 )
-					SetEntPropEnt(entity, Prop_Send, sProp, value);
-				else
-					SetEntProp(entity, Prop_Send, sProp, value);
+				SetEntProp(entity, Prop_Send, sProp, value);
 
 				if( client )
 					PrintToChat(client, "\x05%d\x01) Set \x03Prop_Send\x01 integer \"%s\" \"%s\" to \x05%d", entity, sClass, sProp, value);
