@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.33"
+#define PLUGIN_VERSION 		"1.34"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.34 (10-May-2022)
+	- Reverted command "sm_prop*" to before last update, removing the "m_h" check in the keynames, due to breaking non-entity fields.
 
 1.33 (25-Apr-2022)
 	- Changed commands "sm_prop*" to get or set entity indexes which contain "m_h" in the keyname. Requested by "Sreaper".
@@ -2971,9 +2974,9 @@ void PropertyValue(int client, int entity, int args, const char sProp[64], const
 			if( proptype == PropField_Integer )
 			{
 				if( client )
-					PrintToChat(client, "\x05%d\x01) \x03Prop_Send\x01 integer \"%s\" \"%s\" is \x05%d", entity, sClass, sProp, strncmp(sProp, "m_h", 3) == 0 ? GetEntPropEnt(entity, Prop_Send, sProp) : GetEntProp(entity, Prop_Send, sProp));
+					PrintToChat(client, "\x05%d\x01) \x03Prop_Send\x01 integer \"%s\" \"%s\" is \x05%d", entity, sClass, sProp, GetEntProp(entity, Prop_Send, sProp));
 				else
-					ReplyToCommand(client, "%d) Prop_Send integer \"%s\" \"%s\" is %d", entity, sClass, sProp, strncmp(sProp, "m_h", 3) == 0 ? GetEntPropEnt(entity, Prop_Send, sProp) : GetEntProp(entity, Prop_Send, sProp));
+					ReplyToCommand(client, "%d) Prop_Send integer \"%s\" \"%s\" is %d", entity, sClass, sProp, GetEntProp(entity, Prop_Send, sProp));
 			}
 			else if( proptype == PropField_Entity )
 			{
@@ -3034,9 +3037,9 @@ void PropertyValue(int client, int entity, int args, const char sProp[64], const
 			if( proptype == PropField_Integer )
 			{
 				if( client )
-					PrintToChat(client, "\x05%d\x01) \x05Prop_Data\x01 integer \"%s\" \"%s\" is \x05%d", entity, sClass, sProp, strncmp(sProp, "m_h", 3) == 0 ? GetEntPropEnt(entity, Prop_Data, sProp) : GetEntProp(entity, Prop_Data, sProp));
+					PrintToChat(client, "\x05%d\x01) \x05Prop_Data\x01 integer \"%s\" \"%s\" is \x05%d", entity, sClass, sProp, strncmp(sProp, "m_x", 3) == 0 ? GetEntPropEnt(entity, Prop_Data, sProp) : GetEntProp(entity, Prop_Data, sProp));
 				else
-					ReplyToCommand(client, "%d) Prop_Data integer \"%s\" \"%s\" is %d", entity, sClass, sProp, strncmp(sProp, "m_h", 3) == 0 ? GetEntPropEnt(entity, Prop_Data, sProp) : GetEntProp(entity, Prop_Data, sProp));
+					ReplyToCommand(client, "%d) Prop_Data integer \"%s\" \"%s\" is %d", entity, sClass, sProp, strncmp(sProp, "m_x", 3) == 0 ? GetEntPropEnt(entity, Prop_Data, sProp) : GetEntProp(entity, Prop_Data, sProp));
 			}
 			else if( proptype == PropField_Entity )
 			{
@@ -3102,7 +3105,7 @@ void PropertyValue(int client, int entity, int args, const char sProp[64], const
 			{
 				int value = StringToInt(sValue);
 
-				if( strncmp(sProp, "m_h", 3) == 0 )
+				if( strncmp(sProp, "m_x", 3) == 0 )
 					SetEntPropEnt(entity, Prop_Send, sProp, value);
 				else
 					SetEntProp(entity, Prop_Send, sProp, value);
