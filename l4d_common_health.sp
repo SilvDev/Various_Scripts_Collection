@@ -1,6 +1,6 @@
 /*
 *	Common Infected Health - PipeBomb, Physics and Melee Damage
-*	Copyright (C) 2021 Silvers
+*	Copyright (C) 2022 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION		"1.5"
+#define PLUGIN_VERSION		"1.6"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,10 @@
 
 ========================================================================================
 	Change Log:
+
+1.6 (16-May-2022)
+	- Now blocks insta-killing common infected when multiple common are struck by melee weapons. Thanks to "Toranks" for reporting.
+	- Instant kills are only blocked when the cvar "l4d_common_health_melee" value is not "0.0".
 
 1.5 (29-Oct-2021)
 	- Compatibility update for "Prototype Grenades" plugin. Now sets the "m_iMaxHealth" on Common Infected when the value is changed.
@@ -81,7 +85,7 @@ ConVar g_hCvarHealthCeda, g_hCvarHealthClown, g_hCvarHealthFallen, g_hCvarHealth
 bool g_bCvarAllow, g_bLeft4Dead2, g_bPipebombIgnore;
 int g_iMaxHealth[2048], g_iPropType, g_iCvarChainsaw2, g_iCvarLauncher2, g_iCvarMelee2, g_iCvarOxygen2, g_iCvarPipebomb2, g_iCvarPropane2;
 int g_iCvarHealthCeda, g_iCvarHealthClown, g_iCvarHealthFallen, g_iCvarHealthJimmy, g_iCvarHealthMud, g_iCvarHealthRiot, g_iCvarHealthRoad;
-float g_fLastHit[2048][2048], g_fGameTime, g_fCvarChainsaw, g_fCvarLauncher, g_fCvarMelee, g_fCvarOxygen, g_fCvarPipebomb, g_fCvarPropane;
+float g_fLastHit[2048][2048], g_fMelee[MAXPLAYERS+1], g_fGameTime, g_fCvarChainsaw, g_fCvarLauncher, g_fCvarMelee, g_fCvarOxygen, g_fCvarPipebomb, g_fCvarPropane;
 
 
 
@@ -236,14 +240,21 @@ void IsAllowed()
 	{
 		g_bCvarAllow = true;
 
-		HookEvent("round_end",		Event_RoundEnd, EventHookMode_PostNoCopy);
-		HookEvent("break_prop",		Event_BreakProp);
+		HookEvent("round_end",			Event_RoundEnd, EventHookMode_PostNoCopy);
+		HookEvent("break_prop",			Event_BreakProp);
+		if( g_bLeft4Dead2 )
+			HookEvent("weapon_fire",	Event_WeaponFire);
 
 		int entity = -1;
 		while( (entity = FindEntityByClassname(entity, "infected")) != INVALID_ENT_REFERENCE )
 		{
 			SDKHook(entity, SDKHook_OnTakeDamageAlive, OnTakeDamage);
 			g_iMaxHealth[entity] = GetEntProp(entity, Prop_Data, "m_iHealth");
+
+			for( int x = 0; x < 2048; x++ )
+			{
+				g_fLastHit[entity][x] = 0.0;
+			}
 		}
 
 		ResetVars();
@@ -253,8 +264,10 @@ void IsAllowed()
 	{
 		g_bCvarAllow = false;
 
-		UnhookEvent("round_end",	Event_RoundEnd, EventHookMode_PostNoCopy);
-		UnhookEvent("break_prop",	Event_BreakProp);
+		UnhookEvent("round_end",		Event_RoundEnd, EventHookMode_PostNoCopy);
+		UnhookEvent("break_prop",		Event_BreakProp);
+		if( g_bLeft4Dead2 )
+			UnhookEvent("weapon_fire",	Event_WeaponFire);
 
 		int entity = -1;
 		while( (entity = FindEntityByClassname(entity, "infected")) != INVALID_ENT_REFERENCE )
@@ -346,6 +359,25 @@ public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 	ResetVars();
 }
 
+void ResetVars()
+{
+	g_iPropType = 0;
+	g_fGameTime = 0.0;
+
+	for( int i = 1; i <= MaxClients; i++ )
+	{
+		g_fMelee[i] = 0.0;
+	}
+
+	for( int i = 0; i < 2048; i++ )
+	{
+		for( int x = 0; x < 2048; x++ )
+		{
+			g_fLastHit[i][x] = 0.0;
+		}
+	}
+}
+
 public void Event_BreakProp(Event event, const char[] name, bool dontBroadcast)
 {
 	// Reset
@@ -366,16 +398,16 @@ public void Event_BreakProp(Event event, const char[] name, bool dontBroadcast)
 	}
 }
 
-void ResetVars()
+public void Event_WeaponFire(Event event, const char[] name, bool dontBroadcast)
 {
-	g_iPropType = 0;
-	g_fGameTime = 0.0;
-
-	for( int i = 0; i < 2048; i++ )
+	if( g_fCvarMelee )
 	{
-		for( int x = 0; x < 2048; x++ )
+		static char classname[6];
+		event.GetString("weapon", classname, sizeof(classname));
+		if( strcmp(classname, "melee") == 0 )
 		{
-			g_fLastHit[i][x] = 0.0;
+			int client = GetClientOfUserId(event.GetInt("userid"));
+			g_fMelee[client] = GetGameTime();
 		}
 	}
 }
@@ -413,141 +445,144 @@ public void SpawnPost(int entity)
 	}
 
 	g_iMaxHealth[entity] = GetEntProp(entity, Prop_Data, "m_iHealth");
+
+	for( int x = 0; x < 2048; x++ )
+	{
+		g_fLastHit[entity][x] = 0.0;
+	}
 }
 
 public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
 	// Validate entity and timeout on hits
-	if( inflictor > MaxClients && inflictor < 2048 && GetGameTime() > g_fLastHit[victim][inflictor] )
+	if( inflictor > MaxClients && inflictor < 2048 )
 	{
-		// Ignore just in case, noticed NaN produced when 0 health, maybe some other bug before plugin was finished
 		int health = GetEntProp(victim, Prop_Data, "m_iHealth");
-		if( health <= 0 ) return Plugin_Continue;
 
-		// Type of weapon used in attack
-		int type;
-		static char classname[32];
-		GetEdictClassname(inflictor, classname, sizeof(classname));
-
-		if( g_bLeft4Dead2 && g_fCvarMelee && strcmp(classname, "weapon_melee") == 0 )								type = 1;
-		else if( g_bLeft4Dead2 && g_fCvarChainsaw && strcmp(classname, "weapon_chainsaw") == 0 )					type = 2;
-		else if( g_bLeft4Dead2 && g_fCvarLauncher && strcmp(classname, "grenade_launcher_projectile") == 0 )		type = 6;
-		else if( (g_fCvarPipebomb || g_fCvarPropane || g_fCvarOxygen) && (strcmp(classname, "pipe_bomb_projectile") == 0 || (g_bPipebombIgnore && strcmp(classname, "prop_physics") == 0 && GetEntProp(inflictor, Prop_Data, "m_iHammerID") == 19712806)) )
+		if( GetGameTime() > g_fLastHit[victim][inflictor] )
 		{
-			// METHOD 1:
-			// Determine if a real pipebomb was created earlier and thrown, else a physics prop explosion just created (using OnEntityCreated to detect pipe_bomb_projectile)
-			// if( GetEntPropFloat(inflictor, Prop_Send, "m_flCreateTime") == GetGameTime() )
+			// Ignore just in case, noticed NaN produced when 0 health, maybe some other bug before plugin was finished
+			if( health <= 0 ) return Plugin_Continue;
 
-			// METHOD 2: Seems to work fine, less resource intensive
-			if( g_fGameTime == GetGameTime() ) // Physics explosion
-				type = g_iPropType; // If physics prop, the break event tells us which type if allowed
-			else
-				type = 3;
+			// Type of weapon used in attack
+			int type;
+			static char classname[32];
+			GetEdictClassname(inflictor, classname, sizeof(classname));
+
+			if( g_bLeft4Dead2 && g_fCvarMelee && strcmp(classname, "weapon_melee") == 0 )								type = 1;
+			else if( g_bLeft4Dead2 && g_fCvarChainsaw && strcmp(classname, "weapon_chainsaw") == 0 )					type = 2;
+			else if( g_bLeft4Dead2 && g_fCvarLauncher && strcmp(classname, "grenade_launcher_projectile") == 0 )		type = 6;
+			else if( (g_fCvarPipebomb || g_fCvarPropane || g_fCvarOxygen) && (strcmp(classname, "pipe_bomb_projectile") == 0 || (g_bPipebombIgnore && strcmp(classname, "prop_physics") == 0 && GetEntProp(inflictor, Prop_Data, "m_iHammerID") == 19712806)) )
+			{
+				// METHOD 1:
+				// Determine if a real pipebomb was created earlier and thrown, else a physics prop explosion just created (using OnEntityCreated to detect pipe_bomb_projectile)
+				// if( GetEntPropFloat(inflictor, Prop_Send, "m_flCreateTime") == GetGameTime() )
+
+				// METHOD 2: Seems to work fine, less resource intensive
+				if( g_fGameTime == GetGameTime() ) // Physics explosion
+					type = g_iPropType; // If physics prop, the break event tells us which type if allowed
+				else
+					type = 3;
+			}
+
+			g_iPropType = 0; // Reset to be sure there are no false positives
+
+			if( type )
+			{
+				switch( type )
+				{
+					// Melee
+					case 1:
+					{
+						switch( g_iCvarMelee2 )
+						{
+							case 0:		damage = g_fCvarMelee;
+							case 1:		damage = g_fCvarMelee * g_iMaxHealth[victim] / 100.0;
+							case 2:		damage = g_fCvarMelee * damage / 100.0;
+						}
+					}
+					// Chainsaw
+					case 2:
+					{
+						switch( g_iCvarChainsaw2 )
+						{
+							case 0:		damage = g_fCvarChainsaw;
+							case 1:		damage = g_fCvarChainsaw * g_iMaxHealth[victim] / 100.0;
+							case 2:		damage = g_fCvarChainsaw * damage / 100.0;
+						}
+					}
+					// Pipebomb
+					case 3:
+					{
+						switch( g_iCvarPipebomb2 )
+						{
+							case 0:		damage = g_fCvarPipebomb;
+							case 1:		damage = g_fCvarPipebomb * g_iMaxHealth[victim] / 100.0;
+							case 2:		damage = g_fCvarPipebomb * damage / 100.0;
+						}
+					}
+					// Propane
+					case 4:
+					{
+						switch( g_iCvarPropane2 )
+						{
+							case 0:		damage = g_fCvarPropane;
+							case 1:		damage = g_fCvarPropane * g_iMaxHealth[victim] / 100.0;
+							case 2:		damage = g_fCvarPropane * damage / 100.0;
+						}
+					}
+					// Oxygen
+					case 5:
+					{
+						switch( g_iCvarOxygen2 )
+						{
+							case 0:		damage = g_fCvarOxygen;
+							case 1:		damage = g_fCvarOxygen * g_iMaxHealth[victim] / 100.0;
+							case 2:		damage = g_fCvarOxygen * damage / 100.0;
+						}
+					}
+					// Grenade Launcher
+					case 6:
+					{
+						switch( g_iCvarLauncher2 )
+						{
+							case 0:		damage = g_fCvarLauncher;
+							case 1:		damage = g_fCvarLauncher * g_iMaxHealth[victim] / 100.0;
+							case 2:		damage = g_fCvarLauncher * damage / 100.0;
+						}
+					}
+				}
+
+				// Ignore 0 damage, in case max health var is 0 for example
+				if( damage <= 0 )
+				{
+					return Plugin_Continue;
+				}
+
+				// Prevent multiple hits from the same weapon in the same few frames otherwise we affect multiple times
+				switch( type )
+				{
+					case 1:		g_fLastHit[victim][inflictor] = GetGameTime() + 0.5;	// Melee, block same swing
+					case 2:		g_fLastHit[victim][inflictor] = GetGameTime();			// Chainsaw, block same frame, allow multiple hits
+					default:	g_fLastHit[victim][inflictor] = GetGameTime() + 0.1;	// Others, block close hits (just in case), allow multiple hits
+				}
+
+				// Prevent certain gibbed wounds, e.g. to stop legless zombies running around after multiple melee hits or explosions
+				if( health - damage > 0.0 )
+				{
+					SetEntProp(victim, Prop_Send, "m_iRequestedWound1", 0);
+					SetEntProp(victim, Prop_Send, "m_iRequestedWound2", 0);
+				}
+
+				// Change damage
+				return Plugin_Changed;
+			}
 		}
-
-		g_iPropType = 0; // Reset to be sure there are no false positives
-
-		if( type )
+	} else {
+		// Block insta-kill
+		if( g_bLeft4Dead2 && g_fCvarMelee && attacker >= 1 && attacker <= MaxClients && GetGameTime() - g_fMelee[attacker] < 0.6 && GetEntProp(victim, Prop_Data, "m_iHealth") - damage == -1.0 )
 		{
-			switch( type )
-			{
-				// Melee
-				case 1:
-				{
-					switch( g_iCvarMelee2 )
-					{
-						case 0:		damage = g_fCvarMelee;
-						case 1:		damage = g_fCvarMelee * g_iMaxHealth[victim] / 100.0;
-						case 2:		damage = g_fCvarMelee * damage / 100.0;
-					}
-				}
-				// Chainsaw
-				case 2:
-				{
-					switch( g_iCvarChainsaw2 )
-					{
-						case 0:		damage = g_fCvarChainsaw;
-						case 1:		damage = g_fCvarChainsaw * g_iMaxHealth[victim] / 100.0;
-						case 2:		damage = g_fCvarChainsaw * damage / 100.0;
-					}
-				}
-				// Pipebomb
-				case 3:
-				{
-					switch( g_iCvarPipebomb2 )
-					{
-						case 0:		damage = g_fCvarPipebomb;
-						case 1:		damage = g_fCvarPipebomb * g_iMaxHealth[victim] / 100.0;
-						case 2:		damage = g_fCvarPipebomb * damage / 100.0;
-					}
-				}
-				// Propane
-				case 4:
-				{
-					switch( g_iCvarPropane2 )
-					{
-						case 0:		damage = g_fCvarPropane;
-						case 1:		damage = g_fCvarPropane * g_iMaxHealth[victim] / 100.0;
-						case 2:		damage = g_fCvarPropane * damage / 100.0;
-					}
-				}
-				// Oxygen
-				case 5:
-				{
-					switch( g_iCvarOxygen2 )
-					{
-						case 0:		damage = g_fCvarOxygen;
-						case 1:		damage = g_fCvarOxygen * g_iMaxHealth[victim] / 100.0;
-						case 2:		damage = g_fCvarOxygen * damage / 100.0;
-					}
-				}
-				// Grenade Launcher
-				case 6:
-				{
-					switch( g_iCvarLauncher2 )
-					{
-						case 0:		damage = g_fCvarLauncher;
-						case 1:		damage = g_fCvarLauncher * g_iMaxHealth[victim] / 100.0;
-						case 2:		damage = g_fCvarLauncher * damage / 100.0;
-					}
-				}
-			}
-
-			// Ignore damage killing the zombie otherwise the zombie would disappear instantly, don't think we actually need to damage them, expecting them to die normally
-			// if( health - damage <= 0 )
-			// {
-				// return Plugin_Continue;
-
-				// g_fLastHit[victim][inflictor] = GetGameTime() + 0.1; // Setting this to avoid affecting on multiple hits within the same frame (e.g. melee weapons)
-				// damage = health - 1.0;
-				// return Plugin_Changed;
-			// }
-
-			// Ignore 0 damage, in case max health var is 0 for example
-			if( damage <= 0 )
-			{
-				return Plugin_Continue;
-			}
-
-			// Prevent multiple hits from the same weapon in the same few frames otherwise we affect multiple times
-			switch( type )
-			{
-				case 1:		g_fLastHit[victim][inflictor] = GetGameTime() + 0.5;	// Melee, block same swing
-				case 2:		g_fLastHit[victim][inflictor] = GetGameTime();			// Chainsaw, block same frame, allow multiple hits
-				default:	g_fLastHit[victim][inflictor] = GetGameTime() + 0.1;	// Others, block close hits (just in case), allow multiple hits
-			}
-
-			// PrintToChatAll("Hurt %d with %f (%f)", victim, damage, health - damage);
-
-			// Prevent certain gibbed wounds, e.g. to stop legless zombies running around after multiple melee hits or explosions
-			if( health - damage > 0.0 )
-			{
-				SetEntProp(victim, Prop_Send, "m_iRequestedWound1", 0);
-				SetEntProp(victim, Prop_Send, "m_iRequestedWound2", 0);
-			}
-
-			// Change damage
-			return Plugin_Changed;
+			return Plugin_Handled;
 		}
 	}
 
