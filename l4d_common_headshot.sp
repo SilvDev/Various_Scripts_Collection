@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION		"1.0"
+#define PLUGIN_VERSION		"1.1"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.1 (20-May-2022)
+	- Added cvar "l4d_common_headshot_melee" to block applying damage to melee weapons. Requested by "Maur0".
 
 1.0 (16-May-2022)
 	- Initial release.
@@ -46,9 +49,9 @@
 #define CVAR_FLAGS			FCVAR_NOTIFY
 
 ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog;
-ConVar g_hCvarHeadshot;
+ConVar g_hCvarHeadshot, g_hCvarMelee;
 float g_fCvarHeadshot;
-bool g_bLeft4Dead2, g_bCvarAllow;
+bool g_bLeft4Dead2, g_bCvarAllow, g_bCvarMelee;
 int g_iHitGroup[2048];
 
 
@@ -85,6 +88,8 @@ public void OnPluginStart()
 	g_hCvarModesOff = CreateConVar(			"l4d_common_headshot_modes_off",		"",				"Turn off the plugin in these game modes, separate by commas (no spaces). (Empty = none).", CVAR_FLAGS );
 	g_hCvarModesTog = CreateConVar(			"l4d_common_headshot_modes_tog",		"0",			"Turn on the plugin in these game modes. 0=All, 1=Coop, 2=Survival, 4=Versus, 8=Scavenge. Add numbers together.", CVAR_FLAGS );
 	g_hCvarHeadshot = CreateConVar(			"l4d_common_headshot_damage",			"1.0",			"Scale damage value applied on headshots.");
+	if( g_bLeft4Dead2 )
+		g_hCvarMelee = CreateConVar(		"l4d_common_headshot_melee",			"0",			"0=Off. 1=Apply damage handling to melee weapons.");
 	CreateConVar(							"l4d_common_headshot_version",			PLUGIN_VERSION,	"Common Infected Headshot Damage plugin version.", FCVAR_NOTIFY|FCVAR_DONTRECORD);
 	AutoExecConfig(true,					"l4d_common_headshot");
 
@@ -95,6 +100,8 @@ public void OnPluginStart()
 	g_hCvarModesOff.AddChangeHook(ConVarChanged_Allow);
 	g_hCvarAllow.AddChangeHook(ConVarChanged_Allow);
 	g_hCvarHeadshot.AddChangeHook(ConVarChanged_Cvars);
+	if( g_bLeft4Dead2 )
+		g_hCvarMelee.AddChangeHook(ConVarChanged_Cvars);
 }
 
 
@@ -120,6 +127,8 @@ public void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char
 void GetCvars()
 {
 	g_fCvarHeadshot = g_hCvarHeadshot.FloatValue;
+	if( g_bLeft4Dead2 )
+		g_bCvarMelee = g_hCvarMelee.BoolValue;
 }
 
 void IsAllowed()
@@ -263,6 +272,16 @@ public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &dam
 			if( g_bLeft4Dead2 )
 			{
 				static char sTemp[48];
+
+				if( !g_bCvarMelee )
+				{
+					GetEntityClassname(inflictor, sTemp, sizeof sTemp);
+					if( strcmp(sTemp[7], "melee") == 0 )
+					{
+						return Plugin_Continue;
+					}
+				}
+
 				GetEntPropString(victim, Prop_Data, "m_ModelName", sTemp, sizeof(sTemp));
 
 				if( strcmp(sTemp, "models/infected/common_male_") == 0 &&
