@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.8"
+#define PLUGIN_VERSION 		"1.9"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,10 @@
 
 ========================================================================================
 	Change Log:
+
+1.9 (26-May-2022)
+	- Changed the menu order of items to group similar types together.
+	- Menu now displays the last page that was selected instead of returning to the first page.
 
 1.8 (23-Apr-2022)
 	- Changes to allow "CSS" weapons to spawn multiple copies with the "l4d_weapon_spawn_count" cvar. Thanks to "vikingo12" for reporting.
@@ -150,102 +154,99 @@ static char g_sWeaponModels[MAX_WEAPONS][] =
 };
 static char g_sWeaponNames2[MAX_WEAPONS2][] =
 {
-	"Rifle",
-	"Auto Shotgun",
-	"Hunting Rifle",
-	"SMG",
-	"Pump Shotgun",
 	"Pistol",
-	"Molotov",
-	"Pipe Bomb",
-	"First Aid Kit",
-	"Pain Pills",
-
-	"Shotgun Chrome",
-	"Rifle Desert",
-	"Grenade Launcher",
-	"M60",
+	"Pistol Magnum",
+	"Rifle",
 	"AK47",
 	"SG552",
+	"Rifle Desert",
+	"Auto Shotgun",
 	"Shotgun Spas",
+	"Pump Shotgun",
+	"Shotgun Chrome",
+	"SMG",
 	"SMG Silenced",
 	"SMG MP5",
+	"Hunting Rifle",
 	"Sniper AWP",
 	"Sniper Military",
 	"Sniper Scout",
+	"M60",
+	"Grenade Launcher",
 	"Chainsaw",
-	"Pistol Magnum",
+	"Molotov",
+	"Pipe Bomb",
 	"VomitJar",
+	"Pain Pills",
+	"Adrenaline",
+	"First Aid Kit",
 	"Defibrillator",
 	"Upgradepack Explosive",
-	"Upgradepack Incendiary",
-	"Adrenaline"
+	"Upgradepack Incendiary"
 };
 static char g_sWeapons2[MAX_WEAPONS2][] =
 {
-	"weapon_rifle",
-	"weapon_autoshotgun",
-	"weapon_hunting_rifle",
-	"weapon_smg",
-	"weapon_pumpshotgun",
 	"weapon_pistol",
-	"weapon_molotov",
-	"weapon_pipe_bomb",
-	"weapon_first_aid_kit",
-	"weapon_pain_pills",
-
-	"weapon_shotgun_chrome",
-	"weapon_rifle_desert",
-	"weapon_grenade_launcher",
-	"weapon_rifle_m60",
+	"weapon_pistol_magnum",
+	"weapon_rifle",
 	"weapon_rifle_ak47",
 	"weapon_rifle_sg552",
+	"weapon_rifle_desert",
+	"weapon_autoshotgun",
 	"weapon_shotgun_spas",
+	"weapon_pumpshotgun",
+	"weapon_shotgun_chrome",
+	"weapon_smg",
 	"weapon_smg_silenced",
 	"weapon_smg_mp5",
+	"weapon_hunting_rifle",
 	"weapon_sniper_awp",
 	"weapon_sniper_military",
 	"weapon_sniper_scout",
+	"weapon_rifle_m60",
+	"weapon_grenade_launcher",
 	"weapon_chainsaw",
-	"weapon_pistol_magnum",
+	"weapon_molotov",
+	"weapon_pipe_bomb",
 	"weapon_vomitjar",
+	"weapon_pain_pills",
+	"weapon_adrenaline",
+	"weapon_first_aid_kit",
 	"weapon_defibrillator",
 	"weapon_upgradepack_explosive",
-	"weapon_upgradepack_incendiary",
-	"weapon_adrenaline"
+	"weapon_upgradepack_incendiary"
 };
 static char g_sWeaponModels2[MAX_WEAPONS2][] =
 {
-	"models/w_models/weapons/w_rifle_m16a2.mdl",
-	"models/w_models/weapons/w_autoshot_m4super.mdl",
-	"models/w_models/weapons/w_sniper_mini14.mdl",
-	"models/w_models/weapons/w_smg_uzi.mdl",
-	"models/w_models/weapons/w_pumpshotgun_A.mdl",
 	"models/w_models/weapons/w_pistol_a.mdl",
-	"models/w_models/weapons/w_eq_molotov.mdl",
-	"models/w_models/weapons/w_eq_pipebomb.mdl",
-	"models/w_models/weapons/w_eq_medkit.mdl",
-	"models/w_models/weapons/w_eq_painpills.mdl",
-
-	"models/w_models/weapons/w_shotgun.mdl",
-	"models/w_models/weapons/w_desert_rifle.mdl",
-	"models/w_models/weapons/w_grenade_launcher.mdl",
-	"models/w_models/weapons/w_m60.mdl",
+	"models/w_models/weapons/w_desert_eagle.mdl",
+	"models/w_models/weapons/w_rifle_m16a2.mdl",
 	"models/w_models/weapons/w_rifle_ak47.mdl",
 	"models/w_models/weapons/w_rifle_sg552.mdl",
+	"models/w_models/weapons/w_desert_rifle.mdl",
+	"models/w_models/weapons/w_autoshot_m4super.mdl",
 	"models/w_models/weapons/w_shotgun_spas.mdl",
+	"models/w_models/weapons/w_pumpshotgun_A.mdl",
+	"models/w_models/weapons/w_shotgun.mdl",
 	"models/w_models/weapons/w_smg_a.mdl",
+	"models/w_models/weapons/w_smg_uzi.mdl",
 	"models/w_models/weapons/w_smg_mp5.mdl",
+	"models/w_models/weapons/w_sniper_mini14.mdl",
 	"models/w_models/weapons/w_sniper_awp.mdl",
 	"models/w_models/weapons/w_sniper_military.mdl",
 	"models/w_models/weapons/w_sniper_scout.mdl",
+	"models/w_models/weapons/w_m60.mdl",
+	"models/w_models/weapons/w_grenade_launcher.mdl",
 	"models/weapons/melee/w_chainsaw.mdl",
-	"models/w_models/weapons/w_desert_eagle.mdl",
+	"models/w_models/weapons/w_eq_molotov.mdl",
+	"models/w_models/weapons/w_eq_pipebomb.mdl",
 	"models/w_models/weapons/w_eq_bile_flask.mdl",
+	"models/w_models/weapons/w_eq_adrenaline.mdl",
+	"models/w_models/weapons/w_eq_painpills.mdl",
+	"models/w_models/weapons/w_eq_medkit.mdl",
 	"models/w_models/weapons/w_eq_defibrillator.mdl",
 	"models/w_models/weapons/w_eq_explosive_ammopack.mdl",
 	"models/w_models/weapons/w_eq_incendiary_ammopack.mdl",
-	"models/w_models/weapons/w_eq_adrenaline.mdl"
 };
 
 
@@ -740,23 +741,23 @@ void CreateSpawn(const float vOrigin[3], const float vAngles[3], int index = 0, 
 	float vAng[3], vPos[3];
 	vPos = vOrigin;
 	vAng = vAngles;
-	if( model == 8 ) // First aid
+	if( model == (g_bLeft4Dead2 ? 25 : 8) ) // First aid
 	{
 		vAng[0] += 90.0;
 		vPos[2] += 1.0;
 	}
-	else if( g_bLeft4Dead2 && model == 28 ) // Adrenaline
+	else if( g_bLeft4Dead2 && model == 24 ) // Adrenaline
 	{
 		vAng[1] -= 90.0;
 		vAng[2] -= 90.0;
 		vPos[2] += 1.0;
 	}
-	else if( g_bLeft4Dead2 && (model == 25 || model == 26 || model == 27 )) // Defib + Upgrades
+	else if( g_bLeft4Dead2 && (model == 26 || model == 27 || model == 28 )) // Defib + Upgrades
 	{
 		vAng[1] -= 90.0;
 		vAng[2] += 90.0;
 	}
-	else if( g_bLeft4Dead2 && model == 22 ) // Chainsaw
+	else if( g_bLeft4Dead2 && model == 19 ) // Chainsaw
 	{
 		vPos[2] += 3.0;
 	}
@@ -768,26 +769,27 @@ void CreateSpawn(const float vOrigin[3], const float vAngles[3], int index = 0, 
 	{
 		int ammo;
 
-		switch( model )
-		{
-			case 0:						ammo = g_iAmmoRifle;
-			case 1:						ammo = g_iAmmoAutoShot;
-			case 2:						ammo = g_iAmmoHunting;
-			case 3:						ammo = g_iAmmoSmg;
-			case 4:						ammo = g_iAmmoShotgun;
-		}
 		if( g_bLeft4Dead2 )
 		{
 			switch( model )
 			{
-				case 17, 18:			ammo = g_iAmmoSmg;
-				case 11, 14, 15:		ammo = g_iAmmoRifle;
-				case 10:				ammo = g_iAmmoShotgun;
-				case 16:				ammo = g_iAmmoAutoShot;
-				case 22:				ammo = g_iAmmoChainsaw;
-				case 13:				ammo = g_iAmmoM60;
-				case 12:				ammo = g_iAmmoGL;
-				case 19, 20, 21:		ammo = g_iAmmoSniper;
+				case 10, 11, 12:		ammo = g_iAmmoSmg;
+				case 2, 3, 4, 5:		ammo = g_iAmmoRifle;
+				case 8, 9:				ammo = g_iAmmoShotgun;
+				case 6, 7:				ammo = g_iAmmoAutoShot;
+				case 19:				ammo = g_iAmmoChainsaw;
+				case 17:				ammo = g_iAmmoM60;
+				case 18:				ammo = g_iAmmoGL;
+				case 13, 14, 15, 16:	ammo = g_iAmmoSniper;
+			}
+		} else {
+			switch( model )
+			{
+				case 0:						ammo = g_iAmmoRifle;
+				case 1:						ammo = g_iAmmoAutoShot;
+				case 2:						ammo = g_iAmmoHunting;
+				case 3:						ammo = g_iAmmoSmg;
+				case 4:						ammo = g_iAmmoShotgun;
 			}
 		}
 
@@ -821,7 +823,7 @@ public int ListMenuHandler(Menu menu, MenuAction action, int client, int index)
 			CmdSpawnerSaveMenu(client, index);
 		}
 
-		g_hMenuList.Display(client, MENU_TIME_FOREVER);
+		g_hMenuList.DisplayAt(client, g_hMenuList.Selection, MENU_TIME_FOREVER);
 	}
 
 	return 0;
