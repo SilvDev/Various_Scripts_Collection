@@ -1,6 +1,6 @@
 /*
 *	Melee Weapon Spawner
-*	Copyright (C) 2020 Silvers
+*	Copyright (C) 2022 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.5"
+#define PLUGIN_VERSION 		"1.6"
 
 /*======================================================================================
 	Plugin Info:
@@ -32,9 +32,12 @@
 ========================================================================================
 	Change Log:
 
+1.6 (26-May-2022)
+	- Menu now displays the last page that was selected instead of returning to the first page.
+
 1.5 (24-Sep-2020)
 	- Compatibility update for L4D2's "The Last Stand" update.
-	- Added support for the 2 new Melee weapons.
+	- Added support for the 2 new melee weapons.
 
 1.4 (10-May-2020)
 	- Extra checks to prevent "IsAllowedGameMode" throwing errors.
@@ -394,6 +397,7 @@ public Action TimerStart(Handle timer)
 {
 	ResetPlugin();
 	LoadSpawns();
+	return Plugin_Continue;
 }
 
 
@@ -518,8 +522,8 @@ void CreateSpawn(const float vOrigin[3], const float vAngles[3], int index = 0, 
 
 	DispatchKeyValue(entity_weapon, "solid", "6");
 	DispatchKeyValue(entity_weapon, "melee_script_name", g_sScripts[model]);
-
 	DispatchSpawn(entity_weapon);
+
 	if( model == 4 || model == 6 )
 	{
 		if( model == 4 )
@@ -565,8 +569,10 @@ public int ListMenuHandler(Menu menu, MenuAction action, int client, int index)
 			CmdSpawnerSaveMenu(client, index);
 		}
 
-		g_hMenuList.Display(client, MENU_TIME_FOREVER);
+		g_hMenuList.DisplayAt(client, g_hMenuList.Selection, MENU_TIME_FOREVER);
 	}
+
+	return 0;
 }
 
 public Action CmdSpawnerTemp(int client, int args)
@@ -1010,6 +1016,8 @@ public int AngMenuHandler(Menu menu, MenuAction action, int client, int index)
 			SetAngle(client, index);
 		ShowMenuAng(client);
 	}
+
+	return 0;
 }
 
 void SetAngle(int client, int index)
@@ -1073,6 +1081,8 @@ public int PosMenuHandler(Menu menu, MenuAction action, int client, int index)
 			SetOrigin(client, index);
 		ShowMenuPos(client);
 	}
+
+	return 0;
 }
 
 void SetOrigin(int client, int index)
@@ -1249,7 +1259,7 @@ void RemoveSpawn(int index)
 		client = GetEntPropEnt(entity, Prop_Send, "m_hOwnerEntity");
 		if( client < 0 || client > MaxClients || !IsClientInGame(client) )
 		{
-			AcceptEntityInput(entity, "kill");
+			RemoveEntity(entity);
 		}
 	}
 }
