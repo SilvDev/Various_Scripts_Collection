@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION		"1.6"
+#define PLUGIN_VERSION		"1.7"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,15 @@
 
 ========================================================================================
 	Change Log:
+
+1.7 (27-May-2022)
+	- Combined code with "Common Headshot" plugin.
+	- Better handling of wounds. Thanks to "Toranks" for help fixing.
+	- Added new cvars "l4d_common_health_headshot", "l4d_common_health_headshot_melee" to control headshot damage.
+	- Added new cvar "l4d_common_health_headshot_one" to control if single shots to common infected heads insta-kill them.
+	- Fixed crashing clients when multiple common have wounds within the same frame.
+
+	- Thanks to "Toranks" for tons of testing and feedback.
 
 1.6 (16-May-2022)
 	- Now blocks insta-killing common infected when multiple common are struck by melee weapons. Thanks to "Toranks" for reporting.
@@ -70,23 +79,61 @@
 #define MODEL_OXYGEN		"models/props_equipment/oxygentank01.mdl"
 #define MODEL_PROPANE		"models/props_junk/propanecanister001a.mdl"
 
-// models/infected/
-#define MODEL_CEDA			"common_male_ceda.mdl"
-#define MODEL_CLOWN			"common_male_clown.mdl"
-#define MODEL_FALLEN		"common_male_fallen_survivor.mdl"
-#define MODEL_JIMMY			"common_male_jimmy.mdl"
-#define MODEL_MUD			"common_male_mud.mdl"
-#define MODEL_RIOT			"common_male_riot.mdl"
-#define MODEL_ROAD			"common_male_roadcrew.mdl"
+#define RANDOM_WOUND_MIN			26
+#define RANDOM_WOUND_MAX			34
+#define RANDOM_WOUND_CEDA_MIN		0
+#define RANDOM_WOUND_CEDA_MAX		3
+#define RANDOM_WOUND_RIOT_MIN		6
+#define RANDOM_WOUND_RIOT_MAX		13
 
+#define NO_WOUND					0
+#define GENDER_FEMALE_L4D1			22
+#define GENDER_FEMALE_L4D2			2
+#define GENDER_MALE1				0
+#define GENDER_MALE2				1
+#define GENDER_MALE3				12
+#define GENDER_MALE4				13
+#define GENDER_MALE5				14
+#define GENDER_MALE6				16
+#define GENDER_MALE7				20
+#define GENDER_MALE8				21
 
-ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarChainsaw, g_hCvarChainsaw2, g_hCvarLauncher, g_hCvarLauncher2, g_hCvarMelee, g_hCvarMelee2, g_hCvarOxygen, g_hCvarOxygen2, g_hCvarPipebomb, g_hCvarPipebomb2, g_hCvarPropane, g_hCvarPropane2;
+#define GENDER_CEDA 				11
+#define GENDER_MUD	 				12
+#define GENDER_ROAD 				13
+#define GENDER_FALLEN 				14
+#define GENDER_RIOT 				15
+#define GENDER_CLOWN 				16
+#define GENDER_JIMMY 				17
+
+#define PART_A						3
+#define PART_B						4
+#define PART_C						5
+#define PART_E						12
+#define PART_F						9
+#define PART_G						13
+#define PART_H						14
+#define PART_I						15
+#define PART_J						16
+#define PART_K						17
+#define PART_L						19
+#define PART_M						20
+#define PART_N						21
+#define PART_O						22
+#define PART_P						23
+#define PART_Q						24
+#define PART_R						25
+#define PART_S						18
+#define HEAD_1						8
+#define HEAD_2						41
+
+ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarChainsaw, g_hCvarChainsaw2, g_hCvarHeadshot, g_hCvarHeadshotMelee, g_hCvarHeadshotOne, g_hCvarLauncher, g_hCvarLauncher2, g_hCvarMelee, g_hCvarMelee2, g_hCvarOxygen, g_hCvarOxygen2, g_hCvarPipebomb, g_hCvarPipebomb2, g_hCvarPropane, g_hCvarPropane2;
 ConVar g_hCvarHealthCeda, g_hCvarHealthClown, g_hCvarHealthFallen, g_hCvarHealthJimmy, g_hCvarHealthMud, g_hCvarHealthRiot, g_hCvarHealthRoad;
-bool g_bCvarAllow, g_bLeft4Dead2, g_bPipebombIgnore;
+bool g_bCvarAllow, g_bLeft4Dead2, g_bPipebombIgnore, g_bCvarHeadshotOne;
 int g_iMaxHealth[2048], g_iPropType, g_iCvarChainsaw2, g_iCvarLauncher2, g_iCvarMelee2, g_iCvarOxygen2, g_iCvarPipebomb2, g_iCvarPropane2;
 int g_iCvarHealthCeda, g_iCvarHealthClown, g_iCvarHealthFallen, g_iCvarHealthJimmy, g_iCvarHealthMud, g_iCvarHealthRiot, g_iCvarHealthRoad;
-float g_fLastHit[2048][2048], g_fMelee[MAXPLAYERS+1], g_fGameTime, g_fCvarChainsaw, g_fCvarLauncher, g_fCvarMelee, g_fCvarOxygen, g_fCvarPipebomb, g_fCvarPropane;
-
+float g_fLastHit[2048][2048], g_fMelee[MAXPLAYERS+1], g_fGameTime, g_fCvarChainsaw, g_fCvarHeadshot, g_fCvarHeadshotMelee, g_fCvarLauncher, g_fCvarMelee, g_fCvarOxygen, g_fCvarPipebomb, g_fCvarPropane;
+int g_iFrameTick, g_iFrameCount;
 
 
 // ====================================================================================================
@@ -111,6 +158,7 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 		strcopy(error, err_max, "Plugin only supports Left 4 Dead 1 & 2.");
 		return APLRes_SilentFailure;
 	}
+
 	return APLRes_Success;
 }
 
@@ -121,35 +169,38 @@ public void OnAllPluginsLoaded()
 
 public void OnPluginStart()
 {
-	g_hCvarAllow = CreateConVar(			"l4d_common_health_allow",			"1",			"0=Plugin off, 1=Plugin on.", CVAR_FLAGS );
-	g_hCvarModes = CreateConVar(			"l4d_common_health_modes",			"",				"Turn on the plugin in these game modes, separate by commas (no spaces). (Empty = all).", CVAR_FLAGS );
-	g_hCvarModesOff = CreateConVar(			"l4d_common_health_modes_off",		"",				"Turn off the plugin in these game modes, separate by commas (no spaces). (Empty = none).", CVAR_FLAGS );
-	g_hCvarModesTog = CreateConVar(			"l4d_common_health_modes_tog",		"0",			"Turn on the plugin in these game modes. 0=All, 1=Coop, 2=Survival, 4=Versus, 8=Scavenge. Add numbers together.", CVAR_FLAGS );
+	g_hCvarAllow = CreateConVar(				"l4d_common_health_allow",				"1",			"0=Plugin off, 1=Plugin on.", CVAR_FLAGS );
+	g_hCvarModes = CreateConVar(				"l4d_common_health_modes",				"",				"Turn on the plugin in these game modes, separate by commas (no spaces). (Empty = all).", CVAR_FLAGS );
+	g_hCvarModesOff = CreateConVar(				"l4d_common_health_modes_off",			"",				"Turn off the plugin in these game modes, separate by commas (no spaces). (Empty = none).", CVAR_FLAGS );
+	g_hCvarModesTog = CreateConVar(				"l4d_common_health_modes_tog",			"0",			"Turn on the plugin in these game modes. 0=All, 1=Coop, 2=Survival, 4=Versus, 8=Scavenge. Add numbers together.", CVAR_FLAGS );
+	g_hCvarHeadshot = CreateConVar(				"l4d_common_health_headshot",			"0.0",			"0.0=Ignore headshot damage. 1.0=100% damage. Scale damage value applied on headshots.");
+	g_hCvarHeadshotOne = CreateConVar(			"l4d_common_health_headshot_one",		"1",			"0=Block instant kill headshots. 1=Allow instant kill headshots.");
 	if( g_bLeft4Dead2 )
 	{
-		g_hCvarChainsaw = CreateConVar(		"l4d_common_health_chainsaw",		"50.0",			"L4D2 only. 0.0=Off (games default damage). Amount of damage each Chainsaw hit causes to a common infected, or scale according to related cvar.", CVAR_FLAGS );
-		g_hCvarChainsaw2 = CreateConVar(	"l4d_common_health_chainsaw2",		"1",			"L4D2 only. 0=Deal the damage value specified. 1=Deal the specified damage value as a percentage of their maximum health. 2=Scale original damage.", CVAR_FLAGS );
-		g_hCvarLauncher = CreateConVar(		"l4d_common_health_launcher",		"50.0",			"L4D2 only. 0.0=Off (games default damage). Amount of damage each Grenade Launcher hit causes to a common infected, or scale according to related cvar.", CVAR_FLAGS );
-		g_hCvarLauncher2 = CreateConVar(	"l4d_common_health_launcher2",		"1",			"L4D2 only. 0=Deal the damage value specified. 1=Deal the specified damage value as a percentage of their maximum health. 2=Scale original damage.", CVAR_FLAGS );
-		g_hCvarMelee = CreateConVar(		"l4d_common_health_melee",			"50.0",			"L4D2 only. 0.0=Off (games default damage). Amount of damage each Melee weapon hit causes to a common infected, or scale according to related cvar.", CVAR_FLAGS );
-		g_hCvarMelee2 = CreateConVar(		"l4d_common_health_melee2",			"1",			"L4D2 only. 0=Deal the damage value specified. 1=Deal the specified damage value as a percentage of their maximum health. 2=Scale original damage.", CVAR_FLAGS );
+		g_hCvarChainsaw = CreateConVar(			"l4d_common_health_chainsaw",			"0.0",			"L4D2 only. 0.0=Off (use games default damage). Amount of damage each Chainsaw hit causes to a common infected, or scale according to related cvar.", CVAR_FLAGS );
+		g_hCvarChainsaw2 = CreateConVar(		"l4d_common_health_chainsaw2",			"2",			"L4D2 only. 0=Deal the damage value specified. 1=Deal the specified damage value as a percentage of their maximum health. 2=Scale original damage.", CVAR_FLAGS );
+		g_hCvarLauncher = CreateConVar(			"l4d_common_health_launcher",			"0.0",			"L4D2 only. 0.0=Off (use games default damage). Amount of damage each Grenade Launcher hit causes to a common infected, or scale according to related cvar.", CVAR_FLAGS );
+		g_hCvarLauncher2 = CreateConVar(		"l4d_common_health_launcher2",			"2",			"L4D2 only. 0=Deal the damage value specified. 1=Deal the specified damage value as a percentage of their maximum health. 2=Scale original damage.", CVAR_FLAGS );
+		g_hCvarHeadshotMelee = CreateConVar(	"l4d_common_health_headshot_melee",		"0.0",			"0.0=Ignore headshot damage. 1.0=100% damage. Scale damage value applied on headshots with melee weapons.");
+		g_hCvarMelee = CreateConVar(			"l4d_common_health_melee",				"0.0",			"L4D2 only. 0.0=Off (use games default damage). Amount of damage each Melee weapon hit causes to a common infected, or scale according to related cvar.", CVAR_FLAGS );
+		g_hCvarMelee2 = CreateConVar(			"l4d_common_health_melee2",				"2",			"L4D2 only. 0=Deal the damage value specified. 1=Deal the specified damage value as a percentage of their maximum health. 2=Scale original damage.", CVAR_FLAGS );
 
-		g_hCvarHealthCeda = CreateConVar(	"l4d_common_health_u_ceda",			"150",			"L4D2 only. Game default: 150. Default amount of health for CEDA Hazmat uncommon infected.", CVAR_FLAGS );
-		g_hCvarHealthClown = CreateConVar(	"l4d_common_health_u_clown",		"150",			"L4D2 only. Game default: 150. Default amount of health for Clown uncommon infected.", CVAR_FLAGS );
-		g_hCvarHealthFallen = CreateConVar(	"l4d_common_health_u_fallen",		"1000",			"L4D2 only. Game default: 1000. Default amount of health for Fallen Survivor uncommon infected.", CVAR_FLAGS );
-		g_hCvarHealthJimmy = CreateConVar(	"l4d_common_health_u_jimmy",		"3000",			"L4D2 only. Game default: 3000. Default amount of health for Jimmy Gibbs Junior uncommon infected.", CVAR_FLAGS );
-		g_hCvarHealthMud = CreateConVar(	"l4d_common_health_u_mud",			"150",			"L4D2 only. Game default: 150. Default amount of health for Mud Men uncommon infected.", CVAR_FLAGS );
-		g_hCvarHealthRiot = CreateConVar(	"l4d_common_health_u_riot",			"50",			"L4D2 only. Game default: 50. Default amount of health for Riot Security uncommon infected.", CVAR_FLAGS );
-		g_hCvarHealthRoad = CreateConVar(	"l4d_common_health_u_road",			"150",			"L4D2 only. Game default: 150. Default amount of health for Road Crew Worker uncommon infected.", CVAR_FLAGS );
+		g_hCvarHealthCeda = CreateConVar(		"l4d_common_health_u_ceda",				"150",			"L4D2 only. Game default: 150. Default amount of health for CEDA Hazmat uncommon infected.", CVAR_FLAGS );
+		g_hCvarHealthClown = CreateConVar(		"l4d_common_health_u_clown",			"150",			"L4D2 only. Game default: 150. Default amount of health for Clown uncommon infected.", CVAR_FLAGS );
+		g_hCvarHealthFallen = CreateConVar(		"l4d_common_health_u_fallen",			"1000",			"L4D2 only. Game default: 1000. Default amount of health for Fallen Survivor uncommon infected.", CVAR_FLAGS );
+		g_hCvarHealthJimmy = CreateConVar(		"l4d_common_health_u_jimmy",			"3000",			"L4D2 only. Game default: 3000. Default amount of health for Jimmy Gibbs Junior uncommon infected.", CVAR_FLAGS );
+		g_hCvarHealthMud = CreateConVar(		"l4d_common_health_u_mud",				"150",			"L4D2 only. Game default: 150. Default amount of health for Mud Men uncommon infected.", CVAR_FLAGS );
+		g_hCvarHealthRiot = CreateConVar(		"l4d_common_health_u_riot",				"50",			"L4D2 only. Game default: 50. Default amount of health for Riot Security uncommon infected.", CVAR_FLAGS );
+		g_hCvarHealthRoad = CreateConVar(		"l4d_common_health_u_road",				"150",			"L4D2 only. Game default: 150. Default amount of health for Road Crew Worker uncommon infected.", CVAR_FLAGS );
 	}
-	g_hCvarOxygen = CreateConVar(			"l4d_common_health_oxygen",			"100.0",		"0.0=Off (games default damage). Amount of damage each Oxygen Tank explosion causes to a common infected, or scale according to related cvar.", CVAR_FLAGS );
-	g_hCvarOxygen2 = CreateConVar(			"l4d_common_health_oxygen2",		"1",			"0=Deal the damage value specified. 1=Deal the specified damage value as a percentage of their maximum health. 2=Scale original damage.", CVAR_FLAGS );
-	g_hCvarPropane = CreateConVar(			"l4d_common_health_propane",		"100.0",		"0.0=Off (games default damage). Amount of damage each Propane explosion causes to a common infected, or scale according to related cvar.", CVAR_FLAGS );
-	g_hCvarPropane2 = CreateConVar(			"l4d_common_health_propane2",		"1",			"0=Deal the damage value specified. 1=Deal the specified damage value as a percentage of their maximum health. 2=Scale original damage.", CVAR_FLAGS );
-	g_hCvarPipebomb = CreateConVar(			"l4d_common_health_pipebomb",		"50.0",			"0.0=Off (games default damage). Amount of damage each PipeBomb explosion causes to a common infected, or scale according to related cvar.", CVAR_FLAGS );
-	g_hCvarPipebomb2 = CreateConVar(		"l4d_common_health_pipebomb2",		"0",			"0=Deal the damage value specified. 1=Deal the specified damage value as a percentage of their maximum health. 2=Scale original damage.", CVAR_FLAGS );
-	CreateConVar(							"l4d_common_health_version",		PLUGIN_VERSION,	"Molotov Shove plugin version.", FCVAR_NOTIFY|FCVAR_DONTRECORD);
-	AutoExecConfig(true,					"l4d_common_health");
+	g_hCvarOxygen = CreateConVar(				"l4d_common_health_oxygen",				"0.0",			"0.0=Off (use games default damage). Amount of damage each Oxygen Tank explosion causes to a common infected, or scale according to related cvar.", CVAR_FLAGS );
+	g_hCvarOxygen2 = CreateConVar(				"l4d_common_health_oxygen2",			"2",			"0=Deal the damage value specified. 1=Deal the specified damage value as a percentage of their maximum health. 2=Scale original damage.", CVAR_FLAGS );
+	g_hCvarPropane = CreateConVar(				"l4d_common_health_propane",			"0.0",			"0.0=Off (use games default damage). Amount of damage each Propane explosion causes to a common infected, or scale according to related cvar.", CVAR_FLAGS );
+	g_hCvarPropane2 = CreateConVar(				"l4d_common_health_propane2",			"2",			"0=Deal the damage value specified. 1=Deal the specified damage value as a percentage of their maximum health. 2=Scale original damage.", CVAR_FLAGS );
+	g_hCvarPipebomb = CreateConVar(				"l4d_common_health_pipebomb",			"0.0",			"0.0=Off (use games default damage). Amount of damage each PipeBomb explosion causes to a common infected, or scale according to related cvar.", CVAR_FLAGS );
+	g_hCvarPipebomb2 = CreateConVar(			"l4d_common_health_pipebomb2",			"2",			"0=Deal the damage value specified. 1=Deal the specified damage value as a percentage of their maximum health. 2=Scale original damage.", CVAR_FLAGS );
+	CreateConVar(								"l4d_common_health_version",			PLUGIN_VERSION,	"Molotov Shove plugin version.", FCVAR_NOTIFY|FCVAR_DONTRECORD);
+	AutoExecConfig(true,						"l4d_common_health");
 
 	g_hCvarMPGameMode = FindConVar("mp_gamemode");
 	g_hCvarMPGameMode.AddChangeHook(ConVarChanged_Allow);
@@ -157,10 +208,19 @@ public void OnPluginStart()
 	g_hCvarModes.AddChangeHook(ConVarChanged_Allow);
 	g_hCvarModesOff.AddChangeHook(ConVarChanged_Allow);
 	g_hCvarAllow.AddChangeHook(ConVarChanged_Allow);
+	g_hCvarHeadshot.AddChangeHook(ConVarChanged_Cvars);
+	g_hCvarHeadshotOne.AddChangeHook(ConVarChanged_Cvars);
+	g_hCvarOxygen.AddChangeHook(ConVarChanged_Cvars);
+	g_hCvarOxygen2.AddChangeHook(ConVarChanged_Cvars);
+	g_hCvarPipebomb.AddChangeHook(ConVarChanged_Cvars);
+	g_hCvarPipebomb2.AddChangeHook(ConVarChanged_Cvars);
+	g_hCvarPropane.AddChangeHook(ConVarChanged_Cvars);
+	g_hCvarPropane2.AddChangeHook(ConVarChanged_Cvars);
 	if( g_bLeft4Dead2 )
 	{
 		g_hCvarChainsaw.AddChangeHook(ConVarChanged_Cvars);
 		g_hCvarChainsaw2.AddChangeHook(ConVarChanged_Cvars);
+		g_hCvarHeadshotMelee.AddChangeHook(ConVarChanged_Cvars);
 		g_hCvarLauncher.AddChangeHook(ConVarChanged_Cvars);
 		g_hCvarLauncher2.AddChangeHook(ConVarChanged_Cvars);
 		g_hCvarMelee.AddChangeHook(ConVarChanged_Cvars);
@@ -174,12 +234,6 @@ public void OnPluginStart()
 		g_hCvarHealthRiot.AddChangeHook(ConVarChanged_Cvars);
 		g_hCvarHealthRoad.AddChangeHook(ConVarChanged_Cvars);
 	}
-	g_hCvarOxygen.AddChangeHook(ConVarChanged_Cvars);
-	g_hCvarOxygen2.AddChangeHook(ConVarChanged_Cvars);
-	g_hCvarPipebomb.AddChangeHook(ConVarChanged_Cvars);
-	g_hCvarPipebomb2.AddChangeHook(ConVarChanged_Cvars);
-	g_hCvarPropane.AddChangeHook(ConVarChanged_Cvars);
-	g_hCvarPropane2.AddChangeHook(ConVarChanged_Cvars);
 }
 
 
@@ -208,6 +262,7 @@ void GetCvars()
 	{
 		g_fCvarChainsaw = g_hCvarChainsaw.FloatValue;
 		g_iCvarChainsaw2 = g_hCvarChainsaw2.IntValue;
+		g_fCvarHeadshotMelee = g_hCvarHeadshotMelee.FloatValue;
 		g_fCvarLauncher = g_hCvarLauncher.FloatValue;
 		g_iCvarLauncher2 = g_hCvarLauncher2.IntValue;
 		g_fCvarMelee = g_hCvarMelee.FloatValue;
@@ -222,6 +277,8 @@ void GetCvars()
 		g_iCvarHealthRoad = g_hCvarHealthRoad.IntValue;
 	}
 
+	g_fCvarHeadshot = g_hCvarHeadshot.FloatValue;
+	g_bCvarHeadshotOne = g_hCvarHeadshotOne.BoolValue;
 	g_fCvarOxygen = g_hCvarOxygen.FloatValue;
 	g_iCvarOxygen2 = g_hCvarOxygen2.IntValue;
 	g_fCvarPipebomb = g_hCvarPipebomb.FloatValue;
@@ -249,6 +306,7 @@ void IsAllowed()
 		while( (entity = FindEntityByClassname(entity, "infected")) != INVALID_ENT_REFERENCE )
 		{
 			SDKHook(entity, SDKHook_OnTakeDamageAlive, OnTakeDamage);
+
 			g_iMaxHealth[entity] = GetEntProp(entity, Prop_Data, "m_iHealth");
 
 			for( int x = 0; x < 2048; x++ )
@@ -414,10 +472,8 @@ public void Event_WeaponFire(Event event, const char[] name, bool dontBroadcast)
 
 public void OnEntityCreated(int entity, const char[] classname)
 {
-	if( strcmp(classname, "infected") == 0 )
+	if( g_bCvarAllow && strcmp(classname, "infected") == 0 )
 	{
-		// Using OnTakeDamagAlive because of riot zombies (L4D2), otherwise they would take visual damage but not die until struck from behind, this way they don't take damage until they really should
-		SDKHook(entity, SDKHook_OnTakeDamageAlive, OnTakeDamage);
 		SDKHook(entity, SDKHook_SpawnPost, SpawnPost);
 	}
 	// else if( strcmp(classname, "pipe_bomb_projectile") == 0 )
@@ -432,17 +488,48 @@ public void SpawnPost(int entity)
 
 	if( g_bLeft4Dead2 )
 	{
-		static char model[64];
-		GetEntPropString(entity, Prop_Data, "m_ModelName", model, sizeof(model));
+		int gender = GetEntProp(entity, Prop_Send, "m_Gender");
 
-		if(			g_iCvarHealthCeda	!= 150	&&	strcmp(model[16], MODEL_CEDA) == 0 )	{ SetEntProp(entity, Prop_Data, "m_iHealth", g_iCvarHealthCeda);	SetEntProp(entity, Prop_Data, "m_iMaxHealth", g_iCvarHealthCeda); }
-		else if(	g_iCvarHealthClown	!= 150	&&	strcmp(model[16], MODEL_CLOWN) == 0 )	{ SetEntProp(entity, Prop_Data, "m_iHealth", g_iCvarHealthClown);	SetEntProp(entity, Prop_Data, "m_iMaxHealth", g_iCvarHealthClown); }
-		else if(	g_iCvarHealthFallen	!= 1000	&&	strcmp(model[16], MODEL_FALLEN) == 0 )	{ SetEntProp(entity, Prop_Data, "m_iHealth", g_iCvarHealthFallen);	SetEntProp(entity, Prop_Data, "m_iMaxHealth", g_iCvarHealthFallen); }
-		else if(	g_iCvarHealthJimmy	!= 3000	&&	strcmp(model[16], MODEL_JIMMY) == 0 )	{ SetEntProp(entity, Prop_Data, "m_iHealth", g_iCvarHealthJimmy);	SetEntProp(entity, Prop_Data, "m_iMaxHealth", g_iCvarHealthJimmy); }
-		else if(	g_iCvarHealthMud	!= 150	&&	strcmp(model[16], MODEL_MUD) == 0 )		{ SetEntProp(entity, Prop_Data, "m_iHealth", g_iCvarHealthMud);		SetEntProp(entity, Prop_Data, "m_iMaxHealth", g_iCvarHealthMud); }
-		else if(	g_iCvarHealthRiot	!= 50	&&	strcmp(model[16], MODEL_RIOT) == 0 )	{ SetEntProp(entity, Prop_Data, "m_iHealth", g_iCvarHealthRiot);	SetEntProp(entity, Prop_Data, "m_iMaxHealth", g_iCvarHealthRiot); }
-		else if(	g_iCvarHealthRoad	!= 150	&&	strcmp(model[16], MODEL_ROAD) == 0 )	{ SetEntProp(entity, Prop_Data, "m_iHealth", g_iCvarHealthRoad);	SetEntProp(entity, Prop_Data, "m_iMaxHealth", g_iCvarHealthRoad); }
+		switch( gender )
+		{
+			case GENDER_CEDA:
+			{
+				if( g_iCvarHealthCeda	!= 150 )		{ SetEntProp(entity, Prop_Data, "m_iHealth", g_iCvarHealthCeda);	SetEntProp(entity, Prop_Data, "m_iMaxHealth", g_iCvarHealthCeda); }
+			}
+
+			case GENDER_MUD:
+			{
+				if( g_iCvarHealthMud	!= 150 )		{ SetEntProp(entity, Prop_Data, "m_iHealth", g_iCvarHealthMud);		SetEntProp(entity, Prop_Data, "m_iMaxHealth", g_iCvarHealthMud); }
+			}
+
+			case GENDER_ROAD:
+			{
+				if( g_iCvarHealthRoad	!= 150 )		{ SetEntProp(entity, Prop_Data, "m_iHealth", g_iCvarHealthRoad);	SetEntProp(entity, Prop_Data, "m_iMaxHealth", g_iCvarHealthRoad); }
+			}
+
+			case GENDER_FALLEN:
+			{
+				if( g_iCvarHealthFallen	!= 1000 )		{ SetEntProp(entity, Prop_Data, "m_iHealth", g_iCvarHealthFallen);	SetEntProp(entity, Prop_Data, "m_iMaxHealth", g_iCvarHealthFallen); }
+			}
+
+			case GENDER_RIOT:
+			{
+				if( g_iCvarHealthRiot	!= 50 )			{ SetEntProp(entity, Prop_Data, "m_iHealth", g_iCvarHealthRiot);	SetEntProp(entity, Prop_Data, "m_iMaxHealth", g_iCvarHealthRiot); }
+			}
+
+			case GENDER_CLOWN:
+			{
+				if( g_iCvarHealthClown	!= 150 )		{ SetEntProp(entity, Prop_Data, "m_iHealth", g_iCvarHealthClown);	SetEntProp(entity, Prop_Data, "m_iMaxHealth", g_iCvarHealthClown); }
+			}
+
+			case GENDER_JIMMY:
+			{
+				if( g_iCvarHealthJimmy	!= 3000 )		{ SetEntProp(entity, Prop_Data, "m_iHealth", g_iCvarHealthJimmy);	SetEntProp(entity, Prop_Data, "m_iMaxHealth", g_iCvarHealthJimmy); }
+			}
+		}
 	}
+
+	SDKHook(entity, SDKHook_OnTakeDamageAlive, OnTakeDamage);
 
 	g_iMaxHealth[entity] = GetEntProp(entity, Prop_Data, "m_iHealth");
 
@@ -469,7 +556,7 @@ public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &dam
 			static char classname[32];
 			GetEdictClassname(inflictor, classname, sizeof(classname));
 
-			if( g_bLeft4Dead2 && g_fCvarMelee && strcmp(classname, "weapon_melee") == 0 )								type = 1;
+			if( g_bLeft4Dead2 && (g_fCvarMelee || g_fCvarHeadshotMelee) && strcmp(classname, "weapon_melee") == 0 )		type = 1;
 			else if( g_bLeft4Dead2 && g_fCvarChainsaw && strcmp(classname, "weapon_chainsaw") == 0 )					type = 2;
 			else if( g_bLeft4Dead2 && g_fCvarLauncher && strcmp(classname, "grenade_launcher_projectile") == 0 )		type = 6;
 			else if( (g_fCvarPipebomb || g_fCvarPropane || g_fCvarOxygen) && (strcmp(classname, "pipe_bomb_projectile") == 0 || (g_bPipebombIgnore && strcmp(classname, "prop_physics") == 0 && GetEntProp(inflictor, Prop_Data, "m_iHammerID") == 19712806)) )
@@ -487,6 +574,7 @@ public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &dam
 
 			g_iPropType = 0; // Reset to be sure there are no false positives
 
+			// Damage scales
 			if( type )
 			{
 				switch( type )
@@ -494,11 +582,19 @@ public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &dam
 					// Melee
 					case 1:
 					{
-						switch( g_iCvarMelee2 )
+						if( g_fCvarMelee )
 						{
-							case 0:		damage = g_fCvarMelee;
-							case 1:		damage = g_fCvarMelee * g_iMaxHealth[victim] / 100.0;
-							case 2:		damage = g_fCvarMelee * damage / 100.0;
+							switch( g_iCvarMelee2 )
+							{
+								case 0:		damage = g_fCvarMelee;
+								case 1:		damage = g_fCvarMelee * g_iMaxHealth[victim] / 100.0;
+								case 2:		damage = g_fCvarMelee * damage / 100.0;
+							}
+						}
+
+						if( g_fCvarHeadshotMelee && GetEntProp(victim, Prop_Data, "m_LastHitGroup") == 1 )
+						{
+							damage *= g_fCvarHeadshotMelee;
 						}
 					}
 					// Chainsaw
@@ -570,21 +666,230 @@ public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &dam
 				// Prevent certain gibbed wounds, e.g. to stop legless zombies running around after multiple melee hits or explosions
 				if( health - damage > 0.0 )
 				{
-					SetEntProp(victim, Prop_Send, "m_iRequestedWound1", 0);
-					SetEntProp(victim, Prop_Send, "m_iRequestedWound2", 0);
+					DoWounds(victim);
 				}
 
 				// Change damage
 				return Plugin_Changed;
+			} else {
+				// Headshot scale
+				if( g_fCvarHeadshot && attacker >= 1 && attacker <= MaxClients && GetClientTeam(attacker) == 2 && GetEntProp(victim, Prop_Data, "m_LastHitGroup") == 1 )
+				{
+					damage *= g_fCvarHeadshot;
+
+					if( GetEntProp(victim, Prop_Data, "m_iHealth") - damage > 0.0 )
+					{
+						DoWounds(victim);
+					}
+
+					return Plugin_Changed;
+				}
+			}
+		} else {
+			// Prevent insta-kill from headshots - triggers on multiple hits with 0.0 damage killing them.
+			if( health - damage > 0.0 && GetEntProp(victim, Prop_Data, "m_LastHitGroup") == 1 )
+			{
+				SetEntProp(victim, Prop_Data, "m_LastHitGroup", 2);
 			}
 		}
 	} else {
-		// Block insta-kill
-		if( g_bLeft4Dead2 && g_fCvarMelee && attacker >= 1 && attacker <= MaxClients && GetGameTime() - g_fMelee[attacker] < 0.6 && GetEntProp(victim, Prop_Data, "m_iHealth") - damage == -1.0 )
+		// Block insta-kill with melee weapon (prevents common death when multiple are hit at once):
+		if( g_bLeft4Dead2 && g_fCvarMelee && attacker >= 1 && attacker <= MaxClients && GetGameTime() - g_fMelee[attacker] < 0.6 )
 		{
-			return Plugin_Handled;
+			float test = GetEntProp(victim, Prop_Data, "m_iHealth") - damage;
+
+			if( test == 0.0 || test == -1.0 )
+			{
+				return Plugin_Handled;
+			}
 		}
 	}
 
+	// Prevent insta-kill from headshots - for weapons etc
+	if( !g_bCvarHeadshotOne && GetEntProp(victim, Prop_Data, "m_LastHitGroup") == 1 && GetEntProp(victim, Prop_Data, "m_iHealth") - damage > 0.0 )
+	{
+		SetEntProp(victim, Prop_Data, "m_LastHitGroup", 2);
+	}
+
 	return Plugin_Continue;
+}
+
+void DoWounds(int victim)
+{
+	// Prevent insta-kill from headshots
+	if( GetEntProp(victim, Prop_Data, "m_LastHitGroup") == 1 )
+	{
+		SetEntProp(victim, Prop_Data, "m_LastHitGroup", 2);
+	}
+
+	// Prevent triggering multiple wounds in the same frame
+	DoTickTest(victim);
+}
+
+void DoTickTest(int victim)
+{
+	if( g_iFrameTick == GetGameTickCount() )
+	{
+		g_iFrameCount++;
+	} else {
+		g_iFrameCount = 0;
+		g_iFrameTick = GetGameTickCount();
+	}
+
+	if( g_iFrameCount >= 2)
+	{
+		RequestFrame(OnFrameWounds, EntIndexToEntRef(victim));
+	} else {
+		DoWoundsMain(victim);
+	}
+}
+
+void OnFrameWounds(int victim)
+{
+	if( EntRefToEntIndex(victim) != INVALID_ENT_REFERENCE )
+	{
+		DoTickTest(victim);
+	}
+}
+
+void DoWoundsMain(int victim)
+{
+	int wound1 = GetEntProp(victim, Prop_Send, "m_iRequestedWound1");
+	int wound2 = GetEntProp(victim, Prop_Send, "m_iRequestedWound2");
+	int gender = GetEntProp(victim, Prop_Send, "m_Gender");
+
+	switch( gender )
+	{
+		case GENDER_MALE1, GENDER_MALE2, GENDER_MALE3, GENDER_MALE4, GENDER_MALE5, GENDER_MALE6, GENDER_MALE7, GENDER_MALE8:
+		{
+			switch( wound1 )
+			{
+				case PART_G, PART_H, PART_I, PART_J, PART_K, PART_L, PART_M, PART_N, PART_O, PART_P, PART_Q, PART_R:
+				{
+					int wound = GetRandomInt(RANDOM_WOUND_MIN, RANDOM_WOUND_MAX);
+
+					SetEntProp(victim, Prop_Send, "m_iRequestedWound1", wound);
+					if( wound2 == -1 )
+						SetEntProp(victim, Prop_Send, "m_iRequestedWound2", wound);
+				}
+				case HEAD_1, HEAD_2:
+				{
+					SetEntProp(victim, Prop_Send, "m_iRequestedWound1", 6);
+					if( wound2 == -1 )
+						SetEntProp(victim, Prop_Send, "m_iRequestedWound2", 6);
+				}
+			}
+
+			switch( wound2 )
+			{
+				case PART_G, PART_H, PART_I, PART_J, PART_K, PART_L, PART_M, PART_N, PART_O, PART_P, PART_Q, PART_R:
+				{
+					int wound = GetRandomInt(RANDOM_WOUND_MIN, RANDOM_WOUND_MAX);
+
+					if( wound1 == -1 )
+						SetEntProp(victim, Prop_Send, "m_iRequestedWound1", wound);
+					SetEntProp(victim, Prop_Send, "m_iRequestedWound2", wound);
+				}
+				case HEAD_1, HEAD_2:
+				{
+					if( wound1 == -1 )
+						SetEntProp(victim, Prop_Send, "m_iRequestedWound1", 6);
+					SetEntProp(victim, Prop_Send, "m_iRequestedWound2", 6);
+				}
+			}
+		}
+
+		case GENDER_FEMALE_L4D1, GENDER_FEMALE_L4D2:
+		{
+			switch( wound1 )
+			{
+				case PART_E, PART_G, PART_H, PART_I, PART_J, PART_L, PART_M, PART_N, PART_O, PART_P, PART_Q, PART_S:
+				{
+					int wound = GetRandomInt(RANDOM_WOUND_MIN, RANDOM_WOUND_MAX);
+
+					SetEntProp(victim, Prop_Send, "m_iRequestedWound1", wound);
+					if( wound2 == -1 )
+						SetEntProp(victim, Prop_Send, "m_iRequestedWound2", wound);
+				}
+				case HEAD_1, HEAD_2:
+				{
+					SetEntProp(victim, Prop_Send, "m_iRequestedWound1", 6);
+					if( wound2 == -1 )
+						SetEntProp(victim, Prop_Send, "m_iRequestedWound2", 6);
+				}
+			}
+
+			switch( wound2 )
+			{
+				case PART_E, PART_G, PART_H, PART_I, PART_J, PART_L, PART_M, PART_N, PART_O, PART_P, PART_Q, PART_S:
+				{
+					int wound = GetRandomInt(RANDOM_WOUND_MIN, RANDOM_WOUND_MAX);
+
+					if( wound1 == -1 )
+						SetEntProp(victim, Prop_Send, "m_iRequestedWound1", wound);
+					SetEntProp(victim, Prop_Send, "m_iRequestedWound2", wound);
+				}
+				case HEAD_1, HEAD_2:
+				{
+					if( wound1 == -1 )
+						SetEntProp(victim, Prop_Send, "m_iRequestedWound1", 6);
+					SetEntProp(victim, Prop_Send, "m_iRequestedWound2", 6);
+				}
+			}
+		}
+
+		case GENDER_CEDA:
+		{
+			switch( wound1 )
+			{
+				case PART_B, PART_C, PART_F:
+				{
+					int wound = GetRandomInt(RANDOM_WOUND_CEDA_MIN, RANDOM_WOUND_CEDA_MAX);
+
+					if( wound2 == -1 )
+						SetEntProp(victim, Prop_Send, "m_iRequestedWound1", wound);
+					SetEntProp(victim, Prop_Send, "m_iRequestedWound2", wound);
+				}
+			}
+
+			switch( wound2 )
+			{
+				case PART_B, PART_C, PART_F:
+				{
+					int wound = GetRandomInt(RANDOM_WOUND_CEDA_MIN, RANDOM_WOUND_CEDA_MAX);
+
+					if( wound1 == -1 )
+						SetEntProp(victim, Prop_Send, "m_iRequestedWound1", wound);
+					SetEntProp(victim, Prop_Send, "m_iRequestedWound2", wound);
+				}
+			}
+		}
+
+		case GENDER_RIOT:
+		{
+			switch( wound1 )
+			{
+				case PART_A, PART_B, PART_C:
+				{
+					int wound = GetRandomInt(RANDOM_WOUND_RIOT_MIN, RANDOM_WOUND_RIOT_MAX);
+
+					SetEntProp(victim, Prop_Send, "m_iRequestedWound1", wound);
+					if( wound2 == -1 )
+						SetEntProp(victim, Prop_Send, "m_iRequestedWound2", wound);
+				}
+			}
+
+			switch( wound2 )
+			{
+				case PART_A, PART_B, PART_C:
+				{
+					int wound = GetRandomInt(RANDOM_WOUND_RIOT_MIN, RANDOM_WOUND_RIOT_MAX);
+
+					if( wound1 == -1 )
+						SetEntProp(victim, Prop_Send, "m_iRequestedWound1", wound);
+					SetEntProp(victim, Prop_Send, "m_iRequestedWound2", wound);
+				}
+			}
+		}
+	}
 }
