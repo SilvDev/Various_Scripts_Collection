@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION		"1.7"
+#define PLUGIN_VERSION		"1.8"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.8 (29-May-2022)
+	- Fixed errors in L4D1 about "m_iRequestedWound1" missing.
 
 1.7 (27-May-2022)
 	- Combined code with "Common Headshot" plugin.
@@ -246,12 +249,12 @@ public void OnConfigsExecuted()
 	IsAllowed();
 }
 
-public void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	IsAllowed();
 }
 
-public void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	GetCvars();
 }
@@ -390,7 +393,7 @@ bool IsAllowedGameMode()
 	return true;
 }
 
-public void OnGamemode(const char[] output, int caller, int activator, float delay)
+void OnGamemode(const char[] output, int caller, int activator, float delay)
 {
 	if( strcmp(output, "OnCoop") == 0 )
 		g_iCurrentMode = 1;
@@ -412,7 +415,7 @@ public void OnMapEnd()
 	ResetVars();
 }
 
-public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
+void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
 	ResetVars();
 }
@@ -436,7 +439,7 @@ void ResetVars()
 	}
 }
 
-public void Event_BreakProp(Event event, const char[] name, bool dontBroadcast)
+void Event_BreakProp(Event event, const char[] name, bool dontBroadcast)
 {
 	// Reset
 	g_iPropType = 0;
@@ -456,7 +459,7 @@ public void Event_BreakProp(Event event, const char[] name, bool dontBroadcast)
 	}
 }
 
-public void Event_WeaponFire(Event event, const char[] name, bool dontBroadcast)
+void Event_WeaponFire(Event event, const char[] name, bool dontBroadcast)
 {
 	if( g_fCvarMelee )
 	{
@@ -482,7 +485,7 @@ public void OnEntityCreated(int entity, const char[] classname)
 	// }
 }
 
-public void SpawnPost(int entity)
+void SpawnPost(int entity)
 {
 	// Get maximum health on spawn, supports "Mutant Zombies" plugin for example, maybe some other plugins require a longer delay, either next frame or e.g. 0.1 timer.
 
@@ -539,7 +542,7 @@ public void SpawnPost(int entity)
 	}
 }
 
-public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
+Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
 	// Validate entity and timeout on hits
 	if( inflictor > MaxClients && inflictor < 2048 )
@@ -664,7 +667,7 @@ public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &dam
 				}
 
 				// Prevent certain gibbed wounds, e.g. to stop legless zombies running around after multiple melee hits or explosions
-				if( health - damage > 0.0 )
+				if( g_bLeft4Dead2 && health - damage > 0.0 )
 				{
 					DoWounds(victim);
 				}
@@ -677,7 +680,7 @@ public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &dam
 				{
 					damage *= g_fCvarHeadshot;
 
-					if( GetEntProp(victim, Prop_Data, "m_iHealth") - damage > 0.0 )
+					if( g_bLeft4Dead2 && GetEntProp(victim, Prop_Data, "m_iHealth") - damage > 0.0 )
 					{
 						DoWounds(victim);
 					}
