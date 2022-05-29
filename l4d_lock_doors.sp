@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.6"
+#define PLUGIN_VERSION 		"1.7"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.7 (29-May-2022)
+	- Fixed cvar "l4d_lock_doors_random" not setting random door positions on round restart. Thanks to "gongo" for reporting.
 
 1.6 (29-May-2022)
 	- Added command "sm_lock_doors_health" to check a doors health.
@@ -363,7 +366,6 @@ Action CmdHealth(int client, int args)
 
 void SearchForDoors()
 {
-	char sTarget[128];
 	int entity = -1;
 
 	while( (entity = FindEntityByClassname(entity, "prop_door_rotating")) != INVALID_ENT_REFERENCE )
@@ -384,21 +386,29 @@ void SearchForDoors()
 			// Find double doors
 			MatchRelatives(entity);
 
-			if( g_iCvarRandom )
+			// Random door opening
+			RandomDoors(entity);
+		}
+	}
+}
+
+void RandomDoors(int entity)
+{
+	if( g_iCvarRandom )
+	{
+		static char sTarget[128];
+
+		if( GetRandomInt(1, 100) <= g_iCvarRandom )
+		{
+			if( GetEntProp(entity, Prop_Data, "m_eDoorState") == DOOR_STATE_OPENED )
 			{
-				if( GetRandomInt(1, 100) <= g_iCvarRandom )
-				{
-					if( GetEntProp(entity, Prop_Data, "m_eDoorState") == DOOR_STATE_OPENED )
-					{
-						AcceptEntityInput(entity, "Close");
-					}
-					else if( GetEntProp(entity, Prop_Data, "m_eDoorState") == DOOR_STATE_CLOSED )
-					{
-						GetEntPropString(entity, Prop_Data, "m_iName", sTarget, sizeof(sTarget));
-						SetVariantString(sTarget);
-						AcceptEntityInput(entity, "OpenAwayFrom"); // Support for double doors and doors opening in the correct direction
-					}
-				}
+				AcceptEntityInput(entity, "Close");
+			}
+			else if( GetEntProp(entity, Prop_Data, "m_eDoorState") == DOOR_STATE_CLOSED )
+			{
+				GetEntPropString(entity, Prop_Data, "m_iName", sTarget, sizeof(sTarget));
+				SetVariantString(sTarget);
+				AcceptEntityInput(entity, "OpenAwayFrom"); // Support for double doors and doors opening in the correct direction
 			}
 		}
 	}
@@ -508,6 +518,8 @@ void SpawnPost(int entity)
 
 		// Find double doors
 		MatchRelatives(entity);
+
+		RandomDoors(entity);
 	}
 }
 
