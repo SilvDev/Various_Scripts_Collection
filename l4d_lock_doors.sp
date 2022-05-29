@@ -1,6 +1,6 @@
 /*
 *	Lock Doors
-*	Copyright (C) 2021 Silvers
+*	Copyright (C) 2022 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.5"
+#define PLUGIN_VERSION 		"1.6"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,17 @@
 
 ========================================================================================
 	Change Log:
+
+1.6 (29-May-2022)
+	- Added command "sm_lock_doors_health" to check a doors health.
+	- Added cvar "l4d_lock_doors_random" to randomly open or close doors on round start.
+	- Fixed the health not being consistently set correctly.
+	- Fixed locking or unlocking from opening or closing the door.
+	- Fixed issues with double doors not being handled together.
+	- Change cvar "l4d_lock_doors_text" description and default value for hint messages printing to all instead of an individual client and vice versa.
+
+	- Thanks to "gongo" for reporting issues and testing.
+	- Thanks to "Toranks" for help testing.
 
 1.5 (20-Jul-2021)
 	- Blocked some door models that are missing the door knob animation. Thanks to "sonic155" for reporting.
@@ -61,19 +72,34 @@
 #include <sdktools>
 #include <sdkhooks>
 
-#define CVAR_FLAGS			FCVAR_NOTIFY
-#define SOUND_LOCK			"doors/default_locked.wav" // door_lock_1
-#define SOUND_LOCKED		"doors/latchlocked2.wav"
-#define SOUND_UNLOCK		"doors/door_latch3.wav"
+#define CVAR_FLAGS				FCVAR_NOTIFY
+#define SOUND_LOCK				"doors/default_locked.wav" // door_lock_1
+#define SOUND_LOCKED			"doors/latchlocked2.wav"
+#define SOUND_UNLOCK			"doors/door_latch3.wav"
+
+#define DOOR_FLAG_IGNORE_USE	32768
+#define DEBUG_PRINT				0
+
+// Testing: l4d_lock_doors_health_open 1.0; l4d_lock_doors_health_shut 2.0; l4d_lock_doors_health_lock 3.0;
+
+enum // m_eDoorState
+{
+	DOOR_STATE_CLOSED,
+	DOOR_STATE_OPENING_IN_PROGRESS,
+	DOOR_STATE_OPENED,
+	DOOR_STATE_CLOSING_IN_PROGRESS
+}
 
 
-ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarHealthL, g_hCvarHealthO, g_hCvarHealthS, g_hCvarHealthT, g_hCvarKeys, g_hCvarRange, g_hCvarText, g_hCvarVoca;
+ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarHealthL, g_hCvarHealthO, g_hCvarHealthS, g_hCvarHealthT, g_hCvarKeys, g_hCvarRandom, g_hCvarRange, g_hCvarText, g_hCvarVoca;
 float g_fCvarHealthL, g_fCvarHealthO, g_fCvarHealthS, g_fCvarRange;
-int g_iCvarKeys, g_iCvarText, g_iCvarVoca, g_iCvarHealthT;
+int g_iCvarKeys, g_iCvarRandom, g_iCvarText, g_iCvarVoca, g_iCvarHealthT;
 
 bool g_bCvarAllow, g_bMapStarted, g_bLeft4Dead2;
-float g_fLastUse[MAXPLAYERS+1];
+float g_fLastUse[MAXPLAYERS+1], g_fLastPrint;
 int g_iDoors[2048];
+int g_iFlags[2048];
+int g_iRelative[2048];
 
 
 // Vocalize for Left 4 Dead 2
@@ -121,7 +147,7 @@ public Plugin myinfo =
 {
 	name = "[L4D & L4D2] Lock Doors",
 	author = "SilverShot",
-	description = "Replicates an old feature Valve removed, allowing players to lock and unlock doors.",
+	description = "Replicates an old feature Valve removed, allowing players to lock and unlock doors. Also sets open/closed/locked doors health.",
 	version = PLUGIN_VERSION,
 	url = "https://forums.alliedmods.net/showthread.php?t=322899"
 }
@@ -152,8 +178,9 @@ public void OnPluginStart()
 	g_hCvarHealthS =	CreateConVar("l4d_lock_doors_health_shut",		"1.0",				"0=Off. Percentage of health to set when the door is shut.", CVAR_FLAGS );
 	g_hCvarHealthT =	CreateConVar("l4d_lock_doors_health_total",		"840",				"0=Off. How much health doors have on spawn (840 game default).", CVAR_FLAGS );
 	g_hCvarKeys =		CreateConVar("l4d_lock_doors_keys",				"1",				"Which key combination to lock/unlock doors: 1=Shift (walk) + E (use). 2=Ctrl (duck) + E (use).", CVAR_FLAGS );
+	g_hCvarRandom =		CreateConVar("l4d_lock_doors_random",			"0",				"0=Off. On round start the chance out of 100 to randomly open a closed door, or close an open door.", CVAR_FLAGS );
 	g_hCvarRange =		CreateConVar("l4d_lock_doors_range",			"150",				"0=Any distance. How close a player must be to the door they're trying to lock or unlock.", CVAR_FLAGS );
-	g_hCvarText =		CreateConVar("l4d_lock_doors_text",				"7",				"0=Off. Display a chat message when: 1=Locking doors. 2=Unlocking doors. 4=To self. 8=To all players. Add numbers together.", CVAR_FLAGS );
+	g_hCvarText =		CreateConVar("l4d_lock_doors_text",				"11",				"0=Off. Display a chat message when: 1=Locking doors. 2=Unlocking doors. 4=To all players. 8=To self. Add numbers together.", CVAR_FLAGS );
 	g_hCvarVoca =		CreateConVar("l4d_lock_doors_vocalize",			"1",				"0=Off. 1=-Vocalize when locking doors.", CVAR_FLAGS );
 	CreateConVar(					"l4d_lock_doors_version",			PLUGIN_VERSION,		"Lock Doors plugin version.", FCVAR_NOTIFY|FCVAR_DONTRECORD);
 	AutoExecConfig(true,			"l4d_lock_doors");
@@ -170,8 +197,11 @@ public void OnPluginStart()
 	g_hCvarHealthT.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarKeys.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarText.AddChangeHook(ConVarChanged_Cvars);
+	g_hCvarRandom.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarRange.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarVoca.AddChangeHook(ConVarChanged_Cvars);
+
+	RegAdminCmd("sm_lock_doors_health", CmdHealth, ADMFLAG_ROOT, "Returns the health of the door you're aiming at.");
 }
 
 
@@ -184,12 +214,12 @@ public void OnConfigsExecuted()
 	IsAllowed();
 }
 
-public void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	IsAllowed();
 }
 
-public void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	GetCvars();
 }
@@ -202,6 +232,7 @@ void GetCvars()
 	g_iCvarHealthT = g_hCvarHealthT.IntValue;
 	g_iCvarKeys = g_hCvarKeys.IntValue;
 	g_iCvarText = g_hCvarText.IntValue;
+	g_iCvarRandom = g_hCvarRandom.IntValue;
 	g_fCvarRange = g_hCvarRange.FloatValue;
 	g_iCvarVoca = g_hCvarVoca.IntValue;
 }
@@ -288,7 +319,7 @@ bool IsAllowedGameMode()
 	return true;
 }
 
-public void OnGamemode(const char[] output, int caller, int activator, float delay)
+void OnGamemode(const char[] output, int caller, int activator, float delay)
 {
 	if( strcmp(output, "OnCoop") == 0 )
 		g_iCurrentMode = 1;
@@ -305,8 +336,34 @@ public void OnGamemode(const char[] output, int caller, int activator, float del
 // ====================================================================================================
 //					DOOR STUFF
 // ====================================================================================================
+Action CmdHealth(int client, int args)
+{
+	if( client )
+	{
+		int entity = GetClientAimTarget(client, false);
+		if( entity != -1 )
+		{
+			char sTemp[32];
+			GetEdictClassname(entity, sTemp, sizeof(sTemp));
+			if( strcmp(sTemp, "prop_door_rotating") == 0 )
+			{
+				ReplyToCommand(client, "Door %d health = %d", entity, GetEntProp(entity, Prop_Data, "m_iHealth"));
+				return Plugin_Handled;
+			}
+		}
+	} else {
+		ReplyToCommand(client, "Command can only be used %s", IsDedicatedServer() ? "in game on a dedicated server." : "in chat on a Listen server.");
+		return Plugin_Handled;
+	}
+
+	ReplyToCommand(client, "Invalid door or no entity.");
+
+	return Plugin_Handled;
+}
+
 void SearchForDoors()
 {
+	char sTarget[128];
 	int entity = -1;
 
 	while( (entity = FindEntityByClassname(entity, "prop_door_rotating")) != INVALID_ENT_REFERENCE )
@@ -316,39 +373,109 @@ void SearchForDoors()
 			g_iDoors[entity] = EntIndexToEntRef(entity);
 
 			// Hooks
-			HookSingleEntityOutput(entity, "OnFullyOpen", Door_Movement);
-			HookSingleEntityOutput(entity, "OnFullyClosed", Door_Movement);
+			HookSingleEntityOutput(entity, "OnFullyOpen", Door_Moved);
+			HookSingleEntityOutput(entity, "OnFullyClosed", Door_Moved);
+
+			g_iFlags[entity] = -1;
 
 			// Health
 			SetDoorHealth(entity, true);
+
+			// Find double doors
+			MatchRelatives(entity);
+
+			if( g_iCvarRandom )
+			{
+				if( GetRandomInt(1, 100) <= g_iCvarRandom )
+				{
+					if( GetEntProp(entity, Prop_Data, "m_eDoorState") == DOOR_STATE_OPENED )
+					{
+						AcceptEntityInput(entity, "Close");
+					}
+					else if( GetEntProp(entity, Prop_Data, "m_eDoorState") == DOOR_STATE_CLOSED )
+					{
+						GetEntPropString(entity, Prop_Data, "m_iName", sTarget, sizeof(sTarget));
+						SetVariantString(sTarget);
+						AcceptEntityInput(entity, "OpenAwayFrom"); // Support for double doors and doors opening in the correct direction
+					}
+				}
+			}
 		}
 	}
 }
 
 void SetDoorHealth(int entity, bool spawned = false)
 {
-	bool closed;
-	int health;
-
-	if( spawned && g_iCvarHealthT )				health = g_iCvarHealthT;
-	else										health = GetEntProp(entity, Prop_Data, "m_iHealth");
-
 	if( spawned )
 	{
-		if( g_iCvarHealthT )					SetEntProp(entity, Prop_Data, "m_iHealth", g_iCvarHealthT);
+		int health = g_iCvarHealthT ? g_iCvarHealthT : GetEntProp(entity, Prop_Data, "m_iHealth");
+
+		int state = GetEntProp(entity, Prop_Data, "m_eDoorState");
+		if( (state == DOOR_STATE_CLOSED || state == DOOR_STATE_CLOSING_IN_PROGRESS) && g_fCvarHealthS )				SetEntProp(entity, Prop_Data, "m_iHealth", RoundFloat(health * g_fCvarHealthS)); // Closed
+		else if( (state == DOOR_STATE_OPENED || state == DOOR_STATE_OPENING_IN_PROGRESS) && g_fCvarHealthO )		SetEntProp(entity, Prop_Data, "m_iHealth", RoundFloat(health * g_fCvarHealthO)); // Opened
+
+		#if DEBUG_PRINT
+		PrintToChatAll("SPAWNED: (%d) %s %d > %d", entity, state == 0 ? "CLOSED" : "OPENED", health, GetEntProp(entity, Prop_Data, "m_iHealth"));
+		PrintToServer("SPAWNED: (%d) %s %d > %d", entity, state == 0 ? "CLOSED" : "OPENED", health, GetEntProp(entity, Prop_Data, "m_iHealth"));
+		#endif
 	}
 	else if( g_fCvarHealthO || g_fCvarHealthS )
 	{
-		closed = GetEntProp(entity, Prop_Data, "m_eDoorState") == 0;
+		int health = GetEntProp(entity, Prop_Data, "m_iHealth");
+		int state = GetEntProp(entity, Prop_Data, "m_eDoorState");
 
-		if( closed && g_fCvarHealthS )			SetEntProp(entity, Prop_Data, "m_iHealth", RoundFloat(health * (g_fCvarHealthS * 2)));
-		else if( !closed && g_fCvarHealthO )	SetEntProp(entity, Prop_Data, "m_iHealth", RoundFloat(health * g_fCvarHealthO));
+		if( (state == DOOR_STATE_CLOSED || state == DOOR_STATE_CLOSING_IN_PROGRESS) && g_fCvarHealthS )				SetEntProp(entity, Prop_Data, "m_iHealth", RoundFloat(health * g_fCvarHealthS / (g_fCvarHealthO ? g_fCvarHealthO : 1.0))); // Closed
+		else if( (state == DOOR_STATE_OPENED || state == DOOR_STATE_OPENING_IN_PROGRESS) && g_fCvarHealthO )		SetEntProp(entity, Prop_Data, "m_iHealth", RoundFloat(health * g_fCvarHealthO / (g_fCvarHealthS ? g_fCvarHealthS : 1.0))); // Opened
+
+		#if DEBUG_PRINT
+		PrintToChatAll("%s (%d) %d > %d", state == 0 ? "CLOSED" : "OPENED", entity, health, GetEntProp(entity, Prop_Data, "m_iHealth"));
+		PrintToServer("%s (%d) %d > %d", state == 0 ? "CLOSED" : "OPENED", entity, health, GetEntProp(entity, Prop_Data, "m_iHealth"));
+		#endif
+	}
+
+	if( g_iFlags[entity] == -1 )
+	{
+		g_iFlags[entity] = GetEntProp(entity, Prop_Send, "m_spawnflags");
+		SetEntProp(entity, Prop_Send, "m_spawnflags", DOOR_FLAG_IGNORE_USE); // Prevent +USE
+		CreateTimer(0.2, TimerDoorSet, EntIndexToEntRef(entity));
 	}
 }
 
-public void Door_Movement(const char[] output, int caller, int activator, float delay)
+Action TimerDoorSet(Handle timer, any entity)
+{
+	entity = EntRefToEntIndex(entity);
+	if( entity != INVALID_ENT_REFERENCE )
+	{
+		SetEntProp(entity, Prop_Send, "m_spawnflags", g_iFlags[entity]);
+		g_iFlags[entity] = -1;
+	}
+}
+
+void Door_Moved(const char[] output, int caller, int activator, float delay)
 {
 	SetDoorHealth(caller);
+}
+
+void MatchRelatives(int entity)
+{
+	static char sTemp[128], sTarget[128];
+	GetEntPropString(entity, Prop_Data, "m_SlaveName", sTemp, sizeof(sTemp));
+
+	int target = -1;
+
+	if( sTemp[0] != 0 )
+	{
+		while( (target = FindEntityByClassname(target, "prop_door_rotating")) != INVALID_ENT_REFERENCE )
+		{
+			GetEntPropString(target, Prop_Data, "m_iName", sTarget, sizeof(sTarget));
+			if( strcmp(sTemp, sTarget) == 0 )
+			{
+				g_iRelative[target] = EntIndexToEntRef(entity);
+				g_iRelative[entity] = EntIndexToEntRef(target);
+				return;
+			}
+		}
+	}
 }
 
 
@@ -371,30 +498,20 @@ void SpawnPost(int entity)
 		g_iDoors[entity] = EntIndexToEntRef(entity);
 
 		// Hooks
-		HookSingleEntityOutput(entity, "OnFullyOpen", Door_Movement);
-		HookSingleEntityOutput(entity, "OnFullyClosed", Door_Movement);
+		HookSingleEntityOutput(entity, "OnFullyOpen", Door_Moved);
+		HookSingleEntityOutput(entity, "OnFullyClosed", Door_Moved);
 
-		// SetVariantString("OnLockedUse !self:SetAnimation:KnobTurnFail:0:-1");
-		// AcceptEntityInput(entity, "AddOutput");
-
-			// static int aa;
-			// SetVariantString("OnLockedUse silvers_point_cmd:Command:say test:0:-1");
-			// AcceptEntityInput(entity, "AddOutput");
-
-			// Testing outputs
-			// if( aa == 0 )
-			// {
-				// entity = CreateEntityByName("point_servercommand");
-				// DispatchKeyValue(entity, "targetname", "silvers_point_cmd");
-				// DispatchSpawn(entity);
-			// }
+		g_iFlags[entity] = -1;
 
 		// Health
 		SetDoorHealth(entity, true);
+
+		// Find double doors
+		MatchRelatives(entity);
 	}
 }
 
-public Action Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
+void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
 	ResetPlugin();
 }
@@ -417,16 +534,12 @@ public void OnMapEnd()
 
 void ResetPlugin()
 {
+	g_fLastPrint = 0.0;
+
 	for( int i = 0; i <= MaxClients; i++ )
 	{
 		g_fLastUse[i] = 0.0;
 	}
-
-	// Don't reset, because OnEntityCreated uses this and sets reference anyway.
-	// for( int i = 0; i < 2048; i++ )
-	// {
-		// g_iDoors[i] = 0;
-	// }
 }
 
 public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3], float angles[3], int &weapon)
@@ -439,7 +552,7 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 			if( entity > MaxClients && g_iDoors[entity] == EntIndexToEntRef(entity) )
 			{
 				// Door not rotating
-				if( GetEntProp(entity, Prop_Data, "m_eDoorState") == 0 )
+				if( GetEntProp(entity, Prop_Data, "m_eDoorState") == DOOR_STATE_CLOSED )
 				{
 					// Range text
 					if( g_fCvarRange )
@@ -447,7 +560,7 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 						float vPos[3], vEnd[3];
 						GetClientAbsOrigin(client, vPos);
 						GetEntPropVector(entity, Prop_Data, "m_vecOrigin", vEnd);
-						if( GetVectorDistance(vPos, vEnd) > g_fCvarRange ) return;
+						if( GetVectorDistance(vPos, vEnd) > g_fCvarRange ) return Plugin_Continue;
 					}
 
 					// Door locked
@@ -459,12 +572,43 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 							// Text
 							if( g_iCvarText & 2 )
 							{
-								if( g_iCvarText & 4 )			PrintToChatAll("\x04%N \x01unlocked a door", client);
-								else if( g_iCvarText & 8 )		PrintToChat(client, "\x04%N \x01unlocked a door", client);
+								if( g_fLastPrint != GetGameTime() )
+								{
+									g_fLastPrint = GetGameTime();
+									if( g_iCvarText & 4 )			PrintToChatAll("\x04%N \x01unlocked a door", client);
+									else if( g_iCvarText & 8 )		PrintToChat(client, "\x04%N \x01unlocked a door", client);
+								}
 							}
 
 							// Sound
 							PlaySound(entity, 2);
+
+							// Relative
+							int target = g_iRelative[entity];
+							if( target && (target = EntRefToEntIndex(target)) != INVALID_ENT_REFERENCE )
+							{
+								// Action
+								AcceptEntityInput(target, "InputUnlock");
+								SetEntProp(target, Prop_Data, "m_bLocked", 0);
+								ChangeEdictState(target, 0);
+
+								// Health
+								int health = GetEntProp(target, Prop_Data, "m_iHealth");
+								SetEntProp(target, Prop_Data, "m_iHealth", RoundFloat(health / g_fCvarHealthL)); // Divide by locked health
+
+								#if DEBUG_PRINT
+								PrintToChatAll("UNLOCK RELATIVE (%d) %d > %d", target, health, GetEntProp(target, Prop_Data, "m_iHealth"));
+								PrintToServer("UNLOCK RELATIVE (%d) %d > %d", target, health, GetEntProp(target, Prop_Data, "m_iHealth"));
+								#endif
+
+								// Prevent opening
+								if( g_iFlags[target] == -1 )
+								{
+									g_iFlags[target] = GetEntProp(target, Prop_Send, "m_spawnflags");
+									SetEntProp(target, Prop_Send, "m_spawnflags", DOOR_FLAG_IGNORE_USE); // Prevent +USE
+									CreateTimer(0.2, TimerDoorSet, EntIndexToEntRef(target));
+								}
+							}
 
 							// Action
 							AcceptEntityInput(entity, "InputUnlock");
@@ -473,10 +617,22 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 
 							// Health
 							int health = GetEntProp(entity, Prop_Data, "m_iHealth");
-							SetEntProp(entity, Prop_Data, "m_iHealth", RoundFloat(health / g_fCvarHealthL) / 2); // Divided by 2 because the door opens and triggers movement hook, which doubles the health thinking it was just closed.
+							SetEntProp(entity, Prop_Data, "m_iHealth", RoundFloat(health / g_fCvarHealthL)); // Divide by locked health
+
+							#if DEBUG_PRINT
+							PrintToChatAll("UNLOCK (%d) %d > %d", entity, health, GetEntProp(entity, Prop_Data, "m_iHealth"));
+							PrintToServer("UNLOCK (%d) %d > %d", entity, health, GetEntProp(entity, Prop_Data, "m_iHealth"));
+							#endif
 
 							// Prevent opening
-							RequestFrame(OnOpen, EntIndexToEntRef(entity));
+							if( g_iFlags[entity] == -1 )
+							{
+								g_iFlags[entity] = GetEntProp(entity, Prop_Send, "m_spawnflags");
+								SetEntProp(entity, Prop_Send, "m_spawnflags", DOOR_FLAG_IGNORE_USE); // Prevent +USE
+								CreateTimer(0.2, TimerDoorSet, EntIndexToEntRef(entity));
+							}
+
+							// RequestFrame(OnOpen, EntIndexToEntRef(entity));
 						// Pressing use, attempting to open a locked door
 						} else {
 							PlaySound(entity, 3);
@@ -496,7 +652,7 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 								AcceptEntityInput(entity, "SetAnimation");
 							}
 
-							return;
+							return Plugin_Continue;
 						}
 					}
 					// Not locked
@@ -507,8 +663,12 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 							// Text
 							if( g_iCvarText & 1 )
 							{
-								if( g_iCvarText & 4 )			PrintToChatAll("\x04%N \x01locked a door", client);
-								else if( g_iCvarText & 8 )		PrintToChat(client, "\x043%N \x01locked a door", client);
+								if( g_fLastPrint != GetGameTime() )
+								{
+									g_fLastPrint = GetGameTime();
+									if( g_iCvarText & 4 )			PrintToChatAll("\x04%N \x01locked a door", client);
+									else if( g_iCvarText & 8 )		PrintToChat(client, "\x043%N \x01locked a door", client);
+								}
 							}
 
 							// Sound, vocalize
@@ -519,6 +679,33 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 
 							PlaySound(entity, 1);
 
+							// Relative
+							int target = g_iRelative[entity];
+							if( target && (target = EntRefToEntIndex(target)) != INVALID_ENT_REFERENCE )
+							{
+								// Action
+								AcceptEntityInput(target, "InputLock");
+								SetEntProp(target, Prop_Data, "m_bLocked", 1);
+								ChangeEdictState(target, 0);
+
+								// Health
+								int health = GetEntProp(target, Prop_Data, "m_iHealth");
+								SetEntProp(target, Prop_Data, "m_iHealth", RoundFloat(health * g_fCvarHealthL));
+
+								#if DEBUG_PRINT
+								PrintToChatAll("LOCK RELATIVE (%d) %d > %d", target, health, GetEntProp(target, Prop_Data, "m_iHealth"));
+								PrintToServer("LOCK RELATIVE (%d) %d > %d", target, health, GetEntProp(target, Prop_Data, "m_iHealth"));
+								#endif
+
+								// Prevent opening
+								if( g_iFlags[target] == -1 )
+								{
+									g_iFlags[target] = GetEntProp(target, Prop_Send, "m_spawnflags");
+									SetEntProp(target, Prop_Send, "m_spawnflags", DOOR_FLAG_IGNORE_USE); // Prevent +USE
+									CreateTimer(0.2, TimerDoorSet, EntIndexToEntRef(target));
+								}
+							}
+
 							// Action
 							AcceptEntityInput(entity, "InputLock");
 							SetEntProp(entity, Prop_Data, "m_bLocked", 1);
@@ -527,6 +714,19 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 							// Health
 							int health = GetEntProp(entity, Prop_Data, "m_iHealth");
 							SetEntProp(entity, Prop_Data, "m_iHealth", RoundFloat(health * g_fCvarHealthL));
+
+							#if DEBUG_PRINT
+							PrintToChatAll("LOCK (%d) %d > %d", entity, health, GetEntProp(entity, Prop_Data, "m_iHealth"));
+							PrintToServer("LOCK (%d) %d > %d", entity, health, GetEntProp(entity, Prop_Data, "m_iHealth"));
+							#endif
+
+							// Prevent opening
+							if( g_iFlags[entity] == -1 )
+							{
+								g_iFlags[entity] = GetEntProp(entity, Prop_Send, "m_spawnflags");
+								SetEntProp(entity, Prop_Send, "m_spawnflags", DOOR_FLAG_IGNORE_USE); // Prevent +USE
+								CreateTimer(0.2, TimerDoorSet, EntIndexToEntRef(entity));
+							}
 						}
 					}
 				}
@@ -535,12 +735,8 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 
 		g_fLastUse[client] = GetGameTime() + 0.3; // Avoid spamming resources
 	}
-}
 
-void OnOpen(int entity)
-{
-	if( EntRefToEntIndex(entity) != INVALID_ENT_REFERENCE )
-		AcceptEntityInput(entity, "Close");
+	return Plugin_Continue;
 }
 
 void PlaySound(int entity, int type)
