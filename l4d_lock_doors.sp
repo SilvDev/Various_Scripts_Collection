@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.9"
+#define PLUGIN_VERSION 		"1.10"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,12 @@
 
 ========================================================================================
 	Change Log:
+
+1.10 (30-May-2022)
+	- Added cvar "l4d_lock_doors_invincible" to control if invincible doors should be allowed (stock game function).
+	- Fixed affecting some doors which should be closed for events etc.
+	- Fixed double doors not always opening in the same direction.
+	- Fixed potentially not working on some round restarts.
 
 1.9 (30-May-2022)
 	- Added cvar "l4d_lock_doors_damage_tank" to control a Tanks shove damage on doors.
@@ -95,19 +101,31 @@
 #define SOUND_LOCKED			"doors/latchlocked2.wav"
 #define SOUND_UNLOCK			"doors/door_latch3.wav"
 
-#define DOOR_FLAG_IGNORE_USE	32768	// Do not modify!
 #define DOOR_NEAR_RESCUE		150		// Range to info_survivor_rescue
 #define DOOR_NEAR_VERSUS		10		// Range to match the same door on round 2
 #define DEBUG_PRINT				0
 
 // Testing: l4d_lock_doors_health_open 1.0; l4d_lock_doors_health_shut 2.0; l4d_lock_doors_health_lock 3.0;
 
+// Thanks to "Dragokas":
 enum // m_eDoorState
 {
 	DOOR_STATE_CLOSED,
 	DOOR_STATE_OPENING_IN_PROGRESS,
 	DOOR_STATE_OPENED,
 	DOOR_STATE_CLOSING_IN_PROGRESS
+}
+
+// Thanks to "Dragokas":
+enum // m_spawnflags
+{
+	DOOR_FLAG_STARTS_OPEN		= 1,
+	DOOR_FLAG_STARTS_LOCKED		= 2048,
+	DOOR_FLAG_SILENT			= 4096,
+	DOOR_FLAG_USE_CLOSES		= 8192,
+	DOOR_FLAG_SILENT_NPC		= 16384,
+	DOOR_FLAG_IGNORE_USE		= 32768,
+	DOOR_FLAG_UNBREAKABLE		= 524288
 }
 
 enum
@@ -118,11 +136,11 @@ enum
 	TYPE_TANK,
 }
 
-ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarDamageC, g_hCvarDamageI, g_hCvarDamageS, g_hCvarDamageT, g_hCvarHealthL, g_hCvarHealthO, g_hCvarHealthS, g_hCvarHealthT, g_hCvarKeys, g_hCvarRandom, g_hCvarRange, g_hCvarText, g_hCvarVoca;
+ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarDamageC, g_hCvarDamageI, g_hCvarDamageS, g_hCvarDamageT, g_hCvarHealthL, g_hCvarHealthO, g_hCvarHealthS, g_hCvarHealthT, g_hCvarInvin, g_hCvarKeys, g_hCvarRandom, g_hCvarRange, g_hCvarText, g_hCvarVoca;
 float g_fCvarHealthL, g_fCvarHealthO, g_fCvarHealthS, g_fCvarRange;
 int g_iCvarDamageC, g_iCvarDamageI, g_iCvarDamageS, g_iCvarDamageT, g_iPlayerSpawn, g_iRoundNumber, g_iCvarKeys, g_iCvarRandom, g_iCvarText, g_iCvarVoca, g_iCvarHealthT;
 
-bool g_bCvarAllow, g_bMapStarted, g_bRoundStarted, g_bLeft4Dead2;
+bool g_bCvarAllow, g_bCvarInvin, g_bMapStarted, g_bRoundStarted, g_bLeft4Dead2;
 float g_fLastUse[MAXPLAYERS+1], g_fLastPrint;
 float g_vPos[2048][3];
 int g_iState[2048];
@@ -212,6 +230,7 @@ public void OnPluginStart()
 	g_hCvarHealthO =	CreateConVar("l4d_lock_doors_health_open",		"0.5",				"0=Off. Percentage of health to set when the door is open.", CVAR_FLAGS );
 	g_hCvarHealthS =	CreateConVar("l4d_lock_doors_health_shut",		"1.0",				"0=Off. Percentage of health to set when the door is shut.", CVAR_FLAGS );
 	g_hCvarHealthT =	CreateConVar("l4d_lock_doors_health_total",		"840",				"0=Off. How much health doors have on spawn (840 game default).", CVAR_FLAGS );
+	g_hCvarInvin =		CreateConVar("l4d_lock_doors_invincible",		"0",				"0=No invincible doors. 1=Allow doors which are damaged when shot etc but don't break (default game behaviour).", CVAR_FLAGS );
 	g_hCvarKeys =		CreateConVar("l4d_lock_doors_keys",				"1",				"Which key combination to lock/unlock doors: 1=Shift (walk) + E (use). 2=Ctrl (duck) + E (use).", CVAR_FLAGS );
 	g_hCvarRandom =		CreateConVar("l4d_lock_doors_random",			"0",				"0=Off. On round start the chance out of 100 to randomly open a closed door, or close an open door. Versus 2nd round will open/close the same doors.", CVAR_FLAGS );
 	g_hCvarRange =		CreateConVar("l4d_lock_doors_range",			"150",				"0=Any distance. How close a player must be to the door they're trying to lock or unlock.", CVAR_FLAGS );
@@ -234,6 +253,7 @@ public void OnPluginStart()
 	g_hCvarHealthO.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarHealthS.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarHealthT.AddChangeHook(ConVarChanged_Cvars);
+	g_hCvarInvin.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarKeys.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarText.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarRandom.AddChangeHook(ConVarChanged_Cvars);
@@ -273,6 +293,7 @@ void GetCvars()
 	g_fCvarHealthO = g_hCvarHealthO.FloatValue;
 	g_fCvarHealthS = g_hCvarHealthS.FloatValue;
 	g_iCvarHealthT = g_hCvarHealthT.IntValue;
+	g_bCvarInvin = g_hCvarInvin.BoolValue;
 	g_iCvarKeys = g_hCvarKeys.IntValue;
 	g_iCvarText = g_hCvarText.IntValue;
 	g_iCvarRandom = g_hCvarRandom.IntValue;
@@ -426,36 +447,11 @@ void SpawnPost(int entity)
 {
 	if( GetEntProp(entity, Prop_Data, "m_bLocked") == 0 )
 	{
-		g_iDoors[entity] = EntIndexToEntRef(entity);
+		int flags = GetEntProp(entity, Prop_Data, "m_spawnflags");
 
-		// Hooks
-		HookSingleEntityOutput(entity, "OnFullyOpen", Door_Moved);
-		HookSingleEntityOutput(entity, "OnFullyClosed", Door_Moved);
-
-		g_iFlags[entity] = -1;
-
-		// Health
-		SetDoorHealth(entity, true);
-
-		// Find double doors
-		MatchRelatives(entity);
-
-		RandomDoors(entity);
-	}
-}
-
-
-
-// ====================================================================================================
-//					FIND DOORS
-// ====================================================================================================
-void SearchForDoors()
-{
-	int entity = -1;
-
-	while( (entity = FindEntityByClassname(entity, "prop_door_rotating")) != INVALID_ENT_REFERENCE )
-	{
-		if( GetEntProp(entity, Prop_Data, "m_bLocked") == 0 )
+		// Many doors have the value "65535" which is all flags included, but they should be accessible, so allowing these to be modified
+		// It seems doors with DOOR_FLAG_UNBREAKABLE flag are to trigger events, alarmed doors. c1m2_streets - supermarket doors. c1m3_mall - alarmed door into the mall gauntlet.
+		if( flags == 65535 || flags & DOOR_FLAG_UNBREAKABLE == 0 )
 		{
 			g_iDoors[entity] = EntIndexToEntRef(entity);
 
@@ -474,6 +470,21 @@ void SearchForDoors()
 			// Random door opening
 			RandomDoors(entity);
 		}
+	}
+}
+
+
+
+// ====================================================================================================
+//					FIND DOORS
+// ====================================================================================================
+void SearchForDoors()
+{
+	int entity = -1;
+
+	while( (entity = FindEntityByClassname(entity, "prop_door_rotating")) != INVALID_ENT_REFERENCE )
+	{
+		SpawnPost(entity);
 	}
 }
 
@@ -621,17 +632,20 @@ void OpenOrClose(int entity, int state)
 		if( director == -1 || EntRefToEntIndex(director) == INVALID_ENT_REFERENCE )
 		{
 			director = FindEntityByClassname(-1, "info_director");
-			director = EntIndexToEntRef(director);
+			if( director != -1 )
+			{
+				director = EntIndexToEntRef(director);
+			}
 		}
 
 		sTarget[0] = 0; // Reset string
 
 		if( director != -1 )
 		{
-			GetEntPropString(entity, Prop_Data, "m_iName", sTarget, sizeof(sTarget));
+			GetEntPropString(director, Prop_Data, "m_iName", sTarget, sizeof(sTarget));
 		}
 
-		if( sTarget[0] == 0 )
+		if( sTarget[0] == '\x0' )
 		{
 			GetEntPropString(entity, Prop_Data, "m_iName", sTarget, sizeof(sTarget));
 		}
@@ -733,7 +747,9 @@ Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, in
 			dPack.WriteCell(type);
 			RequestFrame(OnFrameHealth, dPack);
 		}
-	} else {
+	}
+	else if( !g_bCvarInvin )
+	{
 		if( health - damage > 0 )
 			SetEntProp(victim, Prop_Data, "m_iHealth", RoundFloat(health - damage));
 		else
@@ -818,8 +834,7 @@ void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 	{
 		if( g_iRoundNumber == 1 ) ResetPlugin();
 
-		SearchForDoors();
-		g_bRoundStarted = true;
+		CreateTimer(0.5, TimerStart, _, TIMER_FLAG_NO_MAPCHANGE);
 	}
 }
 
