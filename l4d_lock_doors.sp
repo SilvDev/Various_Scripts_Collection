@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.11"
+#define PLUGIN_VERSION 		"1.12"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.12 (01-Jun-2022)
+	- Fixed not finding relative double doors that used only identical targetnames to match. Thanks to "gongo" for reporting/
 
 1.11 (01-Jun-2022)
 	- Added cvar "l4d_lock_doors_random_type" to set if doors should be randomly opened or closed only, or toggled by their current state.
@@ -497,12 +500,32 @@ void SearchForDoors()
 void MatchRelatives(int entity)
 {
 	static char sTemp[128], sTarget[128];
-	GetEntPropString(entity, Prop_Data, "m_SlaveName", sTemp, sizeof(sTemp));
-
 	int target = -1;
+
+	// Match relative doors by "m_SlaveName"
+	GetEntPropString(entity, Prop_Data, "m_SlaveName", sTemp, sizeof(sTemp));
 
 	if( sTemp[0] != 0 )
 	{
+		while( (target = FindEntityByClassname(target, "prop_door_rotating")) != INVALID_ENT_REFERENCE )
+		{
+			GetEntPropString(target, Prop_Data, "m_iName", sTarget, sizeof(sTarget));
+			if( strcmp(sTemp, sTarget) == 0 )
+			{
+				g_iRelative[target] = EntIndexToEntRef(entity);
+				g_iRelative[entity] = EntIndexToEntRef(target);
+				return;
+			}
+		}
+	}
+
+	// Match relative doors by "m_iName"
+	GetEntPropString(entity, Prop_Data, "m_iName", sTemp, sizeof(sTemp));
+
+	if( sTemp[0] != 0 )
+	{
+		target = -1;
+
 		while( (target = FindEntityByClassname(target, "prop_door_rotating")) != INVALID_ENT_REFERENCE )
 		{
 			GetEntPropString(target, Prop_Data, "m_iName", sTarget, sizeof(sTarget));
