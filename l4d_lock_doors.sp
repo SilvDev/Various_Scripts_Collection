@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.10"
+#define PLUGIN_VERSION 		"1.11"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,11 @@
 
 ========================================================================================
 	Change Log:
+
+1.11 (01-Jun-2022)
+	- Added cvar "l4d_lock_doors_random_type" to set if doors should be randomly opened or closed only, or toggled by their current state.
+	- Fixed not always opening or closing doors on round restarts. Thanks to "gongo" for reporting.
+	- Restored ability to lock alarmed doors, but plugin no longer randomly opens them. Thanks to "Toranks" for reporting.
 
 1.10 (30-May-2022)
 	- Added cvar "l4d_lock_doors_invincible" to control if invincible doors should be allowed (stock game function).
@@ -136,9 +141,9 @@ enum
 	TYPE_TANK,
 }
 
-ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarDamageC, g_hCvarDamageI, g_hCvarDamageS, g_hCvarDamageT, g_hCvarHealthL, g_hCvarHealthO, g_hCvarHealthS, g_hCvarHealthT, g_hCvarInvin, g_hCvarKeys, g_hCvarRandom, g_hCvarRange, g_hCvarText, g_hCvarVoca;
+ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarDamageC, g_hCvarDamageI, g_hCvarDamageS, g_hCvarDamageT, g_hCvarHealthL, g_hCvarHealthO, g_hCvarHealthS, g_hCvarHealthT, g_hCvarInvin, g_hCvarKeys, g_hCvarRandom, g_hCvarRandomT, g_hCvarRange, g_hCvarText, g_hCvarVoca;
 float g_fCvarHealthL, g_fCvarHealthO, g_fCvarHealthS, g_fCvarRange;
-int g_iCvarDamageC, g_iCvarDamageI, g_iCvarDamageS, g_iCvarDamageT, g_iPlayerSpawn, g_iRoundNumber, g_iCvarKeys, g_iCvarRandom, g_iCvarText, g_iCvarVoca, g_iCvarHealthT;
+int g_iCvarDamageC, g_iCvarDamageI, g_iCvarDamageS, g_iCvarDamageT, g_iPlayerSpawn, g_iRoundNumber, g_iCvarKeys, g_iCvarRandom, g_iCvarRandomT, g_iCvarText, g_iCvarVoca, g_iCvarHealthT;
 
 bool g_bCvarAllow, g_bCvarInvin, g_bMapStarted, g_bRoundStarted, g_bLeft4Dead2;
 float g_fLastUse[MAXPLAYERS+1], g_fLastPrint;
@@ -232,7 +237,8 @@ public void OnPluginStart()
 	g_hCvarHealthT =	CreateConVar("l4d_lock_doors_health_total",		"840",				"0=Off. How much health doors have on spawn (840 game default).", CVAR_FLAGS );
 	g_hCvarInvin =		CreateConVar("l4d_lock_doors_invincible",		"0",				"0=No invincible doors. 1=Allow doors which are damaged when shot etc but don't break (default game behaviour).", CVAR_FLAGS );
 	g_hCvarKeys =		CreateConVar("l4d_lock_doors_keys",				"1",				"Which key combination to lock/unlock doors: 1=Shift (walk) + E (use). 2=Ctrl (duck) + E (use).", CVAR_FLAGS );
-	g_hCvarRandom =		CreateConVar("l4d_lock_doors_random",			"0",				"0=Off. On round start the chance out of 100 to randomly open a closed door, or close an open door. Versus 2nd round will open/close the same doors.", CVAR_FLAGS );
+	g_hCvarRandom =		CreateConVar("l4d_lock_doors_random",			"0",				"0=Off. On round start the chance out of 100 to randomly open or close a door. Versus 2nd round will open/close the same doors.", CVAR_FLAGS );
+	g_hCvarRandomT =	CreateConVar("l4d_lock_doors_random_type",		"1",				"1=Open doors only. 2=Close doors only. 3=Open doors that are closed, and close doors that are open.", CVAR_FLAGS );
 	g_hCvarRange =		CreateConVar("l4d_lock_doors_range",			"150",				"0=Any distance. How close a player must be to the door they're trying to lock or unlock.", CVAR_FLAGS );
 	g_hCvarText =		CreateConVar("l4d_lock_doors_text",				"11",				"0=Off. Display a chat message when: 1=Locking doors. 2=Unlocking doors. 4=To all players. 8=To self. Add numbers together.", CVAR_FLAGS );
 	g_hCvarVoca =		CreateConVar("l4d_lock_doors_vocalize",			"1",				"0=Off. 1=-Vocalize when locking doors.", CVAR_FLAGS );
@@ -257,6 +263,7 @@ public void OnPluginStart()
 	g_hCvarKeys.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarText.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarRandom.AddChangeHook(ConVarChanged_Cvars);
+	g_hCvarRandomT.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarRange.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarVoca.AddChangeHook(ConVarChanged_Cvars);
 
@@ -297,6 +304,7 @@ void GetCvars()
 	g_iCvarKeys = g_hCvarKeys.IntValue;
 	g_iCvarText = g_hCvarText.IntValue;
 	g_iCvarRandom = g_hCvarRandom.IntValue;
+	g_iCvarRandomT = g_hCvarRandomT.IntValue;
 	g_fCvarRange = g_hCvarRange.FloatValue;
 	g_iCvarVoca = g_hCvarVoca.IntValue;
 }
@@ -447,29 +455,22 @@ void SpawnPost(int entity)
 {
 	if( GetEntProp(entity, Prop_Data, "m_bLocked") == 0 )
 	{
-		int flags = GetEntProp(entity, Prop_Data, "m_spawnflags");
+		g_iDoors[entity] = EntIndexToEntRef(entity);
 
-		// Many doors have the value "65535" which is all flags included, but they should be accessible, so allowing these to be modified
-		// It seems doors with DOOR_FLAG_UNBREAKABLE flag are to trigger events, alarmed doors. c1m2_streets - supermarket doors. c1m3_mall - alarmed door into the mall gauntlet.
-		if( flags == 65535 || flags & DOOR_FLAG_UNBREAKABLE == 0 )
-		{
-			g_iDoors[entity] = EntIndexToEntRef(entity);
+		// Hooks
+		HookSingleEntityOutput(entity, "OnFullyOpen", Door_Moved);
+		HookSingleEntityOutput(entity, "OnFullyClosed", Door_Moved);
 
-			// Hooks
-			HookSingleEntityOutput(entity, "OnFullyOpen", Door_Moved);
-			HookSingleEntityOutput(entity, "OnFullyClosed", Door_Moved);
+		g_iFlags[entity] = -1;
 
-			g_iFlags[entity] = -1;
+		// Health
+		SetDoorHealth(entity, true);
 
-			// Health
-			SetDoorHealth(entity, true);
+		// Find double doors
+		MatchRelatives(entity);
 
-			// Find double doors
-			MatchRelatives(entity);
-
-			// Random door opening
-			RandomDoors(entity);
-		}
+		// Random door opening
+		RandomDoors(entity);
 	}
 }
 
@@ -481,6 +482,11 @@ void SpawnPost(int entity)
 void SearchForDoors()
 {
 	int entity = -1;
+
+	#if DEBUG_PRINT
+	PrintToChatAll("\x03SearchForDoors");
+	PrintToServer("\x03SearchForDoors");
+	#endif
 
 	while( (entity = FindEntityByClassname(entity, "prop_door_rotating")) != INVALID_ENT_REFERENCE )
 	{
@@ -519,101 +525,119 @@ void RandomDoors(int entity)
 {
 	if( g_iCvarRandom )
 	{
-		// Versus, restore door states from previous round
-		if( g_iCurrentMode == 4 && g_iRoundNumber == 2 )
+		int flags = GetEntProp(entity, Prop_Data, "m_spawnflags");
+
+		// Many doors have the value "65535" which is all flags included, but they should be accessible, so allowing these to be modified
+		// It seems doors with DOOR_FLAG_UNBREAKABLE flag are to trigger events, alarmed doors. c1m2_streets - supermarket doors. c1m3_mall - alarmed door into the mall gauntlet.
+		// Ignoring those so they stay randomly closed
+		if( flags == 65535 || flags & DOOR_FLAG_UNBREAKABLE == 0 )
 		{
-			float vPos[3];
-			GetEntPropVector(entity, Prop_Send, "m_vecOrigin", vPos);
-
-			// Loop through saved doors
-			for( int i = 0; i < 2048; i++ )
+			// Versus, restore door states from previous round
+			if( g_iCurrentMode == 4 && g_iRoundNumber == 2 )
 			{
-				// Has a saved position
-				if( g_vPos[i][0] != 0.0 && g_vPos[i][1] != 0.0 && g_vPos[i][2] != 0.0 )
+				float vPos[3];
+				GetEntPropVector(entity, Prop_Send, "m_vecOrigin", vPos);
+
+				// Loop through saved doors
+				for( int i = 0; i < 2048; i++ )
 				{
-					// Match to the same door
-					if( GetVectorDistance(vPos, g_vPos[i]) < DOOR_NEAR_VERSUS )
+					// Has a saved position
+					if( g_vPos[i][0] != 0.0 && g_vPos[i][1] != 0.0 && g_vPos[i][2] != 0.0 )
 					{
-						if( g_iState[i] -1 == DOOR_STATE_OPENED )
+						// Match to the same door
+						if( GetVectorDistance(vPos, g_vPos[i]) < DOOR_NEAR_VERSUS )
 						{
-							#if DEBUG_PRINT
-							PrintToChatAll("VERSUS RESTORE DOOR OPEN: %d (%f) %0.1f %0.1f %0.1f /  %0.1f %0.1f %0.1f", entity, GetVectorDistance(vPos, g_vPos[i]), vPos[0], vPos[1], vPos[2], g_vPos[i][0], g_vPos[i][1], g_vPos[i][2]);
-							PrintToServer("VERSUS RESTORE DOOR OPEN: %d (%f) %0.1f %0.1f %0.1f / %0.1f %0.1f %0.1f", entity, GetVectorDistance(vPos, g_vPos[i]), vPos[0], vPos[1], vPos[2], g_vPos[i][0], g_vPos[i][1], g_vPos[i][2]);
-							#endif
+							if( g_iState[i] -1 == DOOR_STATE_OPENED )
+							{
+								#if DEBUG_PRINT
+								PrintToChatAll("VERSUS RESTORE DOOR OPEN: %d (%f) %0.1f %0.1f %0.1f /  %0.1f %0.1f %0.1f", entity, GetVectorDistance(vPos, g_vPos[i]), vPos[0], vPos[1], vPos[2], g_vPos[i][0], g_vPos[i][1], g_vPos[i][2]);
+								PrintToServer("VERSUS RESTORE DOOR OPEN: %d (%f) %0.1f %0.1f %0.1f / %0.1f %0.1f %0.1f", entity, GetVectorDistance(vPos, g_vPos[i]), vPos[0], vPos[1], vPos[2], g_vPos[i][0], g_vPos[i][1], g_vPos[i][2]);
+								#endif
 
-							OpenOrClose(entity, DOOR_STATE_OPENED);
+								OpenOrClose(entity, DOOR_STATE_OPENED);
+							}
+							else if( g_iState[i] -1 == DOOR_STATE_CLOSED )
+							{
+								#if DEBUG_PRINT
+								PrintToChatAll("VERSUS RESTORE DOOR CLOSED: %d (%f) %0.1f %0.1f %0.1f /  %0.1f %0.1f %0.1f", entity, GetVectorDistance(vPos, g_vPos[i]), vPos[0], vPos[1], vPos[2], g_vPos[i][0], g_vPos[i][1], g_vPos[i][2]);
+								PrintToServer("VERSUS RESTORE DOOR CLOSED: %d (%f) %0.1f %0.1f %0.1f / %0.1f %0.1f %0.1f", entity, GetVectorDistance(vPos, g_vPos[i]), vPos[0], vPos[1], vPos[2], g_vPos[i][0], g_vPos[i][1], g_vPos[i][2]);
+								#endif
+
+								OpenOrClose(entity, DOOR_STATE_CLOSED);
+							}
+
+							g_iState[i] = 0;
+							g_vPos[i][0] = 0.0;
+							g_vPos[i][1] = 0.0;
+							g_vPos[i][2] = 0.0;
 						}
-						else if( g_iState[i] -1 == DOOR_STATE_CLOSED )
-						{
-							#if DEBUG_PRINT
-							PrintToChatAll("VERSUS RESTORE DOOR CLOSED: %d (%f) %0.1f %0.1f %0.1f /  %0.1f %0.1f %0.1f", entity, GetVectorDistance(vPos, g_vPos[i]), vPos[0], vPos[1], vPos[2], g_vPos[i][0], g_vPos[i][1], g_vPos[i][2]);
-							PrintToServer("VERSUS RESTORE DOOR CLOSED: %d (%f) %0.1f %0.1f %0.1f / %0.1f %0.1f %0.1f", entity, GetVectorDistance(vPos, g_vPos[i]), vPos[0], vPos[1], vPos[2], g_vPos[i][0], g_vPos[i][1], g_vPos[i][2]);
-							#endif
-
-							OpenOrClose(entity, DOOR_STATE_CLOSED);
-						}
-
-						g_iState[i] = 0;
-						g_vPos[i][0] = 0.0;
-						g_vPos[i][1] = 0.0;
-						g_vPos[i][2] = 0.0;
 					}
 				}
 			}
-		}
-		else if( GetRandomInt(1, 100) <= g_iCvarRandom )
-		{
-			float vPos[3], vLoc[3];
-			GetEntPropVector(entity, Prop_Send, "m_vecOrigin", vPos);
-
-			// Ignore doors to rescue rooms
-			int target = -1;
-			while( (target = FindEntityByClassname(target, "info_survivor_rescue")) != INVALID_ENT_REFERENCE )
+			else if( GetRandomInt(1, 100) <= g_iCvarRandom )
 			{
-				GetEntPropVector(target, Prop_Send, "m_vecOrigin", vLoc);
-				if( GetVectorDistance(vPos, vLoc) <= DOOR_NEAR_RESCUE )
-				{
-					#if DEBUG_PRINT
-					PrintToChatAll("\x04IGNORING RESCUE DOOR: %d (%f)", entity, GetVectorDistance(vPos, vLoc));
-					PrintToServer("\x04IGNORING RESCUE DOOR: %d (%f)", entity, GetVectorDistance(vPos, vLoc));
-					#endif
-					return;
-				}
-			}
+				float vPos[3], vLoc[3];
+				GetEntPropVector(entity, Prop_Send, "m_vecOrigin", vPos);
 
-			// Door is open, close it
-			if( GetEntProp(entity, Prop_Data, "m_eDoorState") == DOOR_STATE_OPENED )
-			{
-				// Save for VS
-				if( g_iCurrentMode == 4 )
+				// Ignore doors to rescue rooms
+				int target = -1;
+				while( (target = FindEntityByClassname(target, "info_survivor_rescue")) != INVALID_ENT_REFERENCE )
 				{
-					g_vPos[entity] = vPos;
-					g_iState[entity] = DOOR_STATE_CLOSED + 1;
-
-					#if DEBUG_PRINT
-					PrintToChatAll("VERSUS SAVE DOOR CLOSED: %0.1f %0.1f %0.1f", g_vPos[entity][0], g_vPos[entity][1], g_vPos[entity][2]);
-					PrintToServer("VERSUS SAVE DOOR CLOSED: %0.1f %0.1f %0.1f", g_vPos[entity][0], g_vPos[entity][1], g_vPos[entity][2]);
-					#endif
+					GetEntPropVector(target, Prop_Send, "m_vecOrigin", vLoc);
+					if( GetVectorDistance(vPos, vLoc) <= DOOR_NEAR_RESCUE )
+					{
+						#if DEBUG_PRINT
+						PrintToChatAll("\x04IGNORING RESCUE DOOR: %d (%f)", entity, GetVectorDistance(vPos, vLoc));
+						PrintToServer("IGNORING RESCUE DOOR: %d (%f)", entity, GetVectorDistance(vPos, vLoc));
+						#endif
+						return;
+					}
 				}
 
-				OpenOrClose(entity, DOOR_STATE_CLOSED);
-			}
-			// Door is closed, open it
-			else if( GetEntProp(entity, Prop_Data, "m_eDoorState") == DOOR_STATE_CLOSED )
-			{
-				// Save for VS
-				if( g_iCurrentMode == 4 )
+				// Door is open, close it
+				if( g_iCvarRandomT & 2 && GetEntProp(entity, Prop_Data, "m_eDoorState") == DOOR_STATE_OPENED )
 				{
-					g_vPos[entity] = vPos;
-					g_iState[entity] = DOOR_STATE_OPENED + 1;
+					// Save for VS
+					if( g_iCurrentMode == 4 )
+					{
+						g_vPos[entity] = vPos;
+						g_iState[entity] = DOOR_STATE_CLOSED + 1;
+
+						#if DEBUG_PRINT
+						PrintToChatAll("VERSUS SAVE DOOR CLOSED: %0.1f %0.1f %0.1f", g_vPos[entity][0], g_vPos[entity][1], g_vPos[entity][2]);
+						PrintToServer("VERSUS SAVE DOOR CLOSED: %0.1f %0.1f %0.1f", g_vPos[entity][0], g_vPos[entity][1], g_vPos[entity][2]);
+						#endif
+					}
 
 					#if DEBUG_PRINT
-					PrintToChatAll("VERSUS SAVE DOOR OPEN: %0.1f %0.1f %0.1f", g_vPos[entity][0], g_vPos[entity][1], g_vPos[entity][2]);
-					PrintToServer("VERSUS SAVE DOOR OPEN: %0.1f %0.1f %0.1f", g_vPos[entity][0], g_vPos[entity][1], g_vPos[entity][2]);
+					PrintToChatAll("\x04RandomDoors CLOSE %d", entity);
+					PrintToServer("RandomDoors CLOSE %d", entity);
 					#endif
-				}
 
-				OpenOrClose(entity, DOOR_STATE_OPENED);
+					OpenOrClose(entity, DOOR_STATE_CLOSED);
+				}
+				// Door is closed, open it
+				else if( g_iCvarRandomT & 1 && GetEntProp(entity, Prop_Data, "m_eDoorState") == DOOR_STATE_CLOSED )
+				{
+					// Save for VS
+					if( g_iCurrentMode == 4 )
+					{
+						g_vPos[entity] = vPos;
+						g_iState[entity] = DOOR_STATE_OPENED + 1;
+
+						#if DEBUG_PRINT
+						PrintToChatAll("VERSUS SAVE DOOR OPEN: %0.1f %0.1f %0.1f", g_vPos[entity][0], g_vPos[entity][1], g_vPos[entity][2]);
+						PrintToServer("VERSUS SAVE DOOR OPEN: %0.1f %0.1f %0.1f", g_vPos[entity][0], g_vPos[entity][1], g_vPos[entity][2]);
+						#endif
+					}
+
+					#if DEBUG_PRINT
+					PrintToChatAll("\x04RandomDoors OPEN %d", entity);
+					PrintToServer("RandomDoors OPEN %d", entity);
+					#endif
+
+					OpenOrClose(entity, DOOR_STATE_OPENED);
+				}
 			}
 		}
 	}
@@ -626,8 +650,18 @@ void OpenOrClose(int entity, int state)
 
 	if( state == DOOR_STATE_CLOSED )
 	{
+		#if DEBUG_PRINT
+		PrintToChatAll("OpenOrClose: CLOSE: %d", entity);
+		PrintToServer("OpenOrClose: CLOSE: %d", entity);
+		#endif
+
 		AcceptEntityInput(entity, "Close");
 	} else {
+		#if DEBUG_PRINT
+		PrintToChatAll("OpenOrClose: OPEN: %d", entity);
+		PrintToServer("OpenOrClose: OPEN: %d", entity);
+		#endif
+
 		// Open away from (to make double doors open in the same direction)
 		if( director == -1 || EntRefToEntIndex(director) == INVALID_ENT_REFERENCE )
 		{
@@ -650,8 +684,13 @@ void OpenOrClose(int entity, int state)
 			GetEntPropString(entity, Prop_Data, "m_iName", sTarget, sizeof(sTarget));
 		}
 
-		SetVariantString(sTarget);
-		AcceptEntityInput(entity, "OpenAwayFrom"); // Support for double doors and doors opening in the correct direction
+		if( sTarget[0] != '\x0' )
+		{
+			SetVariantString(sTarget);
+			AcceptEntityInput(entity, "OpenAwayFrom"); // Support for double doors and doors opening in the correct direction
+		} else {
+			AcceptEntityInput(entity, "Open");
+		}
 	}
 }
 
@@ -706,8 +745,6 @@ Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, in
 	PrintToServer("(%d) HEALTH %d DMG %f", victim, GetEntProp(victim, Prop_Data, "m_iHealth"), damage);
 	#endif
 
-	int health = GetEntProp(victim, Prop_Data, "m_iHealth");
-
 	if( damagetype == DMG_CLUB )
 	{
 		int type;
@@ -740,6 +777,8 @@ Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, in
 
 		if( type )
 		{
+			int health = GetEntProp(victim, Prop_Data, "m_iHealth");
+
 			// Must set health on frame, after 1 hit the game sets the doors health to 0
 			DataPack dPack = new DataPack();
 			dPack.WriteCell(EntIndexToEntRef(victim));
@@ -750,6 +789,8 @@ Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, in
 	}
 	else if( !g_bCvarInvin )
 	{
+		int health = GetEntProp(victim, Prop_Data, "m_iHealth");
+
 		if( health - damage > 0 )
 			SetEntProp(victim, Prop_Data, "m_iHealth", RoundFloat(health - damage));
 		else
@@ -817,7 +858,7 @@ void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 		if( client && !IsFakeClient(client) )
 		{
 			g_iPlayerSpawn = 1;
-			CreateTimer(2.0, TimerStart, _, TIMER_FLAG_NO_MAPCHANGE);
+			CreateTimer(5.0, TimerStart, _, TIMER_FLAG_NO_MAPCHANGE);
 		}
 	}
 }
@@ -834,7 +875,12 @@ void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 	{
 		if( g_iRoundNumber == 1 ) ResetPlugin();
 
-		CreateTimer(0.5, TimerStart, _, TIMER_FLAG_NO_MAPCHANGE);
+		#if DEBUG_PRINT
+		PrintToChatAll("\x03Event_RoundStart");
+		PrintToServer("\x03Event_RoundStart");
+		#endif
+
+		CreateTimer(5.0, TimerStart, _, TIMER_FLAG_NO_MAPCHANGE);
 	}
 }
 
