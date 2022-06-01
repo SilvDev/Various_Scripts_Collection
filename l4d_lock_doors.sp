@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.12"
+#define PLUGIN_VERSION 		"1.13"
 
 /*=======================================================================================
 	Plugin Info:
@@ -32,8 +32,11 @@
 ========================================================================================
 	Change Log:
 
+1.13 (01-Jun-2022)
+	- Fixed potentially not finding some relative double doors.
+
 1.12 (01-Jun-2022)
-	- Fixed not finding relative double doors that used only identical targetnames to match. Thanks to "gongo" for reporting/
+	- Fixed not finding relative double doors that used only identical targetnames to match. Thanks to "gongo" for reporting.
 
 1.11 (01-Jun-2022)
 	- Added cvar "l4d_lock_doors_random_type" to set if doors should be randomly opened or closed only, or toggled by their current state.
@@ -270,7 +273,34 @@ public void OnPluginStart()
 	g_hCvarRange.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarVoca.AddChangeHook(ConVarChanged_Cvars);
 
+	// Commands
 	RegAdminCmd("sm_lock_doors_health", CmdHealth, ADMFLAG_ROOT, "Returns the health of the door you're aiming at.");
+
+	if( g_bLeft4Dead2 && CommandExists("sm_doors_glow") == false )
+	{
+		RegAdminCmd("sm_doors_glow", CmdGlow, ADMFLAG_ROOT, "Debug testing command to show all doors.");
+	}
+}
+
+bool g_bGlow;
+Action CmdGlow(int client, int args)
+{
+	g_bGlow = !g_bGlow;
+
+	int entity = -1;
+	while( (entity = FindEntityByClassname(entity, "prop_door_rotating")) != INVALID_ENT_REFERENCE )
+	{
+		SetEntProp(entity, Prop_Send, "m_iGlowType", 3);
+		SetEntProp(entity, Prop_Send, "m_glowColorOverride", 255);
+		SetEntProp(entity, Prop_Send, "m_nGlowRange", g_bGlow ? 0 : 9999);
+		SetEntProp(entity, Prop_Send, "m_nGlowRangeMin", 20);
+		if( g_bGlow )
+			AcceptEntityInput(entity, "StartGlowing");
+		else
+			AcceptEntityInput(entity, "StopGlowing");
+	}
+
+	return Plugin_Handled;
 }
 
 
@@ -509,12 +539,15 @@ void MatchRelatives(int entity)
 	{
 		while( (target = FindEntityByClassname(target, "prop_door_rotating")) != INVALID_ENT_REFERENCE )
 		{
-			GetEntPropString(target, Prop_Data, "m_iName", sTarget, sizeof(sTarget));
-			if( strcmp(sTemp, sTarget) == 0 )
+			if( target != entity )
 			{
-				g_iRelative[target] = EntIndexToEntRef(entity);
-				g_iRelative[entity] = EntIndexToEntRef(target);
-				return;
+				GetEntPropString(target, Prop_Data, "m_iName", sTarget, sizeof(sTarget));
+				if( strcmp(sTemp, sTarget) == 0 )
+				{
+					g_iRelative[target] = EntIndexToEntRef(entity);
+					g_iRelative[entity] = EntIndexToEntRef(target);
+					return;
+				}
 			}
 		}
 	}
@@ -528,12 +561,15 @@ void MatchRelatives(int entity)
 
 		while( (target = FindEntityByClassname(target, "prop_door_rotating")) != INVALID_ENT_REFERENCE )
 		{
-			GetEntPropString(target, Prop_Data, "m_iName", sTarget, sizeof(sTarget));
-			if( strcmp(sTemp, sTarget) == 0 )
+			if( target != entity )
 			{
-				g_iRelative[target] = EntIndexToEntRef(entity);
-				g_iRelative[entity] = EntIndexToEntRef(target);
-				return;
+				GetEntPropString(target, Prop_Data, "m_iName", sTarget, sizeof(sTarget));
+				if( strcmp(sTemp, sTarget) == 0 )
+				{
+					g_iRelative[target] = EntIndexToEntRef(entity);
+					g_iRelative[entity] = EntIndexToEntRef(target);
+					return;
+				}
 			}
 		}
 	}
@@ -909,6 +945,7 @@ void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 
 void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
+	g_bGlow = false;
 	g_bRoundStarted = false;
 }
 
@@ -929,6 +966,7 @@ public void OnMapStart()
 
 public void OnMapEnd()
 {
+	g_bGlow = false;
 	g_bMapStarted = false;
 	g_bRoundStarted = false;
 	g_iRoundNumber = 0;
