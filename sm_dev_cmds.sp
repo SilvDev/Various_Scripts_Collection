@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.34"
+#define PLUGIN_VERSION 		"1.35"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,10 @@
 
 ========================================================================================
 	Change Log:
+
+1.35 (01-Jun-2022)
+	- Added command "sm_aimpos" to get the vector position where the crosshair is aiming.
+	- Added command "sm_uptime" to display how long the server has been up. Thanks to "Impact123" for the code: https://forums.alliedmods.net/showthread.php?t=182012
 
 1.34 (10-May-2022)
 	- Reverted command "sm_prop*" to before last update, removing the "m_h" check in the keynames, due to breaking non-entity fields.
@@ -316,6 +320,7 @@ public void OnPluginStart()
 	RegAdminCmd("sm_cheats",		CmdCheats,		ADMFLAG_ROOT, "Toggles sv_cheats.");
 	RegAdminCmd("sm_logit",			CmdLogIt,		ADMFLAG_ROOT, "<text>. Logs specified text to 'sourcemod/logs/sm_logit.txt'.");
 	RegAdminCmd("sm_gametime",		CmdGameTime,	ADMFLAG_ROOT, "Displays the GetGameTime() float.");
+	RegAdminCmd("sm_uptime",		CmdUpTime,		ADMFLAG_ROOT, "Displays how long the server has been up. Maybe inaccurate if server hibernation is active.");
 	RegAdminCmd("sm_createent",		CmdCreateEnt,	ADMFLAG_ROOT, "<classname>. Creates and removes the entity classname, reports success.");
 
 	RegAdminCmd("sm_cv",			CmdCV,			ADMFLAG_ROOT, "<cvar> [value]. Get/Set cvar value without the notify flag.");
@@ -332,6 +337,7 @@ public void OnPluginStart()
 	RegAdminCmd("sm_views",			CmdViewS,		ADMFLAG_ROOT, "Saves your current position and eye angles.");
 	RegAdminCmd("sm_viewr",			CmdViewR,		ADMFLAG_ROOT, "Teleports you to the saved position and eye angles.");
 	RegAdminCmd("sm_pos",			CmdPosition,	ADMFLAG_ROOT, "Displays your position vector.");
+	RegAdminCmd("sm_aimpos",		CmdAimPos,		ADMFLAG_ROOT, "Displays the position vector where your crosshair is aiming.");
 	RegAdminCmd("sm_setang",		CmdSetAng,		ADMFLAG_ROOT, "<#userid|name> <vector ang>. Teleport someone to the x y z angles vector specified.");
 	RegAdminCmd("sm_setpos",		CmdSetPos,		ADMFLAG_ROOT, "<#userid|name> <vector pos>. Teleport someone to the x y z origin vector specified.");
 	RegAdminCmd("sm_bringents",		CmdBring,		ADMFLAG_ROOT, "<classname> [distance: (default 50)]. Teleport specified entities by classname to around the player. E.G. sm_bringents weapon_rifle.");
@@ -495,7 +501,7 @@ public void OnMapStart()
 	g_iHaloIndex = PrecacheModel("materials/sprites/halo01.vmt");
 }
 
-public Action Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
+Action Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
 	g_bFirst = true;
 
@@ -540,7 +546,7 @@ public void OnEntityCreated(int entity, const char[] classname)
 	}
 }
 
-public void OnSpawnCommon(int entity)
+void OnSpawnCommon(int entity)
 {
 	RemoveEntity(entity);
 }  
@@ -550,7 +556,7 @@ public void OnSpawnCommon(int entity)
 // ====================================================================================================
 //					COMMANDS - PLUGINS - sm_refresh, sm_reload, sm_unload
 // ====================================================================================================
-public Action CmdRefresh(int client, int args)
+Action CmdRefresh(int client, int args)
 {
 	ServerCommand("sm plugins refresh");
 	if( client ) PrintToChat(client, "\x04[Plugins Refreshed]");
@@ -558,7 +564,7 @@ public Action CmdRefresh(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdRenew(int client, int args)
+Action CmdRenew(int client, int args)
 {
 	ServerCommand("sm plugins unload_all; sm plugins refresh");
 	if( client ) PrintToChat(client, "\x04[Plugins Reloaded]");
@@ -566,7 +572,7 @@ public Action CmdRenew(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdUnload(int client, int args)
+Action CmdUnload(int client, int args)
 {
 	ServerCommand("sm plugins unload_all");
 	if( client ) PrintToChat(client, "\x04[Plugins Unloaded]");
@@ -579,7 +585,7 @@ public Action CmdUnload(int client, int args)
 // ====================================================================================================
 //					COMMANDS - ALL GAMES - sm_round, sm_cheats, sm_logit, sm_createent
 // ====================================================================================================
-public Action CmdRound(int client, int args)
+Action CmdRound(int client, int args)
 {
 	if( g_iGAMETYPE == GAME_CSS )
 		ServerCommand("mp_restartgame 1");
@@ -590,7 +596,7 @@ public Action CmdRound(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdCheats(int client, int args)
+Action CmdCheats(int client, int args)
 {
 	if( sv_cheats != null )
 	{
@@ -610,7 +616,7 @@ public Action CmdCheats(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdLogIt(int client, int args)
+Action CmdLogIt(int client, int args)
 {
 	if( args == 0 )
 	{
@@ -624,13 +630,34 @@ public Action CmdLogIt(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdGameTime(int client, int args)
+Action CmdGameTime(int client, int args)
 {
 	ReplyToCommand(client, "[GameTime] %f", GetGameTime());
 	return Plugin_Handled;
 }
 
-public Action CmdCreateEnt(int client, int args)
+Action CmdUpTime(int client, int args)
+{
+	float theTime = GetGameTime();
+	int days          = RoundToZero(theTime / 86400);
+	int hours         = RoundToZero((theTime - days) / 3600);
+	int minutes       = RoundToZero((theTime - days - hours) / 60);
+	int seconds       = RoundToZero(theTime - days - hours - minutes);
+	int milli         = RoundToZero((theTime - days - hours - minutes - seconds) * 1000);
+
+	if( client > 0 && client <= MAXPLAYERS && IsClientInGame(client))
+	{
+		PrintToChat(client, "\x03Uptime: %d days %d hours %d minutes %d seconds and %d milliseconds", days, hours, minutes, seconds, milli);
+	}
+	else if( client == 0 )
+	{
+		PrintToServer("Uptime: %d days %d hours %d minutes %d seconds and %d milliseconds", days, hours, minutes, seconds, milli);
+	}
+
+	return Plugin_Handled;
+}
+
+Action CmdCreateEnt(int client, int args)
 {
 	if( args != 1 )
 	{
@@ -660,7 +687,7 @@ public Action CmdCreateEnt(int client, int args)
 // ====================================================================================================
 //					COMMANDS - ALL GAMES - sm_e, sm_cv, sm_fcmd
 // ====================================================================================================
-public Action CmdCV(int client, int args)
+Action CmdCV(int client, int args)
 {
 	if( args == 0 )
 	{
@@ -696,7 +723,7 @@ public Action CmdCV(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdECheat(int client, int args)
+Action CmdECheat(int client, int args)
 {
 	if( !client )
 	{
@@ -735,7 +762,7 @@ public Action CmdECheat(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdCCmd(int client, int args)
+Action CmdCCmd(int client, int args)
 {
 	if( args < 2 )
 	{
@@ -780,7 +807,7 @@ public Action CmdCCmd(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdFCmd(int client, int args)
+Action CmdFCmd(int client, int args)
 {
 	if( args < 2 )
 	{
@@ -827,7 +854,7 @@ public Action CmdFCmd(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdSCmd(int client, int args)
+Action CmdSCmd(int client, int args)
 {
 	char sTemp[512];
 	GetCmdArgString(sTemp, sizeof(sTemp));
@@ -835,19 +862,19 @@ public Action CmdSCmd(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdRngC(int client, int args)
+Action CmdRngC(int client, int args)
 {
 	RandomCommand(client, args, 1);
 	return Plugin_Handled;
 }
 
-public Action CmdRngF(int client, int args)
+Action CmdRngF(int client, int args)
 {
 	RandomCommand(client, args, 2);
 	return Plugin_Handled;
 }
 
-public Action CmdRngS(int client, int args)
+Action CmdRngS(int client, int args)
 {
 	RandomCommand(client, args, 3);
 	return Plugin_Handled;
@@ -887,7 +914,7 @@ void RandomCommand(int client, int args, int type)
 // ====================================================================================================
 //					COMMANDS - POS - sm_views, sm_viewr, sm_pos, sm_tel
 // ====================================================================================================
-public Action CmdViewS(int client, int args)
+Action CmdViewS(int client, int args)
 {
 	if( !client )
 	{
@@ -901,7 +928,7 @@ public Action CmdViewS(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdViewR(int client, int args)
+Action CmdViewR(int client, int args)
 {
 	if( !client )
 	{
@@ -918,7 +945,7 @@ public Action CmdViewR(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdPosition(int client, int args)
+Action CmdPosition(int client, int args)
 {
 	if( !client )
 	{
@@ -933,7 +960,26 @@ public Action CmdPosition(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdSetAng(int client, int args)
+Action CmdAimPos(int client, int args)
+{
+	if( !client )
+	{
+		ReplyToCommand(client, "Command can only be used %s", IsDedicatedServer() ? "in game on a dedicated server." : "in chat on a Listen server.");
+		return Plugin_Handled;
+	}
+
+	float vPos[3];
+	if( GetDirectionEndPoint(client, vPos) )
+	{
+		ReplyToCommand(client, "End position: %f %f %f", vPos[0], vPos[1], vPos[2]);
+	} else {
+		ReplyToCommand(client, "Cannot find end position.");
+	}
+
+	return Plugin_Handled;
+}
+
+Action CmdSetAng(int client, int args)
 {
 	if( !client )
 	{
@@ -985,7 +1031,7 @@ public Action CmdSetAng(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdSetPos(int client, int args)
+Action CmdSetPos(int client, int args)
 {
 	if( !client )
 	{
@@ -1037,7 +1083,7 @@ public Action CmdSetPos(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdBring(int client, int args)
+Action CmdBring(int client, int args)
 {
 	#define DISTANCE		50.0 // How far from the player to teleport entities
 
@@ -1109,7 +1155,7 @@ public Action CmdBring(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdTeleport(int client, int args)
+Action CmdTeleport(int client, int args)
 {
 	if( !client )
 	{
@@ -1166,7 +1212,7 @@ public Action CmdTeleport(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdTele(int client, int args)
+Action CmdTele(int client, int args)
 {
 	if( !client )
 	{
@@ -1228,7 +1274,7 @@ public Action CmdTele(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdRange(int client, int args)
+Action CmdRange(int client, int args)
 {
 	if( !client )
 	{
@@ -1264,7 +1310,7 @@ public Action CmdRange(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdNear(int client, int args)
+Action CmdNear(int client, int args)
 {
 	if( !client )
 	{
@@ -1300,7 +1346,7 @@ public Action CmdNear(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdDist(int client, int args)
+Action CmdDist(int client, int args)
 {
 	if( !client )
 	{
@@ -1323,7 +1369,7 @@ public Action CmdDist(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdDistDir(int client, int args)
+Action CmdDistDir(int client, int args)
 {
 	if( !client )
 	{
@@ -1421,7 +1467,7 @@ stock bool GetDirectionEndPoint(int client, float vEndPos[3])
 	return false;
 }
 
-public Action CmdDistFloor(int client, int args)
+Action CmdDistFloor(int client, int args)
 {
 	if( !client )
 	{
@@ -1472,7 +1518,7 @@ stock float GetDistanceToFloor(int client, float maxheight = 3000.0)
 	return fDistance;
 }
 
-public Action CmdDistRoof(int client, int args)
+Action CmdDistRoof(int client, int args)
 {
 	if( !client )
 	{
@@ -1514,7 +1560,7 @@ stock float GetDistanceToRoof(int client, float maxheight = 3000.0)
 	return fDistance;
 }
 
-public bool TraceRayNoPlayers(int entity, int mask, any data)
+bool TraceRayNoPlayers(int entity, int mask, any data)
 {
     if( entity == data || (entity >= 1 && entity <= MaxClients) )
     {
@@ -1524,10 +1570,12 @@ public bool TraceRayNoPlayers(int entity, int mask, any data)
 }
 
 // Unused
-public bool TraceRay_DontHitSelf(int iEntity, int iMask, any data)
+/*
+bool TraceRay_DontHitSelf(int iEntity, int iMask, any data)
 {
 	return (iEntity != data);
 }
+*/
 
 stock void LaserP(float start[3], float end[3], int color[4], float width = 3.0)
 {
@@ -1558,7 +1606,7 @@ void ShowSize(int client, int target)
 	}
 }
 
-public Action CmdSizeMe(int client, int args)
+Action CmdSizeMe(int client, int args)
 {
 	if( !client )
 	{
@@ -1569,7 +1617,7 @@ public Action CmdSizeMe(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdSizeTarget(int client, int args)
+Action CmdSizeTarget(int client, int args)
 {
 	if( !client )
 	{
@@ -1586,7 +1634,7 @@ public Action CmdSizeTarget(int client, int args)
 // ====================================================================================================
 //					COMMANDS - ENTITIES - sm_del, sm_ent, sm_box, sm_find, sm_count, sm_modlist
 // ====================================================================================================
-public Action CmdDel(int client, int args)
+Action CmdDel(int client, int args)
 {
 	if( !client )
 	{
@@ -1600,7 +1648,7 @@ public Action CmdDel(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdDelE(int client, int args)
+Action CmdDelE(int client, int args)
 {
 	char sTemp[32];
 	int entity;
@@ -1622,7 +1670,7 @@ public Action CmdDelE(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdEnt(int client, int args)
+Action CmdEnt(int client, int args)
 {
 	if( !client )
 	{
@@ -1654,7 +1702,7 @@ public Action CmdEnt(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdEntE(int client, int args)
+Action CmdEntE(int client, int args)
 {
 	char sTemp[32];
 	int entity;
@@ -1706,7 +1754,7 @@ public Action CmdEntE(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdBox(int client, int args)
+Action CmdBox(int client, int args)
 {
 	if( !client )
 	{
@@ -1836,7 +1884,7 @@ stock void TE_SendBeam(const float vMins[3], const float vMaxs[3])
 	TE_SendToAll();
 }
 
-public Action CmdFind(int client, int args)
+Action CmdFind(int client, int args)
 {
 	if( args == 0 )
 	{
@@ -1900,7 +1948,7 @@ public Action CmdFind(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdFindName(int client, int args)
+Action CmdFindName(int client, int args)
 {
 	if( args == 0 )
 	{
@@ -1931,7 +1979,7 @@ public Action CmdFindName(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdCount(int client, int args)
+Action CmdCount(int client, int args)
 {
 	int count;
 	int tt;
@@ -1997,7 +2045,7 @@ public Action CmdCount(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdModList(int client, int args)
+Action CmdModList(int client, int args)
 {
 	int offset, count;
 	char sTemp[64];
@@ -2027,7 +2075,7 @@ public Action CmdModList(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdColli(int client, int args)
+Action CmdColli(int client, int args)
 {
 	if( !client )
 	{
@@ -2075,7 +2123,7 @@ bool g_bAnimWatch;
 int g_iAnimIndex;
 int g_iAnimTarget;
 int g_iAnimLast;
-public Action CmdAnim(int client, int args)
+Action CmdAnim(int client, int args)
 {
 	if( !client )
 	{
@@ -2153,7 +2201,7 @@ void OnAnimFrame(int userid)
 	PrintToChat(client, "[SM] sm_anim finished.");
 }
 
-public Action CmdWeapons(int client, int args)
+Action CmdWeapons(int client, int args)
 {
 	if( !client )
 	{
@@ -2198,7 +2246,7 @@ public Action CmdWeapons(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdWearables(int client, int args)
+Action CmdWearables(int client, int args)
 {
 	if( !client )
 	{
@@ -2234,7 +2282,7 @@ public Action CmdWearables(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdAttachments(int client, int args)
+Action CmdAttachments(int client, int args)
 {
 	if( args == 0 )
 	{
@@ -2306,7 +2354,7 @@ void GetAttachments(int client, int target)
 	}
 }
 
-public Action CmdViewmodel(int client, int args)
+Action CmdViewmodel(int client, int args)
 {
 	if( args == 0 )
 	{
@@ -2358,7 +2406,7 @@ void GetViewmodel(int client, int target)
 	ReplyToCommand(client, "Viewmodel (%d) %N = %d", target, target, GetEntPropEnt(target, Prop_Data, "m_hViewModel"));
 }
 
-public Action CmdDelWeps(int client, int args)
+Action CmdDelWeps(int client, int args)
 {
 	if( args == 0 )
 	{
@@ -2412,7 +2460,7 @@ void DeleteWeapons(int client, int target)
 	}
 }
 
-public Action CmdSpeed(int client, int args)
+Action CmdSpeed(int client, int args)
 {
 	if( args == 0 )
 	{
@@ -2460,7 +2508,7 @@ void GetSpeed(int client)
 	ReplyToCommand(client, "Speed %N: %f", client, speed);
 }
 
-public Action CmdClients(int client, int args)
+Action CmdClients(int client, int args)
 {
 	ReplyToCommand(client, "Index. UserID. Team. SteamID. Name.");
 	char steamID[64];
@@ -2479,13 +2527,13 @@ public Action CmdClients(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdUsers(int client, int args)
+Action CmdUsers(int client, int args)
 {
 	ReplyToCommand(client, "[SM] Total Bots: %d. Total Clients: %d. Last UserID: %d", g_iTotalBots, g_iTotalPlays, g_iLastUserID);
 	return Plugin_Handled;
 }
 
-public Action CmdFreeze(int client, int args)
+Action CmdFreeze(int client, int args)
 {
 	if( !client )
 	{
@@ -2532,7 +2580,7 @@ public Action CmdFreeze(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdDamage(int client, int args)
+Action CmdDamage(int client, int args)
 {
 	if( g_bDamage )
 	{
@@ -2575,7 +2623,7 @@ public Action CmdDamage(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdSolid(int client, int args)
+Action CmdSolid(int client, int args)
 {
 	if( args != 1 )
 	{
@@ -2603,7 +2651,7 @@ public Action CmdSolid(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdSolidF(int client, int args)
+Action CmdSolidF(int client, int args)
 {
 	if( args != 1 )
 	{
@@ -2633,7 +2681,7 @@ public Action CmdSolidF(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdDmg(int client, int args)
+Action CmdDmg(int client, int args)
 {
 	if( args != 1 )
 	{
@@ -2684,7 +2732,7 @@ public Action CmdDmg(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdVal(int client, int args)
+Action CmdVal(int client, int args)
 {
 	if( args != 1 )
 	{
@@ -2711,7 +2759,7 @@ public Action CmdVal(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdBit(int client, int args)
+Action CmdBit(int client, int args)
 {
 	if( args != 1 )
 	{
@@ -2740,7 +2788,7 @@ public Action CmdBit(int client, int args)
 }
 
 int g_iAdmin[MAXPLAYERS+1];
-public Action CmdAdm(int client, int args)
+Action CmdAdm(int client, int args)
 {
 	if( !client )
 	{
@@ -2836,7 +2884,7 @@ public void OnClientDisconnect(int client)
 	}
 }
 
-public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype, int &weapon, float damageForce[3], float damagePosition[3])
+Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype, int &weapon, float damageForce[3], float damagePosition[3])
 {
 	if( g_iDamageRequestor != -1 )
 	{
@@ -2867,7 +2915,7 @@ public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &dam
 // ====================================================================================================
 //					COMMANDS - ENTITY PROPERTIES - sm_prop, sm_propent, sm_propi
 // ====================================================================================================
-public Action CmdProp(int client, int args)
+Action CmdProp(int client, int args)
 {
 	if( !client )
 	{
@@ -2893,7 +2941,7 @@ public Action CmdProp(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdPropEnt(int client, int args)
+Action CmdPropEnt(int client, int args)
 {
 	if( args < 2 || args > 3 )
 	{
@@ -2932,7 +2980,7 @@ public Action CmdPropEnt(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdPropMe(int client, int args)
+Action CmdPropMe(int client, int args)
 {
 	if( !client )
 	{
@@ -3258,7 +3306,7 @@ void PropertyValue(int client, int entity, int args, const char sProp[64], const
 // ====================================================================================================
 //					COMMANDS - sm_input, sm_inputent
 // ====================================================================================================
-public Action CmdInput(int client, int args)
+Action CmdInput(int client, int args)
 {
 	if( !client )
 	{
@@ -3307,7 +3355,7 @@ public Action CmdInput(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdInputEnt(int client, int args)
+Action CmdInputEnt(int client, int args)
 {
 	if( args < 2 )
 	{
@@ -3376,7 +3424,7 @@ int FindByTargetName(const char[] sTarget)
 	return -1;
 }
 
-public Action CmdInputMe(int client, int args)
+Action CmdInputMe(int client, int args)
 {
 	if( !client )
 	{
@@ -3426,7 +3474,7 @@ public Action CmdInputMe(int client, int args)
 // ====================================================================================================
 //					COMMANDS - sm_output, sm_outputent
 // ====================================================================================================
-public Action CmdOutput(int client, int args)
+Action CmdOutput(int client, int args)
 {
 	if( !client )
 	{
@@ -3464,7 +3512,7 @@ public Action CmdOutput(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdOutputEnt(int client, int args)
+Action CmdOutputEnt(int client, int args)
 {
 	if( !client )
 	{
@@ -3504,7 +3552,7 @@ public Action CmdOutputEnt(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdOutputMe(int client, int args)
+Action CmdOutputMe(int client, int args)
 {
 	if( !client )
 	{
@@ -3537,12 +3585,12 @@ public Action CmdOutputMe(int client, int args)
 	return Plugin_Handled;
 }
 
-public void OutputCallback(const char[] output, int caller, int activator, float delay)
+void OutputCallback(const char[] output, int caller, int activator, float delay)
 {
 	PrintToChatAll("\x01[Output] \x05%s \x01Caller= \x05%d \x01Activator= \x05%d", output, caller, activator);
 }
 
-public Action CmdOutputStop(int client, int args)
+Action CmdOutputStop(int client, int args)
 {
 	for( int i = 0; i < MAX_OUTPUTS; i++ )
 	{
@@ -3557,7 +3605,7 @@ public Action CmdOutputStop(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdEmit(int client, int args)
+Action CmdEmit(int client, int args)
 {
 	if( !client )
 	{
@@ -3578,7 +3626,7 @@ public Action CmdEmit(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdListen(int client, int args)
+Action CmdListen(int client, int args)
 {
 	static bool bListen;
 
@@ -3598,7 +3646,7 @@ public Action CmdListen(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action SoundHookA(char sample[PLATFORM_MAX_PATH], int &entity, float &volume, int &level, int &pitch, float pos[3], int &flags, float &delay)
+Action SoundHookA(char sample[PLATFORM_MAX_PATH], int &entity, float &volume, int &level, int &pitch, float pos[3], int &flags, float &delay)
 {
 	PrintToChatAll("\x05A_Sample: \x01%s", sample);
 	PrintToChatAll("\x0A_Sent: \x01%d \x05vol: \x01%.2f \x05lvl: \x01%d \x05pch: \x01%d \x05flg: \x01%d", entity, volume, level, pitch, flags);
@@ -3606,7 +3654,7 @@ public Action SoundHookA(char sample[PLATFORM_MAX_PATH], int &entity, float &vol
 	return Plugin_Continue;
 }
 
-public Action SoundHookN(int clients[64], int &numClients, char sample[PLATFORM_MAX_PATH], int &entity, int &channel, float &volume, int &level, int &pitch, int &flags)
+Action SoundHookN(int clients[64], int &numClients, char sample[PLATFORM_MAX_PATH], int &entity, int &channel, float &volume, int &level, int &pitch, int &flags)
 {
 	static char strchannel[19];
 	if( channel == -1 ) strchannel = "REPLACE";
@@ -3626,14 +3674,14 @@ public Action SoundHookN(int clients[64], int &numClients, char sample[PLATFORM_
 	return Plugin_Continue;
 }
 
-public Action CmdWatchEnts(int client, int args)
+Action CmdWatchEnts(int client, int args)
 {
 	g_bWatchEnts = !g_bWatchEnts;
 	ReplyToCommand(client, "Watch Entities: %s", g_bWatchEnts ? "On" : "Off");
 	return Plugin_Handled;
 }
 
-public Action CmdBot(int client, int args)
+Action CmdBot(int client, int args)
 {
 	int bot = CreateFakeClient("Bot");
 	if( bot && IsClientInGame(bot) )
@@ -3659,7 +3707,7 @@ public Action CmdBot(int client, int args)
 // ====================================================================================================
 //					COMMANDS - CREATE - sm_part, sm_parti
 // ====================================================================================================
-public Action CmdPart(int client, int args)
+Action CmdPart(int client, int args)
 {
 	if( !client )
 	{
@@ -3682,7 +3730,7 @@ public Action CmdPart(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdPart2(int client, int args)
+Action CmdPart2(int client, int args)
 {
 	if( !client )
 	{
@@ -3709,7 +3757,7 @@ public Action CmdPart2(int client, int args)
 // ====================================================================================================
 //					COMMANDS - L4D2 - sm_lobby, sm_ledge, sm_spit, sm_alloff, sm_director, sm_hold, sm_halt, sm_c, sm_r, sm_s, sm_v
 // ====================================================================================================
-public Action CmdLobby(int client, int args)
+Action CmdLobby(int client, int args)
 {
 	if( !client )
 	{
@@ -3721,7 +3769,7 @@ public Action CmdLobby(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdLedge(int client, int args)
+Action CmdLedge(int client, int args)
 {
 	if( !client )
 	{
@@ -3782,7 +3830,7 @@ public Action CmdLedge(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdSpit(int client, int args)
+Action CmdSpit(int client, int args)
 {
 	if( !client )
 	{
@@ -3853,7 +3901,7 @@ public Action CmdSpit(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdAll(int client, int args)
+Action CmdAll(int client, int args)
 {
 	if( g_bAll )
 	{
@@ -3904,7 +3952,7 @@ public Action CmdAll(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdDirector(int client, int args)
+Action CmdDirector(int client, int args)
 {
 	if( g_bDirector )
 	{
@@ -3922,7 +3970,7 @@ public Action CmdDirector(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdHold(int client, int args)
+Action CmdHold(int client, int args)
 {
 	if( sb_hold_position.IntValue == 1 )
 	{
@@ -3939,7 +3987,7 @@ public Action CmdHold(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdHalt(int client, int args)
+Action CmdHalt(int client, int args)
 {
 	if( sb_stop.IntValue == 1 )
 	{
@@ -3956,7 +4004,7 @@ public Action CmdHalt(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdNB(int client, int args)
+Action CmdNB(int client, int args)
 {
 	if( g_bNB )
 	{
@@ -3974,7 +4022,7 @@ public Action CmdNB(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdNoSpawn(int client, int args)
+Action CmdNoSpawn(int client, int args)
 {
 	if( g_bNospawn )
 	{
@@ -4010,7 +4058,7 @@ void DisableSpawn(bool bDisable)
 	}
 }
 
-public void ConVarChanged_Cheats(ConVar convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Cheats(ConVar convar, const char[] oldValue, const char[] newValue)
 {
 	 // 1 -> 0
 	if( strcmp(oldValue, "1") == 0 && strcmp(newValue, "0") == 0 )
@@ -4023,7 +4071,7 @@ public void ConVarChanged_Cheats(ConVar convar, const char[] oldValue, const cha
 	}
 }
 
-public Action Timer_FixCvars(Handle timer)
+Action Timer_FixCvars(Handle timer)
 {
 	if( g_bNospawn )
 	{
@@ -4033,7 +4081,7 @@ public Action Timer_FixCvars(Handle timer)
 	return Plugin_Continue;
 }
 
-public Action CmdZSpawnV(int client, int args)
+Action CmdZSpawnV(int client, int args)
 {
 	if( args < 4 || args > 9 )
 	{
@@ -4118,7 +4166,7 @@ public Action CmdZSpawnV(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdBotsL4D(int client, int args)
+Action CmdBotsL4D(int client, int args)
 {
 	int bot = CreateFakeClient("DevBot");
 	DispatchKeyValue(bot, "classname", "SurvivorBot");
@@ -4129,7 +4177,7 @@ public Action CmdBotsL4D(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdSlayAll(int client, int args)
+Action CmdSlayAll(int client, int args)
 {
 	CmdSlayCommon(client, 0);
 	CmdSlayWitches(client, 0);
@@ -4138,7 +4186,7 @@ public Action CmdSlayAll(int client, int args)
 }
 
 // Code thanks to: "Don't Fear The Reaper"
-public Action CmdSlayCommon(int client, int args)
+Action CmdSlayCommon(int client, int args)
 {
 	int count, i_EdictIndex = -1;
 	while( (i_EdictIndex = FindEntityByClassname(i_EdictIndex, "infected")) != INVALID_ENT_REFERENCE )
@@ -4152,7 +4200,7 @@ public Action CmdSlayCommon(int client, int args)
 }
 
 // Code thanks to: "Don't Fear The Reaper"
-public Action CmdSlayWitches(int client, int args)
+Action CmdSlayWitches(int client, int args)
 {
 	int count, i_EdictIndex = -1;
 	while( (i_EdictIndex = FindEntityByClassname(i_EdictIndex, "witch")) != INVALID_ENT_REFERENCE )
@@ -4183,7 +4231,7 @@ void SlaySpecial(int client)
 	ReplyToCommand(client, "[SM] Slayed %d special infected.", count);
 }
 
-public Action CmdStopAngle(int client, int args)
+Action CmdStopAngle(int client, int args)
 {
 	float ang[3];
 	for( int i = 1; i <= MaxClients; i++ )
@@ -4202,7 +4250,7 @@ public Action CmdStopAngle(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action Time_StopAngle(Handle timer, DataPack dp)
+Action Time_StopAngle(Handle timer, DataPack dp)
 {
 	dp.Reset();
 	float ang[3];
@@ -4219,7 +4267,7 @@ public Action Time_StopAngle(Handle timer, DataPack dp)
 	return Plugin_Continue;
 }
 
-public Action CmdCoop(int client, int args)
+Action CmdCoop(int client, int args)
 {
 	mp_gamemode.SetString("coop");
 
@@ -4228,7 +4276,7 @@ public Action CmdCoop(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdRealism(int client, int args)
+Action CmdRealism(int client, int args)
 {
 	mp_gamemode.SetString("realism");
 
@@ -4237,7 +4285,7 @@ public Action CmdRealism(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdSurvival(int client, int args)
+Action CmdSurvival(int client, int args)
 {
 	mp_gamemode.SetString("survival");
 
@@ -4246,7 +4294,7 @@ public Action CmdSurvival(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdVersus(int client, int args)
+Action CmdVersus(int client, int args)
 {
 	if( g_iGAMETYPE == GAME_L4D2 )
 		ExecuteCheatCommand("sb_all_bot_game", "1");
@@ -4259,7 +4307,7 @@ public Action CmdVersus(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdScavenge(int client, int args)
+Action CmdScavenge(int client, int args)
 {
 	ExecuteCheatCommand("sb_all_bot_game", "1");
 	mp_gamemode.SetString("scavenge");
@@ -4274,7 +4322,7 @@ public Action CmdScavenge(int client, int args)
 // ====================================================================================================
 //					COMMANDS - L4D2 & CSS - sm_nv
 // ====================================================================================================
-public Action CmdNV(int client, int args)
+Action CmdNV(int client, int args)
 {
 	if( !client )
 	{
@@ -4326,7 +4374,7 @@ public Action CmdNV(int client, int args)
 // ====================================================================================================
 //					COMMANDS - CSS - sm_bots, sm_money
 // ====================================================================================================
-public Action CmdBots(int client, int args)
+Action CmdBots(int client, int args)
 {
 	ShowBotMenu(client);
 	return Plugin_Handled;
@@ -4350,7 +4398,7 @@ void ShowBotMenu(int client)
 	}
 }
 
-public int BotMenuHandler(Menu menu, MenuAction action, int client, int index)
+int BotMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_End )
 		delete menu;
@@ -4375,7 +4423,7 @@ public int BotMenuHandler(Menu menu, MenuAction action, int client, int index)
 	return 0;
 }
 
-public Action CmdMoney(int client, int args)
+Action CmdMoney(int client, int args)
 {
 	if( !client )
 	{
@@ -4410,7 +4458,7 @@ void ShowPlayerList(int client)
 	}
 }
 
-public int PlayerListMenur(Menu menu, MenuAction action, int client, int index)
+int PlayerListMenur(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_End )
 		delete menu;
@@ -4557,7 +4605,7 @@ bool SetTeleportEndPoint(int client, float vPos[3])
 	return true;
 }
 
-public bool _TraceFilter(int entity, int contentsMask)
+bool _TraceFilter(int entity, int contentsMask)
 {
 	return entity > MaxClients || !entity;
 }
