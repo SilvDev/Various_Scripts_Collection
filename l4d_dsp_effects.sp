@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.4"
+#define PLUGIN_VERSION 		"1.5"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.5 (01-Jun-2022)
+	- Fixed random rare server crash.
 
 1.4 (02-Feb-2022)
 	- Fixed invalid client errors. Thanks to "sonic155" for reporting.
@@ -115,7 +118,7 @@ public void OnPluginStart()
 	AddCommandListener(CommandListener, "give");
 }
 
-public Action CommandListener(int client, const char[] command, int args)
+Action CommandListener(int client, const char[] command, int args)
 {
 	if( g_bSetDSP[client] && args > 0 )
 	{
@@ -149,6 +152,14 @@ void ResetPlugin()
 	}
 }
 
+public void OnMapEnd()
+{
+	for( int i = 1; i <= MaxClients; i++ )
+	{
+		g_bSetDSP[i] = false;
+	}
+}
+
 
 
 // ====================================================================================================
@@ -159,12 +170,12 @@ public void OnConfigsExecuted()
 	IsAllowed();
 }
 
-public void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	IsAllowed();
 }
 
-public void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	GetCvars();
 }
@@ -185,6 +196,7 @@ void IsAllowed()
 	if( g_bCvarAllow == false && bCvarAllow == true && bAllowMode == true )
 	{
 		g_bCvarAllow = true;
+		HookEvent("round_end",						Event_RoundEnd);
 		HookEvent("player_spawn",					Event_PlayerSpawn);
 		HookEvent("player_death",					Event_PlayerDeath);
 		HookEvent("player_incapacitated",			Event_Incapped);
@@ -213,6 +225,7 @@ void IsAllowed()
 	{
 		ResetPlugin();
 		g_bCvarAllow = false;
+		UnhookEvent("round_end",					Event_RoundEnd);
 		UnhookEvent("player_spawn",					Event_PlayerSpawn);
 		UnhookEvent("player_death",					Event_PlayerDeath);
 		UnhookEvent("player_incapacitated",			Event_Incapped);
@@ -284,7 +297,12 @@ bool IsAllowedGameMode()
 // ====================================================================================================
 //					EVENTS
 // ====================================================================================================
-public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
+void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
+{
+	OnMapEnd();
+}
+
+void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
 	if( g_bSetDSP[client] )
@@ -294,29 +312,35 @@ public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast
 	}
 }
 
-public void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
+void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
-	SetEffects(client, 1);
-	g_bSetDSP[client] = false;
+	if( g_bSetDSP[client] )
+	{
+		g_bSetDSP[client] = false;
+		SetEffects(client, 1);
+	}
 }
 
-public void Event_Stop(Event event, const char[] name, bool dontBroadcast)
+void Event_Stop(Event event, const char[] name, bool dontBroadcast)
 {
 	if( g_iCvarSpecial )
 	{
 		int client = GetClientOfUserId(event.GetInt("victim"));
 		if( client )
 		{
-			g_bSetDSP[client] = false;
-			SetEffects(client, 1);
+			if( g_bSetDSP[client] )
+			{
+				g_bSetDSP[client] = false;
+				SetEffects(client, 1);
 
-			//PrintToChatAll("STOP DSP %N %s", client, name);
+				//PrintToChatAll("STOP DSP %N %s", client, name);
+			}
 		}
 	}
 }
 
-public void Event_Start(Event event, const char[] name, bool dontBroadcast)
+void Event_Start(Event event, const char[] name, bool dontBroadcast)
 {
 	if( g_iCvarSpecial )
 	{
@@ -331,7 +355,7 @@ public void Event_Start(Event event, const char[] name, bool dontBroadcast)
 	}
 }
 
-public void Event_Incapped(Event event, const char[] name, bool dontBroadcast)
+void Event_Incapped(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
 
@@ -344,7 +368,7 @@ public void Event_Incapped(Event event, const char[] name, bool dontBroadcast)
 	}
 }
 
-public void Event_Revived(Event event, const char[] name, bool dontBroadcast)
+void Event_Revived(Event event, const char[] name, bool dontBroadcast)
 {
 	if( g_iCvarIncap || g_iCvarStrike )
 	{
@@ -369,13 +393,16 @@ public void Event_Revived(Event event, const char[] name, bool dontBroadcast)
 	}
 }
 
-public void Event_Healed(Event event, const char[] name, bool dontBroadcast)
+void Event_Healed(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("subject"));
 	if( client )
 	{
-		g_bSetDSP[client] = false;
-		SetEffects(client, 1);
+		if( g_bSetDSP[client] )
+		{
+			g_bSetDSP[client] = false;
+			SetEffects(client, 1);
+		}
 
 		//PrintToChatAll("HEALED DSP %N", client);
 	}
