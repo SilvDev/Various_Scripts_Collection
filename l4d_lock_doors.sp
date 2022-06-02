@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.13"
+#define PLUGIN_VERSION 		"1.14"
 
 /*=======================================================================================
 	Plugin Info:
@@ -32,7 +32,12 @@
 ========================================================================================
 	Change Log:
 
+1.14 (03-Jun-2022)
+	- Changed cvar "l4d_lock_doors_keys" to accept the value of "0" to disable the locking and unlocking doors feature.
+	- Really fixed doors not randomly opening or closing on new campaigns. Thanks to "gongo" for help.
+
 1.13 (01-Jun-2022)
+	- Added command "sm_doors_glow" to make doors glow, for debug testing.
 	- Fixed potentially not finding some relative double doors.
 
 1.12 (01-Jun-2022)
@@ -118,6 +123,9 @@
 
 // Testing: l4d_lock_doors_health_open 1.0; l4d_lock_doors_health_shut 2.0; l4d_lock_doors_health_lock 3.0;
 
+// From left4dhooks, optional native if left4dhooks is detected:
+native bool L4D_IsFirstMapInScenario();
+
 // Thanks to "Dragokas":
 enum // m_eDoorState
 {
@@ -149,11 +157,12 @@ enum
 
 ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarDamageC, g_hCvarDamageI, g_hCvarDamageS, g_hCvarDamageT, g_hCvarHealthL, g_hCvarHealthO, g_hCvarHealthS, g_hCvarHealthT, g_hCvarInvin, g_hCvarKeys, g_hCvarRandom, g_hCvarRandomT, g_hCvarRange, g_hCvarText, g_hCvarVoca;
 float g_fCvarHealthL, g_fCvarHealthO, g_fCvarHealthS, g_fCvarRange;
-int g_iCvarDamageC, g_iCvarDamageI, g_iCvarDamageS, g_iCvarDamageT, g_iPlayerSpawn, g_iRoundNumber, g_iCvarKeys, g_iCvarRandom, g_iCvarRandomT, g_iCvarText, g_iCvarVoca, g_iCvarHealthT;
+int g_iCvarDamageC, g_iCvarDamageI, g_iCvarDamageS, g_iCvarDamageT, g_iPlayerSpawn, g_iRoundStart, g_iRoundNumber, g_iCvarKeys, g_iCvarRandom, g_iCvarRandomT, g_iCvarText, g_iCvarVoca, g_iCvarHealthT;
 
-bool g_bCvarAllow, g_bCvarInvin, g_bMapStarted, g_bRoundStarted, g_bLeft4Dead2;
+bool g_bCvarAllow, g_bCvarInvin, g_bBootedServer, g_bMapStarted, g_bRoundStarted, g_bLeft4DHooks, g_bLeft4Dead2, g_bGlow;
 float g_fLastUse[MAXPLAYERS+1], g_fLastPrint;
 float g_vPos[2048][3];
+int g_iEntity[2048];
 int g_iState[2048];
 int g_iDoors[2048];
 int g_iFlags[2048];
@@ -224,7 +233,14 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 
 	if( late ) g_iPlayerSpawn = 1;
 
+	MarkNativeAsOptional("L4D_IsFirstMapInScenario");
+
 	return APLRes_Success;
+}
+
+public void OnAllPluginsLoaded()
+{
+	g_bLeft4DHooks = GetFeatureStatus(FeatureType_Native, "L4D_IsFirstMapInScenario") == FeatureStatus_Available;
 }
 
 public void OnPluginStart()
@@ -242,7 +258,7 @@ public void OnPluginStart()
 	g_hCvarHealthS =	CreateConVar("l4d_lock_doors_health_shut",		"1.0",				"0=Off. Percentage of health to set when the door is shut.", CVAR_FLAGS );
 	g_hCvarHealthT =	CreateConVar("l4d_lock_doors_health_total",		"840",				"0=Off. How much health doors have on spawn (840 game default).", CVAR_FLAGS );
 	g_hCvarInvin =		CreateConVar("l4d_lock_doors_invincible",		"0",				"0=No invincible doors. 1=Allow doors which are damaged when shot etc but don't break (default game behaviour).", CVAR_FLAGS );
-	g_hCvarKeys =		CreateConVar("l4d_lock_doors_keys",				"1",				"Which key combination to lock/unlock doors: 1=Shift (walk) + E (use). 2=Ctrl (duck) + E (use).", CVAR_FLAGS );
+	g_hCvarKeys =		CreateConVar("l4d_lock_doors_keys",				"1",				"0=Off (no locking doors). 1=Shift (walk) + E (use). 2=Ctrl (duck) + E (use). Which key combination to lock/unlock doors.", CVAR_FLAGS );
 	g_hCvarRandom =		CreateConVar("l4d_lock_doors_random",			"0",				"0=Off. On round start the chance out of 100 to randomly open or close a door. Versus 2nd round will open/close the same doors.", CVAR_FLAGS );
 	g_hCvarRandomT =	CreateConVar("l4d_lock_doors_random_type",		"1",				"1=Open doors only. 2=Close doors only. 3=Open doors that are closed, and close doors that are open.", CVAR_FLAGS );
 	g_hCvarRange =		CreateConVar("l4d_lock_doors_range",			"150",				"0=Any distance. How close a player must be to the door they're trying to lock or unlock.", CVAR_FLAGS );
@@ -280,27 +296,6 @@ public void OnPluginStart()
 	{
 		RegAdminCmd("sm_doors_glow", CmdGlow, ADMFLAG_ROOT, "Debug testing command to show all doors.");
 	}
-}
-
-bool g_bGlow;
-Action CmdGlow(int client, int args)
-{
-	g_bGlow = !g_bGlow;
-
-	int entity = -1;
-	while( (entity = FindEntityByClassname(entity, "prop_door_rotating")) != INVALID_ENT_REFERENCE )
-	{
-		SetEntProp(entity, Prop_Send, "m_iGlowType", 3);
-		SetEntProp(entity, Prop_Send, "m_glowColorOverride", 255);
-		SetEntProp(entity, Prop_Send, "m_nGlowRange", g_bGlow ? 0 : 9999);
-		SetEntProp(entity, Prop_Send, "m_nGlowRangeMin", 20);
-		if( g_bGlow )
-			AcceptEntityInput(entity, "StartGlowing");
-		else
-			AcceptEntityInput(entity, "StopGlowing");
-	}
-
-	return Plugin_Handled;
 }
 
 
@@ -356,18 +351,20 @@ void IsAllowed()
 		if( g_iPlayerSpawn == 1 )
 			SearchForDoors();
 
-		HookEvent("round_end",			Event_RoundEnd,		EventHookMode_PostNoCopy);
-		HookEvent("round_start",		Event_RoundStart,	EventHookMode_PostNoCopy);
-		HookEvent("player_spawn",		Event_PlayerSpawn);
+		HookEvent("player_spawn",				Event_PlayerSpawn);
+		HookEvent("round_start",				Event_RoundStart,	EventHookMode_PostNoCopy);
+		HookEvent("round_end",					Event_RoundEnd,		EventHookMode_PostNoCopy);
+		HookEvent("gameinstructor_draw",		Event_NoDraw,		EventHookMode_PostNoCopy);
 	}
 
 	else if( g_bCvarAllow == true && (bCvarAllow == false || bAllowMode == false) )
 	{
 		g_bCvarAllow = false;
 
-		UnhookEvent("round_end",		Event_RoundEnd,		EventHookMode_PostNoCopy);
-		UnhookEvent("round_start",		Event_RoundStart,	EventHookMode_PostNoCopy);
-		UnhookEvent("player_spawn",		Event_PlayerSpawn);
+		UnhookEvent("player_spawn",				Event_PlayerSpawn);
+		UnhookEvent("round_start",				Event_RoundStart,	EventHookMode_PostNoCopy);
+		UnhookEvent("round_end",				Event_RoundEnd,		EventHookMode_PostNoCopy);
+		UnhookEvent("gameinstructor_draw",		Event_NoDraw,		EventHookMode_PostNoCopy);
 	}
 }
 
@@ -444,6 +441,158 @@ void OnGamemode(const char[] output, int caller, int activator, float delay)
 
 
 // ====================================================================================================
+//					EVENTS
+// ====================================================================================================
+void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
+{
+	// Search doors
+	if( !g_bBootedServer )
+	{
+		int client = GetClientOfUserId(event.GetInt("userid"));
+		if( client && !IsFakeClient(client) )
+		{
+			CreateTimer(5.0, TimerStart, _, TIMER_FLAG_NO_MAPCHANGE);
+		}
+	}
+
+	if( g_bBootedServer && g_iPlayerSpawn == 0 && g_iRoundStart == 1 && (!g_bLeft4DHooks || !L4D_IsFirstMapInScenario()) )
+	{
+		#if DEBUG_PRINT
+		PrintToChatAll("\x03Event_PlayerSpawn");
+		PrintToServer("\x03Event_PlayerSpawn");
+		#endif
+
+		CreateTimer(1.0, TimerStart, _, TIMER_FLAG_NO_MAPCHANGE);
+	}
+
+	g_iPlayerSpawn = 1;
+}
+
+void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
+{
+	// Search doors
+	if( g_bBootedServer && g_iPlayerSpawn == 1 && g_iRoundStart == 0 && (!g_bLeft4DHooks || !L4D_IsFirstMapInScenario()) )
+	{
+		#if DEBUG_PRINT
+		PrintToChatAll("\x03Event_RoundStart");
+		PrintToServer("\x03Event_RoundStart");
+		#endif
+
+		CreateTimer(1.0, TimerStart, _, TIMER_FLAG_NO_MAPCHANGE);
+	}
+
+	g_iRoundStart = 1;
+
+	// Versus related
+	g_iRoundNumber++;
+
+	#if DEBUG_PRINT
+	if( g_iRoundNumber > 2 ) g_iRoundNumber = 1; // For debugging, to allow multiple round restarts with mp_restartgame 1
+	#endif
+
+	if( g_iRoundNumber == 1 ) ResetPlugin();
+}
+
+void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
+{
+	g_bGlow = false;
+	g_bRoundStarted = false;
+	g_iRoundStart = 0;
+	g_iPlayerSpawn = 0;
+}
+
+void Event_NoDraw(Event event, const char[] name, bool dontBroadcast)
+{
+	#if DEBUG_PRINT
+	PrintToChatAll("\x03Event_NoDraw");
+	PrintToServer("\x03Event_NoDraw");
+	#endif
+
+	// Doors opened or closed during cutscenes don't always work before this event triggers, reset them to previous state and then open/close again
+	CreateTimer(1.0, TimerStartDraw, _, TIMER_FLAG_NO_MAPCHANGE);
+}
+
+Action TimerStartDraw(Handle timer)
+{
+	ResetPlugin();
+	CreateTimer(1.0, TimerStartDraw2, _, TIMER_FLAG_NO_MAPCHANGE);
+}
+
+Action TimerStartDraw2(Handle timer)
+{
+	SearchForDoors();
+	g_bRoundStarted = true;
+}
+
+Action TimerStart(Handle timer)
+{
+	SearchForDoors();
+	g_bBootedServer = true;
+	g_bRoundStarted = true;
+}
+
+public void OnMapStart()
+{
+	g_bMapStarted = true;
+
+	PrecacheSound(SOUND_LOCK);
+	PrecacheSound(SOUND_LOCKED);
+	PrecacheSound(SOUND_UNLOCK);
+}
+
+public void OnMapEnd()
+{
+	g_bGlow = false;
+	g_bMapStarted = false;
+	g_bRoundStarted = false;
+	g_iRoundNumber = 0;
+	g_iRoundStart = 0;
+	g_iPlayerSpawn = 0;
+
+	ResetPlugin();
+}
+
+void ResetPlugin(bool all = true)
+{
+	g_fLastPrint = 0.0;
+
+	for( int i = 0; i <= MaxClients; i++ )
+	{
+		g_fLastUse[i] = 0.0;
+	}
+
+	if( all )
+	{
+		for( int i = 0; i < 2048; i++ )
+		{
+			// Return doors to original position:
+			// Because we're calling SearchForDoors on round_start and after cutscenes with the cvar random cvars the doors could be set wrong
+			if( g_iEntity[i] && EntRefToEntIndex(g_iEntity[i]) != INVALID_ENT_REFERENCE )
+			{
+				#if DEBUG_PRINT
+				PrintToChatAll("\x03Reset state: %d to %s", i, g_iState[i] -1 == DOOR_STATE_CLOSED ? "CLOSED" : "OPEN");
+				PrintToServer("\x03Reset state: %d to %s", i, g_iState[i] -1 == DOOR_STATE_CLOSED ? "CLOSED" : "OPEN");
+				#endif
+
+				switch( g_iState[i] -1 )
+				{
+					case DOOR_STATE_OPENED:		OpenOrClose(i, DOOR_STATE_CLOSED);
+					case DOOR_STATE_CLOSED:		OpenOrClose(i, DOOR_STATE_OPENED);
+				}
+			}
+
+			g_iState[i] = 0;
+			g_iEntity[i] = 0;
+			g_vPos[i][0] = 0.0;
+			g_vPos[i][1] = 0.0;
+			g_vPos[i][2] = 0.0;
+		}
+	}
+}
+
+
+
+// ====================================================================================================
 //					COMMANDS
 // ====================================================================================================
 Action CmdHealth(int client, int args)
@@ -467,6 +616,26 @@ Action CmdHealth(int client, int args)
 	}
 
 	ReplyToCommand(client, "Invalid door or no entity.");
+
+	return Plugin_Handled;
+}
+
+Action CmdGlow(int client, int args)
+{
+	g_bGlow = !g_bGlow;
+
+	int entity = -1;
+	while( (entity = FindEntityByClassname(entity, "prop_door_rotating")) != INVALID_ENT_REFERENCE )
+	{
+		SetEntProp(entity, Prop_Send, "m_iGlowType", 3);
+		SetEntProp(entity, Prop_Send, "m_glowColorOverride", 255);
+		SetEntProp(entity, Prop_Send, "m_nGlowRange", g_bGlow ? 0 : 9999);
+		SetEntProp(entity, Prop_Send, "m_nGlowRangeMin", 20);
+		if( g_bGlow )
+			AcceptEntityInput(entity, "StartGlowing");
+		else
+			AcceptEntityInput(entity, "StopGlowing");
+	}
 
 	return Plugin_Handled;
 }
@@ -591,6 +760,8 @@ void RandomDoors(int entity)
 		// Ignoring those so they stay randomly closed
 		if( flags == 65535 || flags & DOOR_FLAG_UNBREAKABLE == 0 )
 		{
+			g_iEntity[entity] = EntIndexToEntRef(entity);
+
 			// Versus, restore door states from previous round
 			if( g_iCurrentMode == 4 && g_iRoundNumber == 2 )
 			{
@@ -625,7 +796,6 @@ void RandomDoors(int entity)
 								OpenOrClose(entity, DOOR_STATE_CLOSED);
 							}
 
-							g_iState[i] = 0;
 							g_vPos[i][0] = 0.0;
 							g_vPos[i][1] = 0.0;
 							g_vPos[i][2] = 0.0;
@@ -656,11 +826,12 @@ void RandomDoors(int entity)
 				// Door is open, close it
 				if( g_iCvarRandomT & 2 && GetEntProp(entity, Prop_Data, "m_eDoorState") == DOOR_STATE_OPENED )
 				{
+					g_iState[entity] = DOOR_STATE_CLOSED + 1;
+
 					// Save for VS
 					if( g_iCurrentMode == 4 )
 					{
 						g_vPos[entity] = vPos;
-						g_iState[entity] = DOOR_STATE_CLOSED + 1;
 
 						#if DEBUG_PRINT
 						PrintToChatAll("VERSUS SAVE DOOR CLOSED: %0.1f %0.1f %0.1f", g_vPos[entity][0], g_vPos[entity][1], g_vPos[entity][2]);
@@ -678,11 +849,12 @@ void RandomDoors(int entity)
 				// Door is closed, open it
 				else if( g_iCvarRandomT & 1 && GetEntProp(entity, Prop_Data, "m_eDoorState") == DOOR_STATE_CLOSED )
 				{
+					g_iState[entity] = DOOR_STATE_OPENED + 1;
+
 					// Save for VS
 					if( g_iCurrentMode == 4 )
 					{
 						g_vPos[entity] = vPos;
-						g_iState[entity] = DOOR_STATE_OPENED + 1;
 
 						#if DEBUG_PRINT
 						PrintToChatAll("VERSUS SAVE DOOR OPEN: %0.1f %0.1f %0.1f", g_vPos[entity][0], g_vPos[entity][1], g_vPos[entity][2]);
@@ -823,7 +995,9 @@ Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, in
 					type = TYPE_INFECTED;
 			}
 			else
+			{
 				type = TYPE_SURVIVOR;
+			}
 		}
 
 		switch( type )
@@ -877,8 +1051,8 @@ void OnFrameHealth(DataPack dPack)
 		}
 
 		#if DEBUG_PRINT
-		PrintToChatAll("(%d) SHOVE HEALTH %d SET %d", entity, GetEntProp(entity, Prop_Data, "m_iHealth"), health);
-		PrintToServer("(%d) SHOVE HEALTH %d SET %d", entity, GetEntProp(entity, Prop_Data, "m_iHealth"), health);
+		PrintToChatAll("(%d) SHOVE HEALTH %d SET %d", EntRefToEntIndex(entity), GetEntProp(entity, Prop_Data, "m_iHealth"), health);
+		PrintToServer("(%d) SHOVE HEALTH %d SET %d", EntRefToEntIndex(entity), GetEntProp(entity, Prop_Data, "m_iHealth"), health);
 		#endif
 
 		if( health > 0 )
@@ -906,103 +1080,11 @@ void Door_Moved(const char[] output, int caller, int activator, float delay)
 
 
 // ====================================================================================================
-//					EVENTS
-// ====================================================================================================
-void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
-{
-	// This fixes doors not being affected from server start, after that map changes etc are fine
-	if( !g_iPlayerSpawn )
-	{
-		int client = GetClientOfUserId(event.GetInt("userid"));
-		if( client && !IsFakeClient(client) )
-		{
-			g_iPlayerSpawn = 1;
-			CreateTimer(5.0, TimerStart, _, TIMER_FLAG_NO_MAPCHANGE);
-		}
-	}
-}
-
-void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
-{
-	g_iRoundNumber++;
-
-	#if DEBUG_PRINT
-	if( g_iRoundNumber > 2 ) g_iRoundNumber = 1; // For debugging, to allow multiple round restarts with mp_restartgame 1
-	#endif
-
-	if( !g_bRoundStarted && g_iPlayerSpawn )
-	{
-		if( g_iRoundNumber == 1 ) ResetPlugin();
-
-		#if DEBUG_PRINT
-		PrintToChatAll("\x03Event_RoundStart");
-		PrintToServer("\x03Event_RoundStart");
-		#endif
-
-		CreateTimer(5.0, TimerStart, _, TIMER_FLAG_NO_MAPCHANGE);
-	}
-}
-
-void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
-{
-	g_bGlow = false;
-	g_bRoundStarted = false;
-}
-
-Action TimerStart(Handle timer)
-{
-	SearchForDoors();
-	g_bRoundStarted = true;
-}
-
-public void OnMapStart()
-{
-	g_bMapStarted = true;
-
-	PrecacheSound(SOUND_LOCK);
-	PrecacheSound(SOUND_LOCKED);
-	PrecacheSound(SOUND_UNLOCK);
-}
-
-public void OnMapEnd()
-{
-	g_bGlow = false;
-	g_bMapStarted = false;
-	g_bRoundStarted = false;
-	g_iRoundNumber = 0;
-
-	ResetPlugin();
-}
-
-void ResetPlugin(bool all = true)
-{
-	g_fLastPrint = 0.0;
-
-	for( int i = 0; i <= MaxClients; i++ )
-	{
-		g_fLastUse[i] = 0.0;
-	}
-
-	if( all )
-	{
-		for( int i = 0; i < 2048; i++ )
-		{
-			g_iState[i] = 0;
-			g_vPos[i][0] = 0.0;
-			g_vPos[i][1] = 0.0;
-			g_vPos[i][2] = 0.0;
-		}
-	}
-}
-
-
-
-// ====================================================================================================
 //					KEYBINDS
 // ====================================================================================================
 public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3], float angles[3], int &weapon)
 {
-	if( g_bCvarAllow && buttons & IN_USE && GetGameTime() > g_fLastUse[client] )
+	if( g_bCvarAllow && g_iCvarKeys && buttons & IN_USE && GetGameTime() > g_fLastUse[client] )
 	{
 		if( GetClientTeam(client) == 2 && IsPlayerAlive(client) )
 		{
