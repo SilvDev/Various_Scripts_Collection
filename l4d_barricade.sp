@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.3"
+#define PLUGIN_VERSION 		"1.4"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.4 (03-June-2022)
+	- L4D1: Fixed the planks not showing, however Infected do not attack the barrier. Thanks to "finishlast" for reporting.
 
 1.3 (03-June-2022)
 	- Fixed some issues regarding plank health.
@@ -164,7 +167,7 @@ public void OnPluginStart()
 	g_hCvarDamageT =	CreateConVar(	"l4d_barricade_damage_tank",		"0",				"0=Default game damage. Amount of damage to cause to planks when shoved by a Tank.", CVAR_FLAGS );
 	g_hCvarHealth =		CreateConVar(	"l4d_barricade_health",				"500",				"Health of each plank.", CVAR_FLAGS );
 	g_hCvarRange =		CreateConVar(	"l4d_barricade_range",				"100.0",			"Range required by Survivors to an open doorway or window to create planks. Large values may affect other nearby doorways or windows.", CVAR_FLAGS );
-	g_hCvarTime =		CreateConVar(	"l4d_barricade_time",				"5.0",				"How long does it take to build 1 plank.", CVAR_FLAGS );
+	g_hCvarTime =		CreateConVar(	"l4d_barricade_time",				"5.0",				"How long does it take to build 1 plank. L4D1: Values less than 0.6 will not show the progress bar and recommend whole numbers.", CVAR_FLAGS );
 	g_hCvarTimePress =	CreateConVar(	"l4d_barricade_time_press",			"0.3",				"How long must someone be holding +USE before building starts.", CVAR_FLAGS );
 	g_hCvarTimeWait =	CreateConVar(	"l4d_barricade_time_wait",			"0.5",				"How long after building a plank to make the player wait until they can build again.", CVAR_FLAGS );
 	g_hCvarType =		CreateConVar(	"l4d_barricade_types",				"3",				"1=Doors. 2=Windows. 3=Both. Where can barricades be built.", CVAR_FLAGS );
@@ -840,7 +843,7 @@ void BuildBarricade(int index)
 
 	if( plank )
 	{
-		int entity = CreateEntityByName("prop_wall_breakable");
+		int entity = CreateEntityByName(g_bLeft4Dead2 ? "prop_wall_breakable" : "prop_physics");
 		if( entity != -1 )
 		{
 			bool dbl_door;
