@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.36"
+#define PLUGIN_VERSION 		"1.37"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.37 (03-Jun-2022)
+	- Fixed command "sm_uptime" not displaying the correct time.
 
 1.36 (03-Jun-2022)
 	- Changed the method for the command "sm_uptime" to show since the plugin was loaded since GetGameTime() resets to 0.0 on map change.
@@ -643,11 +646,12 @@ Action CmdGameTime(int client, int args)
 
 Action CmdUpTime(int client, int args)
 {
-	int theTime			= GetTime() - g_iGameTime;
-	int days			= theTime / 86400;
-	int hours			= (theTime - days) / 3600;
-	int minutes			= (theTime - days - hours) / 60;
-	int seconds			= theTime - days - hours - minutes;
+	// From nextmap plugin
+	int time = GetTime() - g_iGameTime;
+	int days = time / 86400;
+	int hours = (time / 3600) % 24;
+	int minutes = (time / 60) % 60;
+	int seconds =  time % 60;
 
 	if( client > 0 && client <= MAXPLAYERS && IsClientInGame(client))
 	{
