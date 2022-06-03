@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.2"
+#define PLUGIN_VERSION 		"1.3"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.3 (03-June-2022)
+	- Fixed some issues regarding plank health.
 
 1.2 (03-June-2022)
 	- Fixed some plank placements being wrong with certain doors and windows.
@@ -992,9 +995,10 @@ Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, in
 			dPack.WriteCell(health);
 			dPack.WriteCell(type);
 			RequestFrame(OnFrameHealth, dPack);
-		}
 
-		return Plugin_Changed;
+			if( health > 0 )
+				return Plugin_Handled;
+		}
 	}
 
 	return Plugin_Continue;
