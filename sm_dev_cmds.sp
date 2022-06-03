@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.35"
+#define PLUGIN_VERSION 		"1.36"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.36 (03-Jun-2022)
+	- Changed the method for the command "sm_uptime" to show since the plugin was loaded since GetGameTime() resets to 0.0 on map change.
 
 1.35 (01-Jun-2022)
 	- Added command "sm_aimpos" to get the vector position where the crosshair is aiming.
@@ -261,7 +264,7 @@ bool g_bFirst = true;
 int g_sprite;
 
 bool g_bDirector = true, g_bAll, g_bNB, g_bNospawn, g_bDamage;
-int g_iGAMETYPE, g_iEntsSpit[MAXPLAYERS], g_iLedge[MAXPLAYERS], g_iDamageRequestor, g_iTotalBots, g_iTotalPlays, g_iLastUserID;
+int g_iGAMETYPE, g_iEntsSpit[MAXPLAYERS], g_iLedge[MAXPLAYERS], g_iDamageRequestor, g_iTotalBots, g_iTotalPlays, g_iLastUserID, g_iGameTime;
 float g_vAng[MAXPLAYERS+1][3], g_vPos[MAXPLAYERS+1][3];
 
 ConVar sb_hold_position, sb_stop, sv_cheats, mp_gamemode, z_background_limit, z_boomer_limit, z_charger_limit, z_common_limit, z_hunter_limit, z_jockey_limit, z_minion_limit, z_smoker_limit, z_spitter_limit, director_no_bosses, director_no_mobs, director_no_specials;
@@ -403,7 +406,6 @@ public void OnPluginStart()
 
 	if( g_iGAMETYPE == GAME_L4D || g_iGAMETYPE == GAME_L4D2 )
 	{
-
 		RegAdminCmd("sm_lobby",			CmdLobby,		0,	"Starts a vote return to lobby.");
 		RegAdminCmd("sm_ledge",			CmdLedge,		ADMFLAG_ROOT, "Enables/Disables ledge hanging.");
 		RegAdminCmd("sm_spit",			CmdSpit,		ADMFLAG_ROOT, "[#userid|name] Toggles spitter goo dribble on self (with no args) or specified targets.");
@@ -469,6 +471,9 @@ public void OnPluginStart()
 
 	// Events
 	HookEventEx("round_end", Event_RoundEnd, EventHookMode_PostNoCopy); // Only hooks if exists
+
+	// Other
+	g_iGameTime = GetTime();
 }
 
 public void OnPluginEnd()
@@ -549,7 +554,7 @@ public void OnEntityCreated(int entity, const char[] classname)
 void OnSpawnCommon(int entity)
 {
 	RemoveEntity(entity);
-}  
+}
 
 
 
@@ -638,20 +643,19 @@ Action CmdGameTime(int client, int args)
 
 Action CmdUpTime(int client, int args)
 {
-	float theTime = GetGameTime();
-	int days          = RoundToZero(theTime / 86400);
-	int hours         = RoundToZero((theTime - days) / 3600);
-	int minutes       = RoundToZero((theTime - days - hours) / 60);
-	int seconds       = RoundToZero(theTime - days - hours - minutes);
-	int milli         = RoundToZero((theTime - days - hours - minutes - seconds) * 1000);
+	int theTime			= GetTime() - g_iGameTime;
+	int days			= theTime / 86400;
+	int hours			= (theTime - days) / 3600;
+	int minutes			= (theTime - days - hours) / 60;
+	int seconds			= theTime - days - hours - minutes;
 
 	if( client > 0 && client <= MAXPLAYERS && IsClientInGame(client))
 	{
-		PrintToChat(client, "\x03Uptime: %d days %d hours %d minutes %d seconds and %d milliseconds", days, hours, minutes, seconds, milli);
+		PrintToChat(client, "\x03Uptime: %d days %d hours %d minutes %d seconds", days, hours, minutes, seconds);
 	}
 	else if( client == 0 )
 	{
-		PrintToServer("Uptime: %d days %d hours %d minutes %d seconds and %d milliseconds", days, hours, minutes, seconds, milli);
+		PrintToServer("Uptime: %d days %d hours %d minutes %d seconds", days, hours, minutes, seconds);
 	}
 
 	return Plugin_Handled;
@@ -1444,7 +1448,6 @@ stock float GetDistanceToVec(int client, float vEnd[3])
 
 	return fDistance;
 }
-	
 
 stock bool GetDirectionEndPoint(int client, float vEndPos[3])
 {
@@ -1562,11 +1565,11 @@ stock float GetDistanceToRoof(int client, float maxheight = 3000.0)
 
 bool TraceRayNoPlayers(int entity, int mask, any data)
 {
-    if( entity == data || (entity >= 1 && entity <= MaxClients) )
-    {
-        return false;
-    }
-    return true;
+	if( entity == data || (entity >= 1 && entity <= MaxClients) )
+	{
+		return false;
+	}
+	return true;
 }
 
 // Unused
@@ -2162,7 +2165,7 @@ Action CmdAnim(int client, int args)
 
 	g_bAnimWatch = true;
 	g_iAnimLast = 0;
-	g_iAnimIndex =  target;
+	g_iAnimIndex = target;
 	g_iAnimTarget = EntIndexToEntRef(target);
 	RequestFrame(OnAnimFrame, GetClientUserId(client));
 
@@ -2834,7 +2837,7 @@ Action CmdAdm(int client, int args)
 				if( strcmp(sTemp, "CUSTOM5") == 0 )			{ flags |= (1<<19);		StrCat(sRet, sizeof(sRet), "CUSTOM5|"); }
 				if( strcmp(sTemp, "CUSTOM6") == 0 )			{ flags |= (1<<20);		StrCat(sRet, sizeof(sRet), "CUSTOM6|"); }
 			}
-	
+
 			if( sRet[0] ) sRet[strlen(sRet) - 1] = 0; // Clear last "|"
 			PrintToChat(client, "[SM] sm_adm: Set admin flag: %s (%d)", sRet, flags);
 
@@ -4500,12 +4503,12 @@ stock void SetEntitySolid(int entity, bool doSolid)
 {
 	int m_nSolidType	= GetEntProp(entity, Prop_Data, "m_nSolidType", 1);
 	int m_usSolidFlags	= GetEntProp(entity, Prop_Data, "m_usSolidFlags", 2);
-	
+
 	if( doSolid )
 	{
 		if( m_nSolidType == 0 )
 			SetEntProp(entity, Prop_Send,	"m_nSolidType",		SOLID_VPHYSICS,	1);
-			
+
 		if( m_usSolidFlags & FSOLID_NOT_SOLID )
 			SetEntProp(entity, Prop_Send,	"m_usSolidFlags", 	m_usSolidFlags & ~FSOLID_NOT_SOLID,	2);
 	}
@@ -4513,7 +4516,7 @@ stock void SetEntitySolid(int entity, bool doSolid)
 	{
 		if( m_nSolidType != 0 )
 			SetEntProp(entity, Prop_Send,	"m_nSolidType",		view_as<int>(SOLID_NONE),	1);
-			
+
 		if( m_usSolidFlags & FSOLID_NOT_SOLID == 0 )
 			SetEntProp(entity, Prop_Send,	"m_usSolidFlags", 	m_usSolidFlags | FSOLID_NOT_SOLID,	2);
 	}
