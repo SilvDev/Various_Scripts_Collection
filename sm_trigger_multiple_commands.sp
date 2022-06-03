@@ -1,6 +1,6 @@
 /*
 *	Trigger Multiple Commands
-*	Copyright (C) 2021 Silvers
+*	Copyright (C) 2022 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION		"1.5"
+#define PLUGIN_VERSION		"1.6"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.6 (03-Jun-2022)
+	- Fixed client not connected errors. Thanks to "ZBzibing" for reporting.
 
 1.5 (20-Apr-2021)
 	- Fixed compile errors on SourceMod 1.11.
@@ -555,7 +558,7 @@ void ResetPlugin()
 		g_fRefireTime[i] = REFIRE_TIME;
 		g_fDelayTime[i] = DELAY_TIME;
 
-		if( IsValidEntRef(g_iTriggers[i]) ) AcceptEntityInput(g_iTriggers[i], "Kill");
+		if( IsValidEntRef(g_iTriggers[i]) ) RemoveEntity(g_iTriggers[i]);
 		g_iTriggers[i] = 0;
 
 		delete g_hTimerEnable[i];
@@ -572,12 +575,12 @@ public void OnConfigsExecuted()
 	IsAllowed();
 }
 
-public void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	IsAllowed();
 }
 
-public void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	GetCvars();
 }
@@ -660,26 +663,27 @@ void IsAllowed()
 	}
 }
 
-public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
+void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
 	ResetPlugin();
 }
 
-public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
+void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
 	if( g_iPlayerSpawn == 1 && g_iRoundStart == 0 ) CreateTimer(1.0, TimerStart, _, TIMER_FLAG_NO_MAPCHANGE);
 	g_iRoundStart = 1;
 }
 
-public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
+void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 {
 	if( g_iPlayerSpawn == 0 && g_iRoundStart == 1 ) CreateTimer(1.0, TimerStart, _, TIMER_FLAG_NO_MAPCHANGE);
 	g_iPlayerSpawn = 1;
 }
 
-public Action TimerStart(Handle timer)
+Action TimerStart(Handle timer)
 {
 	LoadDataConfig();
+	return Plugin_Continue;
 }
 
 
@@ -750,7 +754,7 @@ void LoadDataConfig()
 // ====================================================================================================
 //					COMMAND - RELOAD
 // ====================================================================================================
-public Action CmdTriggerReload(int client, int args)
+Action CmdTriggerReload(int client, int args)
 {
 	g_bCvarAllow = false;
 	ResetPlugin();
@@ -766,7 +770,7 @@ public Action CmdTriggerReload(int client, int args)
 // ====================================================================================================
 //					COMMAND - FLAGS
 // ====================================================================================================
-public Action CmdTriggerDupe(int client, int args)
+Action CmdTriggerDupe(int client, int args)
 {
 	ShowMenuTrigList(client, 7);
 	return Plugin_Handled;
@@ -777,7 +781,7 @@ public Action CmdTriggerDupe(int client, int args)
 // ====================================================================================================
 //					COMMAND - FLAGS
 // ====================================================================================================
-public Action CmdTriggerFlags(int client, int args)
+Action CmdTriggerFlags(int client, int args)
 {
 	char sTemp[256];
 	GetCmdArg(1, sTemp, sizeof(sTemp));
@@ -831,7 +835,7 @@ void GetFlags(int flags, char[] sTemp, int size)
 // ====================================================================================================
 //					COMMANDS
 // ====================================================================================================
-public Action CmdTriggerAdd(int client, int args)
+Action CmdTriggerAdd(int client, int args)
 {
 	if( client == 0 )
 	{
@@ -855,7 +859,7 @@ public Action CmdTriggerAdd(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdTriggerMenu(int client, int args)
+Action CmdTriggerMenu(int client, int args)
 {
 	if( client == 0 )
 	{
@@ -892,7 +896,7 @@ void ShowMainMenu(int client)
 	hMenu.Display(client, MENU_TIME_FOREVER);
 }
 
-public int TrigMenuHandler(Menu menu, MenuAction action, int client, int index)
+int TrigMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_End )
 	{
@@ -918,6 +922,8 @@ public int TrigMenuHandler(Menu menu, MenuAction action, int client, int index)
 			ShowMenuTrigList(client, index);
 		}
 	}
+
+	return 0;
 }
 
 void ShowMenuTrigList(int client, int index)
@@ -966,7 +972,7 @@ void ShowMenuTrigList(int client, int index)
 	hMenu.Display(client, MENU_TIME_FOREVER);
 }
 
-public int TrigListMenuHandler(Menu menu, MenuAction action, int client, int index)
+int TrigListMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_End )
 	{
@@ -1051,6 +1057,8 @@ public int TrigListMenuHandler(Menu menu, MenuAction action, int client, int ind
 			}
 		}
 	}
+
+	return 0;
 }
 
 
@@ -1058,7 +1066,7 @@ public int TrigListMenuHandler(Menu menu, MenuAction action, int client, int ind
 // ====================================================================================================
 //					MENU - TRIGGER BOX - EDIT OPTIONS
 // ====================================================================================================
-public int EditMenuHandler(Menu menu, MenuAction action, int client, int index)
+int EditMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_Cancel )
 	{
@@ -1121,6 +1129,8 @@ public int EditMenuHandler(Menu menu, MenuAction action, int client, int index)
 			}
 		}
 	}
+
+	return 0;
 }
 
 
@@ -1128,7 +1138,7 @@ public int EditMenuHandler(Menu menu, MenuAction action, int client, int index)
 // ====================================================================================================
 //					MENU - DATA HANDLER
 // ====================================================================================================
-public int DataMenuHandler(Menu menu, MenuAction action, int client, int index)
+int DataMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_Cancel )
 	{
@@ -1376,6 +1386,8 @@ public int DataMenuHandler(Menu menu, MenuAction action, int client, int index)
 			delete hFile;
 		}
 	}
+
+	return 0;
 }
 
 
@@ -1383,7 +1395,7 @@ public int DataMenuHandler(Menu menu, MenuAction action, int client, int index)
 // ====================================================================================================
 //					MENU - TRIGGER BOX - REFIRE COUNT
 // ====================================================================================================
-public int RefireMenuHandler(Menu menu, MenuAction action, int client, int index)
+int RefireMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_Cancel )
 	{
@@ -1409,7 +1421,7 @@ public int RefireMenuHandler(Menu menu, MenuAction action, int client, int index
 		{
 			PrintToChat(client, "%sCannot select + or - when setting up, please choose a default value.", CHAT_TAG);
 			g_hMenuRefire.Display(client, MENU_TIME_FOREVER);
-			return;
+			return 0;
 		}
 
 
@@ -1460,6 +1472,8 @@ public int RefireMenuHandler(Menu menu, MenuAction action, int client, int index
 		else if( index == 1 || index == 2 ) g_hMenuRefire.Display(client, MENU_TIME_FOREVER);
 		else g_hMenuEdit.Display(client, MENU_TIME_FOREVER);
 	}
+
+	return 0;
 }
 
 
@@ -1467,7 +1481,7 @@ public int RefireMenuHandler(Menu menu, MenuAction action, int client, int index
 // ====================================================================================================
 //					MENU - TRIGGER BOX - REFIRE TIME
 // ====================================================================================================
-public int TimeMenuHandler(Menu menu, MenuAction action, int client, int index)
+int TimeMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_Cancel )
 	{
@@ -1493,7 +1507,7 @@ public int TimeMenuHandler(Menu menu, MenuAction action, int client, int index)
 		{
 			PrintToChat(client, "%sCannot select + or - when setting up, please choose a default value.", CHAT_TAG);
 			g_hMenuTime.Display(client, MENU_TIME_FOREVER);
-			return;
+			return 0;
 		}
 
 
@@ -1529,6 +1543,8 @@ public int TimeMenuHandler(Menu menu, MenuAction action, int client, int index)
 		else if( index == 1 || index == 2 ) g_hMenuTime.Display(client, MENU_TIME_FOREVER);
 		else g_hMenuEdit.Display(client, MENU_TIME_FOREVER);
 	}
+
+	return 0;
 }
 
 
@@ -1536,7 +1552,7 @@ public int TimeMenuHandler(Menu menu, MenuAction action, int client, int index)
 // ====================================================================================================
 //					MENU - TRIGGER BOX - REFIRE TIME
 // ====================================================================================================
-public int DelayMenuHandler(Menu menu, MenuAction action, int client, int index)
+int DelayMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_Cancel )
 	{
@@ -1562,7 +1578,7 @@ public int DelayMenuHandler(Menu menu, MenuAction action, int client, int index)
 		{
 			PrintToChat(client, "%sCannot select + or - when setting up, please choose a default value.", CHAT_TAG);
 			g_hMenuDelay.Display(client, MENU_TIME_FOREVER);
-			return;
+			return 0;
 		}
 
 
@@ -1607,6 +1623,8 @@ public int DelayMenuHandler(Menu menu, MenuAction action, int client, int index)
 		else if( index == 1 || index == 2 ) g_hMenuDelay.Display(client, MENU_TIME_FOREVER);
 		else g_hMenuEdit.Display(client, MENU_TIME_FOREVER);
 	}
+
+	return 0;
 }
 
 
@@ -1614,7 +1632,7 @@ public int DelayMenuHandler(Menu menu, MenuAction action, int client, int index)
 // ====================================================================================================
 //					MENU - TRIGGER BOX - FIRE CHANCE
 // ====================================================================================================
-public int ChanceMenuHandler(Menu menu, MenuAction action, int client, int index)
+int ChanceMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_Cancel )
 	{
@@ -1679,6 +1697,8 @@ public int ChanceMenuHandler(Menu menu, MenuAction action, int client, int index
 		}
 		else g_hMenuEdit.Display(client, MENU_TIME_FOREVER);
 	}
+
+	return 0;
 }
 
 
@@ -1686,7 +1706,7 @@ public int ChanceMenuHandler(Menu menu, MenuAction action, int client, int index
 // ====================================================================================================
 //					MENU - TRIGGER BOX - VMINS/VMAXS/VPOS - CALLBACKS
 // ====================================================================================================
-public int VMaxsMenuHandler(Menu menu, MenuAction action, int client, int index)
+int VMaxsMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_Cancel )
 	{
@@ -1722,9 +1742,11 @@ public int VMaxsMenuHandler(Menu menu, MenuAction action, int client, int index)
 
 		g_hMenuVMaxs.Display(client, MENU_TIME_FOREVER);
 	}
+
+	return 0;
 }
 
-public int VMinsMenuHandler(Menu menu, MenuAction action, int client, int index)
+int VMinsMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_Cancel )
 	{
@@ -1760,9 +1782,11 @@ public int VMinsMenuHandler(Menu menu, MenuAction action, int client, int index)
 
 		g_hMenuVMins.Display(client, MENU_TIME_FOREVER);
 	}
+
+	return 0;
 }
 
-public int PosMenuHandler(Menu menu, MenuAction action, int client, int index)
+int PosMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_Cancel )
 	{
@@ -1799,6 +1823,8 @@ public int PosMenuHandler(Menu menu, MenuAction action, int client, int index)
 
 		g_hMenuPos.Display(client, MENU_TIME_FOREVER);
 	}
+
+	return 0;
 }
 
 
@@ -1894,7 +1920,8 @@ void DeleteTrigger(int client, int cfgindex)
 
 			if( hFile.JumpToKey(sTemp) )
 			{
-				if( IsValidEntRef(g_iTriggers[cfgindex-1]) )	AcceptEntityInput(g_iTriggers[cfgindex-1], "Kill");
+				if( IsValidEntRef(g_iTriggers[cfgindex-1]) )
+					RemoveEntity(g_iTriggers[cfgindex-1]);
 				g_iTriggers[cfgindex-1] = 0;
 
 				hFile.DeleteKey("vpos");
@@ -2132,7 +2159,7 @@ void CreateTriggerMultiple(int index, float vPos[3], float vMaxs[3], float vMins
 	g_iTriggers[index] = EntIndexToEntRef(trigger);
 }
 
-public Action TimerEnable(Handle timer, any index)
+Action TimerEnable(Handle timer, any index)
 {
 	g_hTimerEnable[index] = null;
 	g_bStopEnd[index] = false;
@@ -2145,14 +2172,16 @@ public Action TimerEnable(Handle timer, any index)
 			AcceptEntityInput(trigger, "Enable");
 		}
 	}
+
+	return Plugin_Continue;
 }
 
-public void OnEndTouch(const char[] output, int caller, int activator, float delay)
+void OnEndTouch(const char[] output, int caller, int activator, float delay)
 {
 	if( activator > 0 && activator <= MaxClients ) g_iInside[activator] = 0;
 }
 
-public void OnStartTouch(const char[] output, int caller, int activator, float delay)
+void OnStartTouch(const char[] output, int caller, int activator, float delay)
 {
 	if( IsClientInGame(activator) )
 	{
@@ -2271,7 +2300,7 @@ public void OnStartTouch(const char[] output, int caller, int activator, float d
 	}
 }
 
-public Action TimerExecuteCommand(Handle timer, any bits)
+Action TimerExecuteCommand(Handle timer, any bits)
 {
 	int client = bits & 0x7F;
 	int index = bits >> 7;
@@ -2282,6 +2311,8 @@ public Action TimerExecuteCommand(Handle timer, any bits)
 	{
 		ExecuteCommand(client, index);
 	}
+
+	return Plugin_Continue;
 }
 
 void ExecuteCommand(int client, int index)
@@ -2308,9 +2339,9 @@ void ExecuteCommand(int client, int index)
 		if( num == MaxClients )
 		{
 			pass = false;
-			client = i;
 			if( IsClientInGame(client) )
 			{
+				client = i;
 				bot = IsFakeClient(client);
 				team = GetClientTeam(client);
 
@@ -2337,13 +2368,13 @@ void ExecuteCommand(int client, int index)
 			pass = true;
 		}
 
-		//Get the targets id and replace {me} with the client's id
-		char id[32];
-		Format(id, sizeof(id), "#%d", GetClientUserId(client));
-		ReplaceString(sCommand, sizeof(sCommand), "{me}", id, false);
-
 		if( pass )
 		{
+			//Get the targets id and replace {me} with the client's id
+			char id[32];
+			Format(id, sizeof(id), "#%d", GetClientUserId(client));
+			ReplaceString(sCommand, sizeof(sCommand), "{me}", id, false);
+
 			bot = IsFakeClient(client);
 			// COMMAND CHEAT FLAG
 			if( data & FLAGS_CHEAT == FLAGS_CHEAT || data & FLAGS_ADMINCHEAT == FLAGS_ADMINCHEAT )
@@ -2390,7 +2421,7 @@ void ExecuteCommand(int client, int index)
 // ====================================================================================================
 //					TRIGGER BOX - DISPLAY BEAM BOX
 // ====================================================================================================
-public Action TimerBeam(Handle timer)
+Action TimerBeam(Handle timer)
 {
 	if( IsValidEntRef(g_iSelectedTrig) )
 	{
