@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.1"
+#define PLUGIN_VERSION 		"1.2"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,14 @@
 
 ========================================================================================
 	Change Log:
+
+1.2 (03-June-2022)
+	- Fixed some plank placements being wrong with certain doors and windows.
+
+	- Plugin will now auto link some known individual double doors (currently only L4D2: "c1m1_hotel").
+	- This will make the doors open together instead of individually, this is an easier than larger plugin modification to create a workaround.
+	- If double doors open individually (which then creates small plank barricades), please report to me the map and location to fix.
+	- If admins don't want the doors linked, please request a cvar to block those known doors from being used for barricades.
 
 1.1 (03-June-2022)
 	- Common infected now attack the planks!
@@ -80,7 +88,8 @@ enum
 enum
 {
 	TYPE_DOORS = 1,
-	TYPE_WINDS
+	TYPE_WINDS,
+	TYPE_WINDS_BIG
 }
 
 ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarDamageC, g_hCvarDamageI, g_hCvarDamageS, g_hCvarDamageT, g_hCvarHealth, g_hCvarRange, g_hCvarTime, g_hCvarTimePress, g_hCvarTimeWait, g_hCvarType;
@@ -100,7 +109,7 @@ float g_fTimeout[MAXPLAYERS+1];
 float g_fTimePress[MAXPLAYERS+1];
 float g_fTimeSound[MAXPLAYERS+1];
 int g_iPressing[MAXPLAYERS+1];
-bool g_bLeft4Dead2;
+bool g_bLeft4Dead2, g_bDoubleDoorFix;
 
 
 
@@ -177,7 +186,7 @@ public void OnPluginStart()
 	g_hCvarType.AddChangeHook(ConVarChanged_Cvars);
 
 	// Commands
-	if( g_bLeft4Dead2 && CommandExists("sm_doors_glow") == false )
+	if( g_bLeft4Dead2 && CommandExists("sm_doors_glow") == false ) // Shared with "Lock Doors" plugin
 	{
 		RegAdminCmd("sm_doors_glow", CmdDoorsGlow, ADMFLAG_ROOT, "Debug testing command to show all doors.");
 	}
@@ -319,6 +328,19 @@ public void OnMapStart()
 	PrecacheSound(SOUND_HAMMER1);
 	PrecacheSound(SOUND_HAMMER2);
 	PrecacheSound(SOUND_HAMMER3);
+
+	// Individual double doors fix
+	g_bDoubleDoorFix = false;
+
+	if( g_bLeft4Dead2 )
+	{
+		char sMap[16];
+		GetCurrentMap(sMap, sizeof(sMap));
+		if( strcmp(sMap, "c1m1_hotel") == 0 )
+		{
+			g_bDoubleDoorFix = true;
+		}
+	}
 }
 
 public void OnMapEnd()
@@ -516,6 +538,18 @@ void SpawnPostDoors(int entity)
 		strcmp(sModel, "models/props_unique/guncabinet01_rdoor.mdl") == 0
 	) return;
 
+	// Pair together known individual double doors
+	if( g_bDoubleDoorFix )
+	{
+		int hammer = GetEntProp(entity, Prop_Data, "m_iHammerID");
+
+		switch( hammer )
+		{
+			case 705345, 492367:	DispatchKeyValue(entity, "targetname", "silver_barricade_fix_1");
+			case 494086, 494081:	DispatchKeyValue(entity, "targetname", "silver_barricade_fix_2");
+		}
+	}
+
 	// Store ref
 	g_iEnties[entity] = EntIndexToEntRef(entity);
 
@@ -526,7 +560,7 @@ void SpawnPostDoors(int entity)
 	vAng[1] -= 90.0;
 
 	// Change height since L4D1 and L4D2 door models have different ground position (vPos[2])
-	if( strncmp(sModel, "models/props_doors", 18) == 0 )
+	if( strncmp(sModel, "models/props_doors", 18, false) == 0 )
 	{
 		vPos[2] -= 10.0;
 	} else {
@@ -601,13 +635,24 @@ void MatchRelatives(int entity)
 void SpawnPostWinds(int entity)
 {
 	// Only allow these windows (please report others to support)
+	int type;
+
 	static char sModel[64];
 	GetEntPropString(entity, Prop_Data, "m_ModelName", sModel, sizeof(sModel));
-	if(
-		strcmp(sModel, "models/props_windows/window_industrial.mdl") == 0 ||
-		strcmp(sModel, "models/props_windows/window_urban_apt.mdl") == 0 ||
-		strcmp(sModel, "models/props_windows/window_farmhouse_big.mdl") == 0
-	)
+	if( strcmp(sModel, "models/props_windows/window_industrial.mdl") == 0 )
+	{
+		type = 1;
+	}
+	else if( strcmp(sModel, "models/props_windows/window_urban_apt.mdl") == 0 || strcmp(sModel, "models/props_windows/window_farmhouse_big.mdl") == 0 )
+	{
+		type = 2;
+	}
+	else if( strcmp(sModel, "models/props/cs_militia/militiawindow02_breakable.mdl") == 0 )
+	{
+		type = 3;
+	}
+
+	if( type )
 	{
 		// Store ref
 		g_iEnties[entity] = EntIndexToEntRef(entity);
@@ -618,9 +663,11 @@ void SpawnPostWinds(int entity)
 		GetEntPropVector(entity, Prop_Data, "m_angRotation", vAng);
 		vAng[1] -= 90.0;
 
+		if( type == 1 ) vPos[2] += 35.0;
+
 		g_vPos[entity] = vPos;
 		g_vAng[entity] = vAng;
-		g_iTypeProp[entity] = TYPE_WINDS;
+		g_iTypeProp[entity] = type == 3 ? TYPE_WINDS_BIG : TYPE_WINDS;
 	}
 }
 
@@ -790,18 +837,23 @@ void BuildBarricade(int index)
 
 	if( plank )
 	{
-		bool dbl_door;
-		bool is_door = g_iTypeProp[index] == TYPE_DOORS;
-
-		if( is_door )
-			dbl_door = g_iRelative[index] != 0;
-
 		int entity = CreateEntityByName("prop_wall_breakable");
 		if( entity != -1 )
 		{
+			bool dbl_door;
+			bool is_door = g_iTypeProp[index] == TYPE_DOORS;
+
+			if( is_door )
+			{
+				dbl_door = g_iRelative[index] != 0;
+			}
+
 			// If double doors, set relative barricade reference to prevent dupe barricades being created
 			g_iBarricade[index][plank - 1] = EntIndexToEntRef(entity);
 			if( dbl_door ) g_iBarricade[g_iRelIndex[index]][plank - 1] = EntIndexToEntRef(entity);
+
+			// Big window
+			if( g_iTypeProp[index] == TYPE_WINDS_BIG ) dbl_door = true;
 
 			DispatchKeyValue(entity, "solid", "6");
 			DispatchKeyValue(entity, "model", dbl_door ? MODEL_PLANK2 : MODEL_PLANK1);
@@ -933,6 +985,7 @@ Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, in
 		if( type )
 		{
 			int health = GetEntProp(victim, Prop_Data, "m_iHealth");
+
 			// Must set health on frame, after 1 hit the game sets the planks health to 0
 			DataPack dPack = new DataPack();
 			dPack.WriteCell(EntIndexToEntRef(victim));
