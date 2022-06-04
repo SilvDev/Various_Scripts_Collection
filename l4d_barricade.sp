@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.4"
+#define PLUGIN_VERSION 		"1.5"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,10 @@
 
 ========================================================================================
 	Change Log:
+
+1.5 (04-June-2022)
+	- Added cvar "l4d_barricade_flags" to only allow users with specific flags to build barricades. Requested by "Maur0".
+	- Added more windows that can be barricaded. Thanks to "Maur0" for reporting.
 
 1.4 (03-June-2022)
 	- L4D1: Fixed the planks not showing, however Infected do not attack the barrier. Thanks to "finishlast" for reporting.
@@ -98,8 +102,8 @@ enum
 	TYPE_WINDS_BIG
 }
 
-ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarDamageC, g_hCvarDamageI, g_hCvarDamageS, g_hCvarDamageT, g_hCvarHealth, g_hCvarRange, g_hCvarTime, g_hCvarTimePress, g_hCvarTimeWait, g_hCvarType;
-int g_iCvarDamageC, g_iCvarDamageI, g_iCvarDamageS, g_iCvarDamageT, g_iCvarHealth, g_iCvarType;
+ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarDamageC, g_hCvarDamageI, g_hCvarDamageS, g_hCvarDamageT, g_hCvarFlags, g_hCvarHealth, g_hCvarRange, g_hCvarTime, g_hCvarTimePress, g_hCvarTimeWait, g_hCvarType;
+int g_iCvarDamageC, g_iCvarDamageI, g_iCvarDamageS, g_iCvarDamageT, g_iCvarFlags, g_iCvarHealth, g_iCvarType;
 float g_fCvarRange, g_fCvarTime, g_fCvarTimeWait, g_fCvarTimePress;
 bool g_bCvarAllow, g_bMapStarted;
 
@@ -165,6 +169,7 @@ public void OnPluginStart()
 	g_hCvarDamageI =	CreateConVar(	"l4d_barricade_damage_infected",	"250",				"0=Default game damage. Amount of damage to cause to planks when shoved by a Special Infected.", CVAR_FLAGS );
 	g_hCvarDamageS =	CreateConVar(	"l4d_barricade_damage_survivor",	"250",				"0=Default game damage. Amount of damage to cause to planks when shoved by a Survivor.", CVAR_FLAGS );
 	g_hCvarDamageT =	CreateConVar(	"l4d_barricade_damage_tank",		"0",				"0=Default game damage. Amount of damage to cause to planks when shoved by a Tank.", CVAR_FLAGS );
+	g_hCvarFlags =		CreateConVar(	"l4d_barricade_flags",				"",					"Empty string = allow everyone. Otherwise only users with one of these flags can build barricades.", CVAR_FLAGS );
 	g_hCvarHealth =		CreateConVar(	"l4d_barricade_health",				"500",				"Health of each plank.", CVAR_FLAGS );
 	g_hCvarRange =		CreateConVar(	"l4d_barricade_range",				"100.0",			"Range required by Survivors to an open doorway or window to create planks. Large values may affect other nearby doorways or windows.", CVAR_FLAGS );
 	g_hCvarTime =		CreateConVar(	"l4d_barricade_time",				"5.0",				"How long does it take to build 1 plank. L4D1: Values less than 0.6 will not show the progress bar and recommend whole numbers.", CVAR_FLAGS );
@@ -185,6 +190,7 @@ public void OnPluginStart()
 	g_hCvarDamageS.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarDamageT.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarHealth.AddChangeHook(ConVarChanged_Cvars);
+	g_hCvarFlags.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarRange.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarTime.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarTimePress.AddChangeHook(ConVarChanged_Cvars);
@@ -301,9 +307,9 @@ Action CmdWindsGlow(int client, int args)
 		GetEntPropString(entity, Prop_Data, "m_ModelName", sModel, sizeof(sModel));
 
 		if(
-			strcmp(sModel, "models/props_windows/window_industrial.mdl") == 0 ||
-			strcmp(sModel, "models/props_windows/window_urban_apt.mdl") == 0 ||
-			strcmp(sModel, "models/props_windows/window_farmhouse_big.mdl") == 0
+			strcmp(sModel, "models/props_windows/window_industrial.mdl", false) == 0 ||
+			strcmp(sModel, "models/props_windows/window_urban_apt.mdl", false) == 0 ||
+			strcmp(sModel, "models/props_windows/window_farmhouse_big.mdl", false) == 0
 		)
 		{
 			SetEntProp(entity, Prop_Send, "m_iGlowType", 3);
@@ -375,6 +381,9 @@ void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newV
 
 void GetCvars()
 {
+	char sTemp[32];
+	g_hCvarFlags.GetString(sTemp, sizeof(sTemp));
+	g_iCvarFlags = ReadFlagString(sTemp);
 	g_iCvarDamageC = g_hCvarDamageC.IntValue;
 	g_iCvarDamageI = g_hCvarDamageI.IntValue;
 	g_iCvarDamageS = g_hCvarDamageS.IntValue;
@@ -539,9 +548,9 @@ void SpawnPostDoors(int entity)
 	static char sModel[64];
 	GetEntPropString(entity, Prop_Data, "m_ModelName", sModel, sizeof(sModel));
 	if(
-		strcmp(sModel, "models/props_urban/outhouse_door001.mdl") == 0 ||
-		strcmp(sModel, "models/props_unique/guncabinet01_ldoor.mdl") == 0 ||
-		strcmp(sModel, "models/props_unique/guncabinet01_rdoor.mdl") == 0
+		strcmp(sModel, "models/props_urban/outhouse_door001.mdl", false) == 0 ||
+		strcmp(sModel, "models/props_unique/guncabinet01_ldoor.mdl", false) == 0 ||
+		strcmp(sModel, "models/props_unique/guncabinet01_rdoor.mdl", false) == 0
 	) return;
 
 	// Pair together known individual double doors
@@ -645,15 +654,15 @@ void SpawnPostWinds(int entity)
 
 	static char sModel[64];
 	GetEntPropString(entity, Prop_Data, "m_ModelName", sModel, sizeof(sModel));
-	if( strcmp(sModel, "models/props_windows/window_industrial.mdl") == 0 )
+	if( strcmp(sModel, "models/props_windows/window_industrial.mdl", false) == 0 )
 	{
 		type = 1;
 	}
-	else if( strcmp(sModel, "models/props_windows/window_urban_apt.mdl") == 0 || strcmp(sModel, "models/props_windows/window_farmhouse_big.mdl") == 0 )
+	else if( strcmp(sModel, "models/props_windows/window_urban_apt.mdl", false) == 0 || strcmp(sModel, "models/props_windows/window_farmhouse_big.mdl") == 0 || strcmp(sModel, "models/props_windows/window_farmhouse_small.mdl", false) == 0 )
 	{
 		type = 2;
 	}
-	else if( strcmp(sModel, "models/props/cs_militia/militiawindow02_breakable.mdl") == 0 )
+	else if( strcmp(sModel, "models/props/cs_militia/militiawindow02_breakable.mdl", false) == 0 )
 	{
 		type = 3;
 	}
@@ -689,6 +698,14 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 	if( buttons & IN_USE )
 	{
 		// Validation checks
+		if( g_iCvarFlags )
+		{
+			int flags = GetUserFlagBits(client);
+
+			if( !(flags & ADMFLAG_ROOT) && !(flags & g_iCvarFlags) )
+			return Plugin_Continue;
+		}
+
 		if( !IsPlayerAlive(client) || GetClientTeam(client) != 2 ) return Plugin_Continue;
 		if( IsReviving(client) || IsIncapped(client) || IsClientPinned(client) ) return Plugin_Continue;
 
