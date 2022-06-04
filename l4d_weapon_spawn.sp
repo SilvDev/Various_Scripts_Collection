@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.9"
+#define PLUGIN_VERSION 		"1.10"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,10 @@
 
 ========================================================================================
 	Change Log:
+
+1.10 (04-June-2022)
+	- L4D2: Plugin now automatically converts old configs to use the new index values. Previous version was spawning the wrong types.
+	- Thanks to "KoMiKoZa" for reporting.
 
 1.9 (26-May-2022)
 	- Changed the menu order of items to group similar types together.
@@ -278,6 +282,7 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 
 public void OnPluginStart()
 {
+	// Cvars
 	g_hCvarAllow =		CreateConVar(	"l4d_weapon_spawn_allow",			"1",			"0=Plugin off, 1=Plugin on.", CVAR_FLAGS );
 	if( g_bLeft4Dead2 )
 	{
@@ -338,6 +343,9 @@ public void OnPluginStart()
 
 	g_hAmmoShotgun.AddChangeHook(ConVarChanged_Cvars);
 
+
+
+	// Commands
 	RegAdminCmd("sm_weapon_spawn",			CmdSpawnerTemp,		ADMFLAG_ROOT, 	"Opens a menu of weapons/items to spawn. Spawns a temporary weapon at your crosshair.");
 	RegAdminCmd("sm_weapon_spawn_save",		CmdSpawnerSave,		ADMFLAG_ROOT, 	"Opens a menu of weapons/items to spawn. Spawns a weapon at your crosshair and saves to config.");
 	RegAdminCmd("sm_weapon_spawn_del",		CmdSpawnerDel,		ADMFLAG_ROOT, 	"Removes the weapon you are pointing at and deletes from the config if saved.");
@@ -354,6 +362,7 @@ public void OnPluginStart()
 
 
 
+	// Menu
 	g_hMenuList = new Menu(ListMenuHandler);
 	int max = MAX_WEAPONS;
 	if( g_bLeft4Dead2 ) max = MAX_WEAPONS2;
@@ -363,6 +372,72 @@ public void OnPluginStart()
 	}
 	g_hMenuList.SetTitle("Spawn Weapon");
 	g_hMenuList.ExitBackButton = true;
+
+
+
+	// Config version
+	if( g_bLeft4Dead2 )
+	{
+		int iMod, iNum, iIndex;
+		bool process;
+		char sKey[128];
+		char sPath[PLATFORM_MAX_PATH];
+		BuildPath(Path_SM, sPath, sizeof(sPath), CONFIG_SPAWNS);
+		if( FileExists(sPath) )
+		{
+			// Load config
+			KeyValues hFile = new KeyValues("spawns");
+			if( hFile.ImportFromFile(sPath) )
+			{
+				// Version check
+				if( hFile.GetNum("version", 1) != 2 )
+				{
+					int iNew[] = { 2, 6, 13, 10, 8, 0, 20, 21, 25, 23, 9, 5, 18, 17, 3, 4, 7, 11, 12, 14, 15, 16, 19, 1, 22, 26, 27, 28, 24 };
+
+					hFile.GotoFirstSubKey(false);
+					process = true;
+
+					while( process )
+					{
+						hFile.GetSectionName(sKey, sizeof(sKey));
+
+						iNum = hFile.GetNum("num", 0);
+						iIndex = 0;
+						while( iIndex < iNum )
+						{
+							iIndex++;
+							IntToString(iIndex, sKey, sizeof(sKey));
+
+							if( hFile.JumpToKey(sKey) )
+							{
+								iMod = hFile.GetNum("mod", -1);
+								if( iMod != -1 )
+								{
+									iMod = iNew[iMod];
+									hFile.SetNum("mod", iMod);
+								}
+							}
+
+							hFile.GoBack();
+						}
+
+						if( !hFile.GotoNextKey(false) )
+						{
+							process = false;
+						}
+					}
+
+					// Save cfg
+					hFile.GoBack();
+					hFile.SetNum("version", 2);
+					hFile.Rewind();
+					hFile.ExportToFile(sPath);
+				}
+			}
+
+			delete hFile;
+		}
+	}
 }
 
 public void OnPluginEnd()
@@ -397,17 +472,17 @@ public void OnConfigsExecuted()
 	IsAllowed();
 }
 
-public void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	IsAllowed();
 }
 
-public void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	GetCvars();
 }
 
-public void ConVarChanged_Glow(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Glow(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	g_iCvarGlow = g_hCvarGlow.IntValue;
 	g_iCvarGlowCol = GetColor(g_hCvarGlowCol);
@@ -539,7 +614,7 @@ bool IsAllowedGameMode()
 	return true;
 }
 
-public void OnGamemode(const char[] output, int caller, int activator, float delay)
+void OnGamemode(const char[] output, int caller, int activator, float delay)
 {
 	if( strcmp(output, "OnCoop") == 0 )
 		g_iCurrentMode = 1;
@@ -556,26 +631,26 @@ public void OnGamemode(const char[] output, int caller, int activator, float del
 // ====================================================================================================
 //					EVENTS
 // ====================================================================================================
-public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
+void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
 	ResetPlugin(false);
 }
 
-public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
+void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
 	if( g_iPlayerSpawn == 1 && g_iRoundStart == 0 )
 		CreateTimer(1.0, TimerStart, _, TIMER_FLAG_NO_MAPCHANGE);
 	g_iRoundStart = 1;
 }
 
-public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
+void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 {
 	if( g_iPlayerSpawn == 0 && g_iRoundStart == 1 )
 		CreateTimer(1.0, TimerStart, _, TIMER_FLAG_NO_MAPCHANGE);
 	g_iPlayerSpawn = 1;
 }
 
-public Action TimerStart(Handle timer)
+Action TimerStart(Handle timer)
 {
 	ResetPlugin();
 	LoadSpawns();
@@ -812,7 +887,7 @@ void CreateSpawn(const float vOrigin[3], const float vAngles[3], int index = 0, 
 // ====================================================================================================
 //					sm_weapon_spawn
 // ====================================================================================================
-public int ListMenuHandler(Menu menu, MenuAction action, int client, int index)
+int ListMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_Select )
 	{
@@ -829,7 +904,7 @@ public int ListMenuHandler(Menu menu, MenuAction action, int client, int index)
 	return 0;
 }
 
-public Action CmdSpawnerTemp(int client, int args)
+Action CmdSpawnerTemp(int client, int args)
 {
 	if( !client )
 	{
@@ -875,7 +950,7 @@ void CmdSpawnerTempMenu(int client, int weapon)
 // ====================================================================================================
 //					sm_weapon_spawn_save
 // ====================================================================================================
-public Action CmdSpawnerSave(int client, int args)
+Action CmdSpawnerSave(int client, int args)
 {
 	if( !client )
 	{
@@ -896,10 +971,12 @@ public Action CmdSpawnerSave(int client, int args)
 
 void CmdSpawnerSaveMenu(int client, int weapon)
 {
+	bool isNew;
 	char sPath[PLATFORM_MAX_PATH];
 	BuildPath(Path_SM, sPath, sizeof(sPath), CONFIG_SPAWNS);
 	if( !FileExists(sPath) )
 	{
+		isNew = true;
 		File hCfg = OpenFile(sPath, "w");
 		hCfg.WriteLine("");
 		delete hCfg;
@@ -909,7 +986,13 @@ void CmdSpawnerSaveMenu(int client, int weapon)
 	KeyValues hFile = new KeyValues("spawns");
 	if( !hFile.ImportFromFile(sPath) )
 	{
+		isNew = true;
 		PrintToChat(client, "%sError: Cannot read the weapon config, assuming empty file. (\x05%s\x01).", CHAT_TAG, sPath);
+	}
+
+	if( isNew )
+	{
+		hFile.SetNum("version", 2);
 	}
 
 	// Check for current map in the config
@@ -971,7 +1054,7 @@ void CmdSpawnerSaveMenu(int client, int weapon)
 // ====================================================================================================
 //					sm_weapon_spawn_del
 // ====================================================================================================
-public Action CmdSpawnerDel(int client, int args)
+Action CmdSpawnerDel(int client, int args)
 {
 	if( !g_bCvarAllow )
 	{
@@ -1101,7 +1184,7 @@ public Action CmdSpawnerDel(int client, int args)
 // ====================================================================================================
 //					sm_weapon_spawn_clear
 // ====================================================================================================
-public Action CmdSpawnerClear(int client, int args)
+Action CmdSpawnerClear(int client, int args)
 {
 	if( !client )
 	{
@@ -1118,7 +1201,7 @@ public Action CmdSpawnerClear(int client, int args)
 // ====================================================================================================
 //					sm_weapon_spawn_wipe
 // ====================================================================================================
-public Action CmdSpawnerWipe(int client, int args)
+Action CmdSpawnerWipe(int client, int args)
 {
 	if( !client )
 	{
@@ -1169,7 +1252,7 @@ public Action CmdSpawnerWipe(int client, int args)
 // ====================================================================================================
 //					sm_weapon_spawn_glow
 // ====================================================================================================
-public Action CmdSpawnerGlow(int client, int args)
+Action CmdSpawnerGlow(int client, int args)
 {
 	static bool glow;
 	glow = !glow;
@@ -1201,7 +1284,7 @@ void VendorGlow(int glow)
 // ====================================================================================================
 //					sm_weapon_spawn_list
 // ====================================================================================================
-public Action CmdSpawnerList(int client, int args)
+Action CmdSpawnerList(int client, int args)
 {
 	float vPos[3];
 	int count;
@@ -1221,7 +1304,7 @@ public Action CmdSpawnerList(int client, int args)
 // ====================================================================================================
 //					sm_weapon_spawn_tele
 // ====================================================================================================
-public Action CmdSpawnerTele(int client, int args)
+Action CmdSpawnerTele(int client, int args)
 {
 	if( args == 1 )
 	{
@@ -1248,7 +1331,7 @@ public Action CmdSpawnerTele(int client, int args)
 // ====================================================================================================
 //					MENU ANGLE
 // ====================================================================================================
-public Action CmdSpawnerAng(int client, int args)
+Action CmdSpawnerAng(int client, int args)
 {
 	ShowMenuAng(client);
 	return Plugin_Handled;
@@ -1260,7 +1343,7 @@ void ShowMenuAng(int client)
 	g_hMenuAng.Display(client, MENU_TIME_FOREVER);
 }
 
-public int AngMenuHandler(Menu menu, MenuAction action, int client, int index)
+int AngMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_Select )
 	{
@@ -1310,7 +1393,7 @@ void SetAngle(int client, int index)
 	}
 }
 
-public Action CmdSpawnerRot(int client, int args)
+Action CmdSpawnerRot(int client, int args)
 {
 	if( args < 2 )
 	{
@@ -1366,7 +1449,7 @@ public Action CmdSpawnerRot(int client, int args)
 // ====================================================================================================
 //					MENU ORIGIN
 // ====================================================================================================
-public Action CmdSpawnerPos(int client, int args)
+Action CmdSpawnerPos(int client, int args)
 {
 	ShowMenuPos(client);
 	return Plugin_Handled;
@@ -1378,7 +1461,7 @@ void ShowMenuPos(int client)
 	g_hMenuPos.Display(client, MENU_TIME_FOREVER);
 }
 
-public int PosMenuHandler(Menu menu, MenuAction action, int client, int index)
+int PosMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_Select )
 	{
@@ -1428,7 +1511,7 @@ void SetOrigin(int client, int index)
 	}
 }
 
-public Action CmdSpawnerMov(int client, int args)
+Action CmdSpawnerMov(int client, int args)
 {
 	if( args < 2 )
 	{
@@ -1687,7 +1770,7 @@ bool SetTeleportEndPoint(int client, float vPos[3], float vAng[3])
 	return true;
 }
 
-public bool _TraceFilter(int entity, int contentsMask)
+bool _TraceFilter(int entity, int contentsMask)
 {
 	return entity > MaxClients || !entity;
 }
