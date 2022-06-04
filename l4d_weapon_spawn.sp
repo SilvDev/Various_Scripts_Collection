@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.10"
+#define PLUGIN_VERSION 		"1.11"
 
 /*======================================================================================
 	Plugin Info:
@@ -32,8 +32,12 @@
 ========================================================================================
 	Change Log:
 
+1.11 (04-June-2022)
+	- Fixed not updating the full data config if an index was missing. Now throws errors to warn about missing indexes.
+	- Plugin will auto backs up the previous data config before updating it.
+
 1.10 (04-June-2022)
-	- L4D2: Plugin now automatically converts old configs to use the new index values. Previous version was spawning the wrong types.
+	- L4D2: Plugin now automatically converts old /data/ configs to use the new index values. Previous version was spawning the wrong types.
 	- Thanks to "KoMiKoZa" for reporting.
 
 1.9 (26-May-2022)
@@ -389,6 +393,10 @@ public void OnPluginStart()
 			KeyValues hFile = new KeyValues("spawns");
 			if( hFile.ImportFromFile(sPath) )
 			{
+				char sNew[PLATFORM_MAX_PATH];
+				BuildPath(Path_SM, sNew, sizeof(sNew), "%s.backup", CONFIG_SPAWNS);
+				RenameFile(sNew, sPath);
+
 				// Version check
 				if( hFile.GetNum("version", 1) != 2 )
 				{
@@ -399,7 +407,8 @@ public void OnPluginStart()
 
 					while( process )
 					{
-						hFile.GetSectionName(sKey, sizeof(sKey));
+						// hFile.GetSectionName(sKey, sizeof(sKey));
+						// PrintToServer("Section: %s", sKey);
 
 						iNum = hFile.GetNum("num", 0);
 						iIndex = 0;
@@ -413,12 +422,16 @@ public void OnPluginStart()
 								iMod = hFile.GetNum("mod", -1);
 								if( iMod != -1 )
 								{
+									// PrintToServer("New: %s (%d > %d)", sKey, iMod, iNew[iMod]);
 									iMod = iNew[iMod];
 									hFile.SetNum("mod", iMod);
 								}
-							}
 
-							hFile.GoBack();
+								hFile.GoBack();
+							} else {
+								hFile.GetSectionName(sKey, sizeof(sKey));
+								LogError("Update warning: missing index detected: \"%d\" from \"%s\" in \"%s\". Suggest manually fixing, this could break some functionality.", iIndex, sKey, CONFIG_SPAWNS);
+							}
 						}
 
 						if( !hFile.GotoNextKey(false) )
@@ -739,6 +752,8 @@ void LoadSpawns()
 			else
 				CreateSpawn(vPos, vAng, index, iMod, true);
 			hFile.GoBack();
+		} else {
+			LogError("Error: missing index detected: \"%d\" from \"%s\" in \"%s\"", index, sMap, CONFIG_SPAWNS);
 		}
 	}
 
