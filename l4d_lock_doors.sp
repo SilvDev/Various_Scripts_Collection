@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.14"
+#define PLUGIN_VERSION 		"1.15"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.15 (05-Jun-2022)
+	- Added commands "sm_doors_close", "sm_doors_open" and "sm_doors_tog" to control all doors.
 
 1.14 (03-Jun-2022)
 	- Changed cvar "l4d_lock_doors_keys" to accept the value of "0" to disable the locking and unlocking doors feature.
@@ -292,10 +295,14 @@ public void OnPluginStart()
 	// Commands
 	RegAdminCmd("sm_lock_doors_health", CmdHealth, ADMFLAG_ROOT, "Returns the health of the door you're aiming at.");
 
-	if( g_bLeft4Dead2 && CommandExists("sm_doors_glow") == false )
+	if( g_bLeft4Dead2 && CommandExists("sm_doors_glow") == false ) // Shared with "Barricades - Doors and Windows" plugin
 	{
 		RegAdminCmd("sm_doors_glow", CmdGlow, ADMFLAG_ROOT, "Debug testing command to show all doors.");
 	}
+
+	RegAdminCmd("sm_doors_close", CmdDoorsClose, ADMFLAG_ROOT, "Closes all doors on the map.");
+	RegAdminCmd("sm_doors_open", CmdDoorsOpen, ADMFLAG_ROOT, "Opens all doors on the map.");
+	RegAdminCmd("sm_doors_tog", CmdDoorsTog, ADMFLAG_ROOT, "Toggle state of all doors on the map.");
 }
 
 
@@ -516,12 +523,14 @@ Action TimerStartDraw(Handle timer)
 {
 	ResetPlugin();
 	CreateTimer(1.0, TimerStartDraw2, _, TIMER_FLAG_NO_MAPCHANGE);
+	return Plugin_Continue;
 }
 
 Action TimerStartDraw2(Handle timer)
 {
 	SearchForDoors();
 	g_bRoundStarted = true;
+	return Plugin_Continue;
 }
 
 Action TimerStart(Handle timer)
@@ -529,6 +538,7 @@ Action TimerStart(Handle timer)
 	SearchForDoors();
 	g_bBootedServer = true;
 	g_bRoundStarted = true;
+	return Plugin_Continue;
 }
 
 public void OnMapStart()
@@ -635,6 +645,42 @@ Action CmdGlow(int client, int args)
 			AcceptEntityInput(entity, "StartGlowing");
 		else
 			AcceptEntityInput(entity, "StopGlowing");
+	}
+
+	return Plugin_Handled;
+}
+
+Action CmdDoorsClose(int client, int args)
+{
+	int entity = -1;
+	while( (entity = FindEntityByClassname(entity, "prop_door_rotating")) != INVALID_ENT_REFERENCE )
+	{
+		OpenOrClose(entity, DOOR_STATE_CLOSED);
+	}
+
+	return Plugin_Handled;
+}
+
+Action CmdDoorsOpen(int client, int args)
+{
+	int entity = -1;
+	while( (entity = FindEntityByClassname(entity, "prop_door_rotating")) != INVALID_ENT_REFERENCE )
+	{
+		OpenOrClose(entity, DOOR_STATE_OPENED);
+	}
+
+	return Plugin_Handled;
+}
+
+Action CmdDoorsTog(int client, int args)
+{
+	int entity = -1;
+	while( (entity = FindEntityByClassname(entity, "prop_door_rotating")) != INVALID_ENT_REFERENCE )
+	{
+		if( GetEntProp(entity, Prop_Data, "m_eDoorState") == DOOR_STATE_OPENED )
+			OpenOrClose(entity, DOOR_STATE_CLOSED);
+		else
+			OpenOrClose(entity, DOOR_STATE_OPENED);
 	}
 
 	return Plugin_Handled;
@@ -1029,6 +1075,8 @@ Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, in
 		else
 			SetEntProp(victim, Prop_Data, "m_iHealth", 0);
 	}
+
+	return Plugin_Continue;
 }
 
 void OnFrameHealth(DataPack dPack)
@@ -1070,6 +1118,8 @@ Action TimerDoorSet(Handle timer, any entity)
 		SetEntProp(entity, Prop_Send, "m_spawnflags", g_iFlags[entity]);
 		g_iFlags[entity] = -1;
 	}
+
+	return Plugin_Continue;
 }
 
 void Door_Moved(const char[] output, int caller, int activator, float delay)
