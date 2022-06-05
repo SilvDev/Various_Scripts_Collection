@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.5"
+#define PLUGIN_VERSION 		"1.6"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.6 (05-June-2022)
+	- Optimized cvar "l4d_barricade_flags" flag checking.
 
 1.5 (04-June-2022)
 	- Added cvar "l4d_barricade_flags" to only allow users with specific flags to build barricades. Requested by "Maur0".
@@ -118,6 +121,7 @@ float g_fPressing[MAXPLAYERS+1];
 float g_fTimeout[MAXPLAYERS+1];
 float g_fTimePress[MAXPLAYERS+1];
 float g_fTimeSound[MAXPLAYERS+1];
+bool g_bValidFlags[MAXPLAYERS+1];
 int g_iPressing[MAXPLAYERS+1];
 bool g_bLeft4Dead2, g_bDoubleDoorFix;
 
@@ -511,6 +515,24 @@ void OnGamemode(const char[] output, int caller, int activator, float delay)
 // ====================================================================================================
 //					EVENTS
 // ====================================================================================================
+public void OnClientPutInServer(int client)
+{
+	g_bValidFlags[client] = true;
+}
+
+public void OnClientPostAdminCheck(int client)
+{
+	if( g_iCvarFlags )
+	{
+		int flags = GetUserFlagBits(client);
+
+		if( !(flags & ADMFLAG_ROOT) && !(flags & g_iCvarFlags) )
+		{
+			g_bValidFlags[client] = false;
+		}
+	}
+}
+
 void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
 	g_bDoorsGlow = false;
@@ -698,15 +720,7 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 	if( buttons & IN_USE )
 	{
 		// Validation checks
-		if( g_iCvarFlags )
-		{
-			int flags = GetUserFlagBits(client);
-
-			if( !(flags & ADMFLAG_ROOT) && !(flags & g_iCvarFlags) )
-			return Plugin_Continue;
-		}
-
-		if( !IsPlayerAlive(client) || GetClientTeam(client) != 2 ) return Plugin_Continue;
+		if( !g_bValidFlags[client] || !IsPlayerAlive(client) || GetClientTeam(client) != 2 ) return Plugin_Continue;
 		if( IsReviving(client) || IsIncapped(client) || IsClientPinned(client) ) return Plugin_Continue;
 
 		// Time pressing +USE
