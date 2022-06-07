@@ -422,7 +422,7 @@ void GetCvars()
 	g_iCvarHealth = g_hCvarHealth.IntValue;
 	g_iCvarKeys = g_hCvarKeys.IntValue;
 	g_fCvarRange = g_hCvarRange.FloatValue;
-	g_iCvarTime = RoundFloat(g_hCvarTime.FloatValue);
+	g_iCvarTime = RoundToCeil(g_hCvarTime.FloatValue);
 	g_fCvarTimePress = g_hCvarTimePress.FloatValue;
 	g_fCvarTimeWait = g_hCvarTimeWait.FloatValue;
 	g_iCvarType = g_hCvarType.IntValue;
