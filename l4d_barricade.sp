@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.7"
+#define PLUGIN_VERSION 		"1.8"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.8 (07-June-2022)
+	- L4D2: Fixed the double door fix not working from map start.
 
 1.7 (07-June-2022)
 	- Added cvar "l4d_barricade_keys" to set the key combination. Requested by "xZk".
@@ -113,7 +116,7 @@ enum
 ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarDamageC, g_hCvarDamageI, g_hCvarDamageS, g_hCvarDamageT, g_hCvarFlags, g_hCvarHealth, g_hCvarKeys, g_hCvarRange, g_hCvarTime, g_hCvarTimePress, g_hCvarTimeWait, g_hCvarType;
 int g_iCvarDamageC, g_iCvarDamageI, g_iCvarDamageS, g_iCvarDamageT, g_iCvarFlags, g_iCvarHealth, g_iCvarKeys, g_iCvarTime, g_iCvarType;
 float g_fCvarRange, g_fCvarTimeWait, g_fCvarTimePress;
-bool g_bCvarAllow, g_bMapStarted, g_bLeft4Dead2, g_bDoubleDoorFix;
+bool g_bCvarAllow, g_bMapStarted, g_bLeft4Dead2, g_bDoubleDoorFix, g_bDoubleDoorMap;
 char g_sMod[4];
 
 int g_iBarricade[2048][4];
@@ -357,20 +360,8 @@ public void OnMapStart()
 	PrecacheSound(SOUND_HAMMER2);
 	PrecacheSound(SOUND_HAMMER3);
 
-
 	if( g_bLeft4Dead2 )
 	{
-		// Individual double doors fix
-		g_bDoubleDoorFix = false;
-
-		static char sMap[128];
-
-		GetCurrentMap(sMap, sizeof(sMap));
-		if( strcmp(sMap, "c1m1_hotel") == 0 )
-		{
-			g_bDoubleDoorFix = true;
-		}
-
 		// Find model for func_button_timed so the text displays
 		for( int i = 1; i <= 50; i++ )
 		{
@@ -383,11 +374,11 @@ public void OnMapStart()
 
 		g_sMod[0] = 0;
 	}
-
 }
 
 public void OnMapEnd()
 {
+	g_bDoubleDoorMap = false;
 	g_bDoorsGlow = false;
 	g_bWindsGlow = false;
 	g_bMapStarted = false;
@@ -604,6 +595,21 @@ void SpawnPostDoors(int entity)
 	) return;
 
 	// Pair together known individual double doors
+	if( g_bLeft4Dead2 && !g_bDoubleDoorMap )
+	{
+		// Individual double doors fix
+		g_bDoubleDoorMap = true;
+		g_bDoubleDoorFix = false;
+
+		static char sMap[16];
+
+		GetCurrentMap(sMap, sizeof(sMap));
+		if( strcmp(sMap, "c1m1_hotel") == 0 )
+		{
+			g_bDoubleDoorFix = true;
+		}
+	}
+
 	if( g_bDoubleDoorFix )
 	{
 		int hammer = GetEntProp(entity, Prop_Data, "m_iHammerID");
