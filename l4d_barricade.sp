@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.9"
+#define PLUGIN_VERSION 		"1.10"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,10 @@
 
 ========================================================================================
 	Change Log:
+
+1.10 (07-June-2022)
+	- L4D2: Fixed the progress bar not ending correctly.
+	- L4D2: Fixed another possible bug of players getting stuck.
 
 1.9 (07-June-2022)
 	- L4D2: Fixed the new progress bar creating a solid random model. Thanks to "gongo" for reporting.
@@ -908,12 +912,26 @@ void RemoveButton(int client)
 {
 	if( IsValidEntRef(g_iButtons[client]) )
 	{
-		SetEntPropEnt(client, Prop_Send, "m_useActionOwner", 0);
-		SetEntPropEnt(client, Prop_Send, "m_useActionTarget", 0);
-		SetEntProp(client, Prop_Send, "m_iCurrentUseAction", 0);
+		AcceptEntityInput(g_iButtons[client], "Disable");
 
 		RemoveEntity(g_iButtons[client]);
 		g_iButtons[client] = 0;
+
+		if( IsClientInGame(client) )
+		{
+			int target = GetEntPropEnt(client, Prop_Send, "m_useActionTarget");
+			if( target > 0 && target <= MaxClients && IsClientInGame(target) ) // Fix healing target making the target unable to be healed again
+			{
+				SetEntProp(target, Prop_Send, "m_useActionOwner", 0);
+				SetEntProp(target, Prop_Send, "m_useActionTarget", 0);
+				SetEntProp(target, Prop_Send, "m_iCurrentUseAction", 0);
+			}
+
+			SetEntProp(client, Prop_Send, "m_useActionOwner", 0);
+			SetEntProp(client, Prop_Send, "m_useActionTarget", 0);
+			SetEntProp(client, Prop_Send, "m_iCurrentUseAction", 0);
+			SetEntityMoveType(client, MOVETYPE_WALK);
+		}
 	}
 }
 
