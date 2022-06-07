@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.6"
+#define PLUGIN_VERSION 		"1.7"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,11 @@
 
 ========================================================================================
 	Change Log:
+
+1.7 (07-June-2022)
+	- Added cvar "l4d_barricade_keys" to set the key combination. Requested by "xZk".
+	- Fixed building a barricade when reviving someone. Thanks to "gongo" for reporting.
+	- L4D2: Progress bar changed to timed button with custom text. Thanks to "xZk" for the method.
 
 1.6 (05-June-2022)
 	- Optimized cvar "l4d_barricade_flags" flag checking.
@@ -105,10 +110,11 @@ enum
 	TYPE_WINDS_BIG
 }
 
-ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarDamageC, g_hCvarDamageI, g_hCvarDamageS, g_hCvarDamageT, g_hCvarFlags, g_hCvarHealth, g_hCvarRange, g_hCvarTime, g_hCvarTimePress, g_hCvarTimeWait, g_hCvarType;
-int g_iCvarDamageC, g_iCvarDamageI, g_iCvarDamageS, g_iCvarDamageT, g_iCvarFlags, g_iCvarHealth, g_iCvarType;
-float g_fCvarRange, g_fCvarTime, g_fCvarTimeWait, g_fCvarTimePress;
-bool g_bCvarAllow, g_bMapStarted;
+ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarDamageC, g_hCvarDamageI, g_hCvarDamageS, g_hCvarDamageT, g_hCvarFlags, g_hCvarHealth, g_hCvarKeys, g_hCvarRange, g_hCvarTime, g_hCvarTimePress, g_hCvarTimeWait, g_hCvarType;
+int g_iCvarDamageC, g_iCvarDamageI, g_iCvarDamageS, g_iCvarDamageT, g_iCvarFlags, g_iCvarHealth, g_iCvarKeys, g_iCvarTime, g_iCvarType;
+float g_fCvarRange, g_fCvarTimeWait, g_fCvarTimePress;
+bool g_bCvarAllow, g_bMapStarted, g_bLeft4Dead2, g_bDoubleDoorFix;
+char g_sMod[4];
 
 int g_iBarricade[2048][4];
 int g_iRelative[2048];
@@ -121,9 +127,10 @@ float g_fPressing[MAXPLAYERS+1];
 float g_fTimeout[MAXPLAYERS+1];
 float g_fTimePress[MAXPLAYERS+1];
 float g_fTimeSound[MAXPLAYERS+1];
-bool g_bValidFlags[MAXPLAYERS+1];
+bool g_bValidFlags[MAXPLAYERS+1] = { true, ... };
 int g_iPressing[MAXPLAYERS+1];
-bool g_bLeft4Dead2, g_bDoubleDoorFix;
+int g_iButtons[MAXPLAYERS+1];
+
 
 
 
@@ -174,9 +181,10 @@ public void OnPluginStart()
 	g_hCvarDamageS =	CreateConVar(	"l4d_barricade_damage_survivor",	"250",				"0=Default game damage. Amount of damage to cause to planks when shoved by a Survivor.", CVAR_FLAGS );
 	g_hCvarDamageT =	CreateConVar(	"l4d_barricade_damage_tank",		"0",				"0=Default game damage. Amount of damage to cause to planks when shoved by a Tank.", CVAR_FLAGS );
 	g_hCvarFlags =		CreateConVar(	"l4d_barricade_flags",				"",					"Empty string = allow everyone. Otherwise only users with one of these flags can build barricades.", CVAR_FLAGS );
+	g_hCvarKeys =		CreateConVar(	"l4d_barricade_keys",				"1",				"1=USE key. 2=CTRL + USE keys. Which key combination to build a barricade.", CVAR_FLAGS );
 	g_hCvarHealth =		CreateConVar(	"l4d_barricade_health",				"500",				"Health of each plank.", CVAR_FLAGS );
 	g_hCvarRange =		CreateConVar(	"l4d_barricade_range",				"100.0",			"Range required by Survivors to an open doorway or window to create planks. Large values may affect other nearby doorways or windows.", CVAR_FLAGS );
-	g_hCvarTime =		CreateConVar(	"l4d_barricade_time",				"5.0",				"How long does it take to build 1 plank. L4D1: Values less than 0.6 will not show the progress bar and recommend whole numbers.", CVAR_FLAGS );
+	g_hCvarTime =		CreateConVar(	"l4d_barricade_time",				"5",				"How long does it take to build 1 plank. Use whole numbers only, must be 1 or greater.", CVAR_FLAGS, true, 1.0 );
 	g_hCvarTimePress =	CreateConVar(	"l4d_barricade_time_press",			"0.3",				"How long must someone be holding +USE before building starts.", CVAR_FLAGS );
 	g_hCvarTimeWait =	CreateConVar(	"l4d_barricade_time_wait",			"0.5",				"How long after building a plank to make the player wait until they can build again.", CVAR_FLAGS );
 	g_hCvarType =		CreateConVar(	"l4d_barricade_types",				"3",				"1=Doors. 2=Windows. 3=Both. Where can barricades be built.", CVAR_FLAGS );
@@ -194,6 +202,7 @@ public void OnPluginStart()
 	g_hCvarDamageS.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarDamageT.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarHealth.AddChangeHook(ConVarChanged_Cvars);
+	g_hCvarKeys.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarFlags.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarRange.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarTime.AddChangeHook(ConVarChanged_Cvars);
@@ -225,18 +234,21 @@ void ResetPlugin()
 	// Reset client arrays, progress bar and movement
 	for( int i = 1; i <= MaxClients; i++ )
 	{
+		if( IsValidEntRef(g_iButtons[i]) )
+		{
+			RemoveEntity(g_iButtons[i]);
+			g_iButtons[i] = 0;
+		}
+
 		if( g_iPressing[i] && IsClientInGame(i) )
 		{
-			if( g_bLeft4Dead2 )
-			{
-				SetEntPropFloat(i, Prop_Send, "m_flProgressBarDuration", 0.0);
-			}
-			else
+			if( !g_bLeft4Dead2 )
 			{
 				SetEntPropString(i, Prop_Send, "m_progressBarText", "");
+				SetEntPropFloat(i, Prop_Send, "m_flProgressBarStartTime", GetGameTime());
 				SetEntProp(i, Prop_Send, "m_iProgressBarDuration", 0);
 			}
-			SetEntPropFloat(i, Prop_Send, "m_flProgressBarStartTime", GetGameTime());
+
 			SetEntityMoveType(i, MOVETYPE_WALK);
 		}
 
@@ -345,18 +357,33 @@ public void OnMapStart()
 	PrecacheSound(SOUND_HAMMER2);
 	PrecacheSound(SOUND_HAMMER3);
 
-	// Individual double doors fix
-	g_bDoubleDoorFix = false;
 
 	if( g_bLeft4Dead2 )
 	{
-		char sMap[16];
+		// Individual double doors fix
+		g_bDoubleDoorFix = false;
+
+		static char sMap[128];
+
 		GetCurrentMap(sMap, sizeof(sMap));
 		if( strcmp(sMap, "c1m1_hotel") == 0 )
 		{
 			g_bDoubleDoorFix = true;
 		}
+
+		// Find model for func_button_timed so the text displays
+		for( int i = 1; i <= 50; i++ )
+		{
+			FormatEx(g_sMod, sizeof(g_sMod), "*%d", i);
+			if( IsModelPrecached(g_sMod) )
+			{
+				return;
+			}
+		}
+
+		g_sMod[0] = 0;
 	}
+
 }
 
 public void OnMapEnd()
@@ -393,8 +420,9 @@ void GetCvars()
 	g_iCvarDamageS = g_hCvarDamageS.IntValue;
 	g_iCvarDamageT = g_hCvarDamageT.IntValue;
 	g_iCvarHealth = g_hCvarHealth.IntValue;
+	g_iCvarKeys = g_hCvarKeys.IntValue;
 	g_fCvarRange = g_hCvarRange.FloatValue;
-	g_fCvarTime = g_hCvarTime.FloatValue;
+	g_iCvarTime = RoundFloat(g_hCvarTime.FloatValue);
 	g_fCvarTimePress = g_hCvarTimePress.FloatValue;
 	g_fCvarTimeWait = g_hCvarTimeWait.FloatValue;
 	g_iCvarType = g_hCvarType.IntValue;
@@ -717,7 +745,7 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 {
 	if( !g_bCvarAllow ) return Plugin_Continue;
 
-	if( buttons & IN_USE )
+	if( buttons & IN_USE && (g_iCvarKeys == 1 || buttons & IN_DUCK) )
 	{
 		// Validation checks
 		if( !g_bValidFlags[client] || !IsPlayerAlive(client) || GetClientTeam(client) != 2 ) return Plugin_Continue;
@@ -770,18 +798,40 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 					// Start pressing
 					if( !g_iPressing[client] )
 					{
-						g_fPressing[client] = GetGameTime() + g_fCvarTime;
+						g_fPressing[client] = GetGameTime() + g_iCvarTime;
 						g_iPressing[client] = index;
 						if( g_bLeft4Dead2 )
 						{
-							SetEntPropFloat(client, Prop_Send, "m_flProgressBarDuration", g_fCvarTime);
+							if( IsValidEntRef(g_iButtons[client]) )
+							{
+								RemoveEntity(g_iButtons[client]);
+								g_iButtons[client] = 0;
+							}
+
+							// L4D2 progress bar, with custom text
+							static char sTemp[4];
+							int button = CreateEntityByName("func_button_timed");
+							DispatchKeyValueVector(button, "origin", g_vPos[index]);
+							DispatchKeyValue(button, "model", g_sMod); // Required to make text display
+							IntToString(g_iCvarTime, sTemp, sizeof(sTemp));
+							DispatchKeyValue(button, "use_time", sTemp);
+							DispatchKeyValue(button, "use_string", "BARRICADE");
+							DispatchKeyValue(button, "use_sub_string", "Building plank...");
+							DispatchSpawn(button);
+
+							HookSingleEntityOutput(button, "OnTimeUp", OnButtonEnd);
+							HookSingleEntityOutput(button, "OnUnpressed", OnButtonEnd);
+
+							AcceptEntityInput(button, "Use", client, client);
+							g_iButtons[client] = EntIndexToEntRef(button);
 						}
 						else
 						{
 							SetEntPropString(client, Prop_Send, "m_progressBarText", "BUILDING BARRICADE...");
-							SetEntProp(client, Prop_Send, "m_iProgressBarDuration", RoundFloat(g_fCvarTime));
+							SetEntProp(client, Prop_Send, "m_iProgressBarDuration", g_iCvarTime);
 						}
-						SetEntPropFloat(client, Prop_Send, "m_flProgressBarStartTime", GetGameTime());
+
+						// Stop player moving
 						SetEntityMoveType(client, MOVETYPE_NONE);
 						TeleportEntity(client, NULL_VECTOR, NULL_VECTOR, view_as<float>({ 0.0, 0.0, 0.0 }));
 					} else {
@@ -791,11 +841,16 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 						if( g_fPressing[client] < GetGameTime() )
 						{
 							g_fTimePress[client] = 0.0;
-							g_fTimeout[client] = GetGameTime() + g_fCvarTimeWait;
 							g_iPressing[client] = 0;
+							g_fTimeout[client] = GetGameTime() + g_fCvarTimeWait;
+
 							if( g_bLeft4Dead2 )
 							{
-								SetEntPropFloat(client, Prop_Send, "m_flProgressBarDuration", 0.0);
+								if( IsValidEntRef(g_iButtons[client]) )
+								{
+									RemoveEntity(g_iButtons[client]);
+									g_iButtons[client] = 0;
+								}
 							}
 							else
 							{
@@ -822,7 +877,11 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 
 			if( g_bLeft4Dead2 )
 			{
-				SetEntPropFloat(client, Prop_Send, "m_flProgressBarDuration", 0.0);
+				if( IsValidEntRef(g_iButtons[client]) )
+				{
+					RemoveEntity(g_iButtons[client]);
+					g_iButtons[client] = 0;
+				}
 			}
 			else
 			{
@@ -835,6 +894,15 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 	}
 
 	return Plugin_Continue;
+}
+
+void OnButtonEnd(const char[] output, int caller, int activator, float delay)
+{
+	if( activator > 0 && activator <= MaxClients && IsValidEntRef(g_iButtons[activator]) )
+	{
+		RemoveEntity(g_iButtons[activator]);
+		g_iButtons[activator] = 0;
+	}
 }
 
 
@@ -1078,7 +1146,7 @@ bool IsValidEntRef(int entity)
 
 bool IsReviving(int client)
 {
-	if( GetEntPropEnt(client, Prop_Send, "m_reviveOwner") > 0 )
+	if( GetEntPropEnt(client, Prop_Send, "m_reviveTarget") > 0 )
 		return true;
 	return false;
 }
