@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.8"
+#define PLUGIN_VERSION 		"1.9"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,11 @@
 
 ========================================================================================
 	Change Log:
+
+1.9 (07-June-2022)
+	- L4D2: Fixed the new progress bar creating a solid random model. Thanks to "gongo" for reporting.
+	- L4D2: Potentially fixed players getting stuck when the progress bar is destroyed.
+	- Changed some cvars to have a minimum value of 0.1, to prevent potential issues with spamming USE.
 
 1.8 (07-June-2022)
 	- L4D2: Fixed the double door fix not working from map start.
@@ -188,8 +193,8 @@ public void OnPluginStart()
 	g_hCvarHealth =		CreateConVar(	"l4d_barricade_health",				"500",				"Health of each plank.", CVAR_FLAGS );
 	g_hCvarRange =		CreateConVar(	"l4d_barricade_range",				"100.0",			"Range required by Survivors to an open doorway or window to create planks. Large values may affect other nearby doorways or windows.", CVAR_FLAGS );
 	g_hCvarTime =		CreateConVar(	"l4d_barricade_time",				"5",				"How long does it take to build 1 plank. Use whole numbers only, must be 1 or greater.", CVAR_FLAGS, true, 1.0 );
-	g_hCvarTimePress =	CreateConVar(	"l4d_barricade_time_press",			"0.3",				"How long must someone be holding +USE before building starts.", CVAR_FLAGS );
-	g_hCvarTimeWait =	CreateConVar(	"l4d_barricade_time_wait",			"0.5",				"How long after building a plank to make the player wait until they can build again.", CVAR_FLAGS );
+	g_hCvarTimePress =	CreateConVar(	"l4d_barricade_time_press",			"0.3",				"How long must someone be holding +USE before building starts.", CVAR_FLAGS, true, 0.1 );
+	g_hCvarTimeWait =	CreateConVar(	"l4d_barricade_time_wait",			"0.5",				"How long after building a plank to make the player wait until they can build again.", CVAR_FLAGS, true, 0.1 );
 	g_hCvarType =		CreateConVar(	"l4d_barricade_types",				"3",				"1=Doors. 2=Windows. 3=Both. Where can barricades be built.", CVAR_FLAGS );
 	CreateConVar(						"l4d_barricade_version",			PLUGIN_VERSION,		"Barricades - Doors and Windows plugin version.", FCVAR_NOTIFY|FCVAR_DONTRECORD);
 	AutoExecConfig(true,				"l4d_barricade");
@@ -237,11 +242,7 @@ void ResetPlugin()
 	// Reset client arrays, progress bar and movement
 	for( int i = 1; i <= MaxClients; i++ )
 	{
-		if( IsValidEntRef(g_iButtons[i]) )
-		{
-			RemoveEntity(g_iButtons[i]);
-			g_iButtons[i] = 0;
-		}
+		RemoveButton(i);
 
 		if( g_iPressing[i] && IsClientInGame(i) )
 		{
@@ -808,11 +809,7 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 						g_iPressing[client] = index;
 						if( g_bLeft4Dead2 )
 						{
-							if( IsValidEntRef(g_iButtons[client]) )
-							{
-								RemoveEntity(g_iButtons[client]);
-								g_iButtons[client] = 0;
-							}
+							RemoveButton(client);
 
 							// L4D2 progress bar, with custom text
 							static char sTemp[4];
@@ -820,10 +817,15 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 							DispatchKeyValueVector(button, "origin", g_vPos[index]);
 							DispatchKeyValue(button, "model", g_sMod); // Required to make text display
 							IntToString(g_iCvarTime, sTemp, sizeof(sTemp));
+							DispatchKeyValue(button, "spawnflags", "0");
+							DispatchKeyValue(button, "solid", "0");
 							DispatchKeyValue(button, "use_time", sTemp);
 							DispatchKeyValue(button, "use_string", "BARRICADE");
 							DispatchKeyValue(button, "use_sub_string", "Building plank...");
 							DispatchSpawn(button);
+
+							SetEntProp(button, Prop_Send, "m_nSolidType", 0);
+							SetEntityRenderMode(button, RENDER_NONE);
 
 							HookSingleEntityOutput(button, "OnTimeUp", OnButtonEnd);
 							HookSingleEntityOutput(button, "OnUnpressed", OnButtonEnd);
@@ -852,11 +854,7 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 
 							if( g_bLeft4Dead2 )
 							{
-								if( IsValidEntRef(g_iButtons[client]) )
-								{
-									RemoveEntity(g_iButtons[client]);
-									g_iButtons[client] = 0;
-								}
+								RemoveButton(client);
 							}
 							else
 							{
@@ -883,11 +881,7 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 
 			if( g_bLeft4Dead2 )
 			{
-				if( IsValidEntRef(g_iButtons[client]) )
-				{
-					RemoveEntity(g_iButtons[client]);
-					g_iButtons[client] = 0;
-				}
+				RemoveButton(client);
 			}
 			else
 			{
@@ -904,10 +898,22 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 
 void OnButtonEnd(const char[] output, int caller, int activator, float delay)
 {
-	if( activator > 0 && activator <= MaxClients && IsValidEntRef(g_iButtons[activator]) )
+	if( activator > 0 && activator <= MaxClients )
 	{
-		RemoveEntity(g_iButtons[activator]);
-		g_iButtons[activator] = 0;
+		RemoveButton(activator);
+	}
+}
+
+void RemoveButton(int client)
+{
+	if( IsValidEntRef(g_iButtons[client]) )
+	{
+		SetEntPropEnt(client, Prop_Send, "m_useActionOwner", 0);
+		SetEntPropEnt(client, Prop_Send, "m_useActionTarget", 0);
+		SetEntProp(client, Prop_Send, "m_iCurrentUseAction", 0);
+
+		RemoveEntity(g_iButtons[client]);
+		g_iButtons[client] = 0;
 	}
 }
 
