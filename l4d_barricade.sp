@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.10"
+#define PLUGIN_VERSION 		"1.11"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.11 (08-June-2022)
+	- L4D2: Fixed the building animation not ending when releasing the USE button or after progress bar has finished.
 
 1.10 (07-June-2022)
 	- L4D2: Fixed the progress bar not ending correctly.
@@ -823,6 +826,7 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 							IntToString(g_iCvarTime, sTemp, sizeof(sTemp));
 							DispatchKeyValue(button, "spawnflags", "0");
 							DispatchKeyValue(button, "solid", "0");
+							DispatchKeyValue(button, "auto_disable", "1");
 							DispatchKeyValue(button, "use_time", sTemp);
 							DispatchKeyValue(button, "use_string", "BARRICADE");
 							DispatchKeyValue(button, "use_sub_string", "Building plank...");
@@ -834,7 +838,7 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 							HookSingleEntityOutput(button, "OnTimeUp", OnButtonEnd);
 							HookSingleEntityOutput(button, "OnUnpressed", OnButtonEnd);
 
-							AcceptEntityInput(button, "Use", client, client);
+							AcceptEntityInput(button, "Use", client);
 							g_iButtons[client] = EntIndexToEntRef(button);
 						}
 						else
@@ -912,21 +916,33 @@ void RemoveButton(int client)
 {
 	if( IsValidEntRef(g_iButtons[client]) )
 	{
+		// Remove progress bar
 		AcceptEntityInput(g_iButtons[client], "Disable");
 
+		// Delete entity
 		RemoveEntity(g_iButtons[client]);
 		g_iButtons[client] = 0;
 
 		if( IsClientInGame(client) )
 		{
+			// Stop animation player
+			int weapon = GetEntPropEnt(client, Prop_Data, "m_hActiveWeapon");
+			if( weapon != -1 )
+			{
+				RemovePlayerItem(client, weapon);
+				EquipPlayerWeapon(client, weapon);
+			}
+
+			// Fix healing target making the target unable to be healed again
 			int target = GetEntPropEnt(client, Prop_Send, "m_useActionTarget");
-			if( target > 0 && target <= MaxClients && IsClientInGame(target) ) // Fix healing target making the target unable to be healed again
+			if( target > 0 && target <= MaxClients && IsClientInGame(target) )
 			{
 				SetEntProp(target, Prop_Send, "m_useActionOwner", 0);
 				SetEntProp(target, Prop_Send, "m_useActionTarget", 0);
 				SetEntProp(target, Prop_Send, "m_iCurrentUseAction", 0);
 			}
 
+			// Fix client unable to move
 			SetEntProp(client, Prop_Send, "m_useActionOwner", 0);
 			SetEntProp(client, Prop_Send, "m_useActionTarget", 0);
 			SetEntProp(client, Prop_Send, "m_iCurrentUseAction", 0);
