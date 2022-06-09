@@ -32,7 +32,7 @@
 ========================================================================================
 	Change Log:
 
-2.9 (08-Jun-2022)
+2.9 (09-Jun-2022)
 	- Fixed the beam not changing color when in thirdperson view.
 	- Fixed a random beam showing on the map at 0,0,0. Thanks to "Lux" for a solution.
 	- Fixed the "tongue_grab" event from throwing "no active hook" errors. No longer toggling the hook.
