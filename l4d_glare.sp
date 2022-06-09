@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"2.9"
+#define PLUGIN_VERSION 		"2.10"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+2.10 (09-Jun-2022)
+	- Fixed invalid client errors. Thanks to "gongo" for reporting.
 
 2.9 (09-Jun-2022)
 	- Fixed the beam not changing color when in thirdperson view.
@@ -899,7 +902,6 @@ Action TimerDetect(Handle timer)
 			{
 				if( g_bDetected[i] == false )
 				{
-					g_bDetected[i] = true;
 					SetView(i, true);
 				}
 			}
@@ -907,7 +909,6 @@ Action TimerDetect(Handle timer)
 			{
 				if( g_bDetected[i] == true )
 				{
-					g_bDetected[i] = false;
 					SetView(i, false);
 				}
 			}
@@ -921,32 +922,25 @@ public void TP_OnThirdPersonChanged(int client, bool bIsThirdPerson)
 {
 	if( bIsThirdPerson == true && g_bDetected[client] == false )
 	{
-		g_bDetected[client] = true;
-		SetView(client, true);
+		if( IsClientInGame(client) )
+		{
+			SetView(client, true);
+		}
 	}
 	else if( bIsThirdPerson == false && g_bDetected[client] == true )
 	{
-		g_bDetected[client] = false;
-		SetView(client, false);
+		if( IsClientInGame(client) )
+		{
+			SetView(client, false);
+		}
 	}
 }
 
 void SetView(int client, bool bSetView)
 {
-	if( bSetView )
-	{
-		DeleteLight(client);
-		CreateLight(client);
-		// int entity = g_iLightIndex[client];
-		// if( entity && (entity = EntRefToEntIndex(entity)) != INVALID_ENT_REFERENCE )
-			// SDKUnhook(entity, SDKHook_SetTransmit, Hook_SetTransmitLight);
-	} else {
-		DeleteLight(client);
-		CreateLight(client);
-		// int entity = g_iLightIndex[client];
-		// if( entity && (entity = EntRefToEntIndex(entity)) != INVALID_ENT_REFERENCE )
-			// SDKHook(entity, SDKHook_SetTransmit, Hook_SetTransmitLight);
-	}
+	g_bDetected[client] = bSetView;
+	DeleteLight(client);
+	CreateLight(client);
 }
 
 
