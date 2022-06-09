@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.11"
+#define PLUGIN_VERSION 		"1.12"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.12 (09-June-2022)
+	- Added some doors models to prevent block building barricades on them.
 
 1.11 (08-June-2022)
 	- L4D2: Fixed the building animation not ending when releasing the USE button or after progress bar has finished.
@@ -145,6 +148,17 @@ float g_fTimeSound[MAXPLAYERS+1];
 bool g_bValidFlags[MAXPLAYERS+1] = { true, ... };
 int g_iPressing[MAXPLAYERS+1];
 int g_iButtons[MAXPLAYERS+1];
+
+
+// Block door models
+char g_sBlockedModels[5][] =
+{
+	"models/props_urban/outhouse_door001.mdl",
+	"models/props_unique/guncabinet01_ldoor.mdl",
+	"models/props_unique/guncabinet01_rdoor.mdl",
+	"models/props_waterfront/footlocker01.mdl",
+	"models/props_windows/window_urban_sash_32_72_full_gib08.mdl"
+};
 
 
 
@@ -334,6 +348,8 @@ Action CmdWindsGlow(int client, int args)
 		GetEntPropString(entity, Prop_Data, "m_ModelName", sModel, sizeof(sModel));
 
 		if(
+			strcmp(sModel, "models/props/cs_militia/militiawindow02_breakable.mdl", false) == 0 ||
+			strcmp(sModel, "models/props_windows/window_farmhouse_small.mdl", false) == 0 ||
 			strcmp(sModel, "models/props_windows/window_industrial.mdl", false) == 0 ||
 			strcmp(sModel, "models/props_windows/window_urban_apt.mdl", false) == 0 ||
 			strcmp(sModel, "models/props_windows/window_farmhouse_big.mdl", false) == 0
@@ -596,11 +612,11 @@ void SpawnPostDoors(int entity)
 	// Ignore outhouse doors and gun cabinet doors
 	static char sModel[64];
 	GetEntPropString(entity, Prop_Data, "m_ModelName", sModel, sizeof(sModel));
-	if(
-		strcmp(sModel, "models/props_urban/outhouse_door001.mdl", false) == 0 ||
-		strcmp(sModel, "models/props_unique/guncabinet01_ldoor.mdl", false) == 0 ||
-		strcmp(sModel, "models/props_unique/guncabinet01_rdoor.mdl", false) == 0
-	) return;
+
+	for( int i = 0; i < sizeof(g_sBlockedModels); i++ )
+	{
+		if(	strcmp(sModel, g_sBlockedModels[i], false) == 0 ) return;
+	}
 
 	// Pair together known individual double doors
 	if( g_bLeft4Dead2 && !g_bDoubleDoorMap )
