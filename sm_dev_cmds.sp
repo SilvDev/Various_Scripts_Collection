@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.37"
+#define PLUGIN_VERSION 		"1.38"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.38 (09-Jun-2022)
+	- Added command "sm_changes" to show how many map changes have occurred.
 
 1.37 (03-Jun-2022)
 	- Fixed command "sm_uptime" not displaying the correct time.
@@ -267,7 +270,7 @@ bool g_bFirst = true;
 int g_sprite;
 
 bool g_bDirector = true, g_bAll, g_bNB, g_bNospawn, g_bDamage;
-int g_iGAMETYPE, g_iEntsSpit[MAXPLAYERS], g_iLedge[MAXPLAYERS], g_iDamageRequestor, g_iTotalBots, g_iTotalPlays, g_iLastUserID, g_iGameTime;
+int g_iGAMETYPE, g_iEntsSpit[MAXPLAYERS], g_iLedge[MAXPLAYERS], g_iDamageRequestor, g_iTotalBots, g_iTotalPlays, g_iLastUserID, g_iGameTime, g_iMapChanges;
 float g_vAng[MAXPLAYERS+1][3], g_vPos[MAXPLAYERS+1][3];
 
 ConVar sb_hold_position, sb_stop, sv_cheats, mp_gamemode, z_background_limit, z_boomer_limit, z_charger_limit, z_common_limit, z_hunter_limit, z_jockey_limit, z_minion_limit, z_smoker_limit, z_spitter_limit, director_no_bosses, director_no_mobs, director_no_specials;
@@ -327,6 +330,7 @@ public void OnPluginStart()
 	RegAdminCmd("sm_logit",			CmdLogIt,		ADMFLAG_ROOT, "<text>. Logs specified text to 'sourcemod/logs/sm_logit.txt'.");
 	RegAdminCmd("sm_gametime",		CmdGameTime,	ADMFLAG_ROOT, "Displays the GetGameTime() float.");
 	RegAdminCmd("sm_uptime",		CmdUpTime,		ADMFLAG_ROOT, "Displays how long the server has been up. Maybe inaccurate if server hibernation is active.");
+	RegAdminCmd("sm_changes",		CmdChanges,		ADMFLAG_ROOT, "Displays how many map changes have occurred.");
 	RegAdminCmd("sm_createent",		CmdCreateEnt,	ADMFLAG_ROOT, "<classname>. Creates and removes the entity classname, reports success.");
 
 	RegAdminCmd("sm_cv",			CmdCV,			ADMFLAG_ROOT, "<cvar> [value]. Get/Set cvar value without the notify flag.");
@@ -507,6 +511,8 @@ public void OnMapStart()
 
 	g_iLaserIndex = PrecacheModel("materials/sprites/laserbeam.vmt");
 	g_iHaloIndex = PrecacheModel("materials/sprites/halo01.vmt");
+
+	g_iMapChanges++;
 }
 
 Action Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
@@ -653,13 +659,27 @@ Action CmdUpTime(int client, int args)
 	int minutes = (time / 60) % 60;
 	int seconds =  time % 60;
 
-	if( client > 0 && client <= MAXPLAYERS && IsClientInGame(client))
+	if( client > 0 && client <= MAXPLAYERS && IsClientInGame(client) )
 	{
 		PrintToChat(client, "\x03Uptime: %d days %d hours %d minutes %d seconds", days, hours, minutes, seconds);
 	}
 	else if( client == 0 )
 	{
 		PrintToServer("Uptime: %d days %d hours %d minutes %d seconds", days, hours, minutes, seconds);
+	}
+
+	return Plugin_Handled;
+}
+
+Action CmdChanges(int client, int args)
+{
+	if( client > 0 && client <= MAXPLAYERS && IsClientInGame(client) )
+	{
+		PrintToChat(client, "\x01Map changes: \x03%d", g_iMapChanges);
+	}
+	else if( client == 0 )
+	{
+		PrintToServer("Map changes: %d", g_iMapChanges);
 	}
 
 	return Plugin_Handled;
@@ -1915,7 +1935,7 @@ Action CmdFind(int client, int args)
 		GetClientAbsOrigin(client, vMe);
 	}
 
-	while( count < 50 && (entity = FindEntityByClassname(entity, class)) != INVALID_ENT_REFERENCE )
+	while( (entity = FindEntityByClassname(entity, class)) != INVALID_ENT_REFERENCE )
 	{
 		GetEntPropString(entity, Prop_Data, "m_iName", sName, sizeof(sName));
 
