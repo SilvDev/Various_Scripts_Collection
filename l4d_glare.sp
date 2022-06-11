@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"2.10"
+#define PLUGIN_VERSION 		"2.11"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+2.11 (11-Jun-2022)
+	- Fixed not removing the beam on client disconnect. Thanks to "gongo" for reporting.
 
 2.10 (09-Jun-2022)
 	- Fixed invalid client errors. Thanks to "gongo" for reporting.
@@ -302,6 +305,11 @@ public void OnPluginEnd()
 {
 	for( int i = 1; i <= MaxClients; i++ )
 		DeleteLight(i);
+}
+
+public void OnClientDisconnect(int client)
+{
+	DeleteLight(client);
 }
 
 public void OnClientConnected(int client)
@@ -1058,10 +1066,10 @@ void DeleteLight(int client)
 {
 	int entity = g_iLightIndex[client];
 	g_iLightIndex[client] = 0;
+
 	if( IsValidEntRef(entity) )
 	{
 		RemoveEntity(entity);
-		SDKUnhook(entity, SDKHook_SetTransmit, Hook_SetTransmitLight);
 	}
 }
 
