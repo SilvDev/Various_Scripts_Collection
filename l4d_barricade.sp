@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.12"
+#define PLUGIN_VERSION 		"1.13"
 
 /*=======================================================================================
 	Plugin Info:
@@ -32,8 +32,11 @@
 ========================================================================================
 	Change Log:
 
+1.13 (16-June-2022)
+	- Changed cvar "l4d_barricade_keys" to set accept SHIFT + USE.
+
 1.12 (09-June-2022)
-	- Added some doors models to prevent block building barricades on them.
+	- Added some door models to prevent building barricades on them.
 
 1.11 (08-June-2022)
 	- L4D2: Fixed the building animation not ending when releasing the USE button or after progress bar has finished.
@@ -210,7 +213,7 @@ public void OnPluginStart()
 	g_hCvarDamageS =	CreateConVar(	"l4d_barricade_damage_survivor",	"250",				"0=Default game damage. Amount of damage to cause to planks when shoved by a Survivor.", CVAR_FLAGS );
 	g_hCvarDamageT =	CreateConVar(	"l4d_barricade_damage_tank",		"0",				"0=Default game damage. Amount of damage to cause to planks when shoved by a Tank.", CVAR_FLAGS );
 	g_hCvarFlags =		CreateConVar(	"l4d_barricade_flags",				"",					"Empty string = allow everyone. Otherwise only users with one of these flags can build barricades.", CVAR_FLAGS );
-	g_hCvarKeys =		CreateConVar(	"l4d_barricade_keys",				"1",				"1=USE key. 2=CTRL + USE keys. Which key combination to build a barricade.", CVAR_FLAGS );
+	g_hCvarKeys =		CreateConVar(	"l4d_barricade_keys",				"1",				"1=USE key. 2=CTRL + USE keys. 3=SHIFT + USE keys. Which key combination to build a barricade.", CVAR_FLAGS );
 	g_hCvarHealth =		CreateConVar(	"l4d_barricade_health",				"500",				"Health of each plank.", CVAR_FLAGS );
 	g_hCvarRange =		CreateConVar(	"l4d_barricade_range",				"100.0",			"Range required by Survivors to an open doorway or window to create planks. Large values may affect other nearby doorways or windows.", CVAR_FLAGS );
 	g_hCvarTime =		CreateConVar(	"l4d_barricade_time",				"5",				"How long does it take to build 1 plank. Use whole numbers only, must be 1 or greater.", CVAR_FLAGS, true, 1.0 );
@@ -775,7 +778,7 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 {
 	if( !g_bCvarAllow ) return Plugin_Continue;
 
-	if( buttons & IN_USE && (g_iCvarKeys == 1 || buttons & IN_DUCK) )
+	if( ((g_iCvarKeys == 1 && buttons & IN_USE) || (g_iCvarKeys == 2 && buttons & (IN_USE|IN_DUCK) == IN_USE|IN_DUCK) || (g_iCvarKeys == 3 && buttons & (IN_USE|IN_SPEED) == IN_USE|IN_SPEED)) )
 	{
 		// Validation checks
 		if( !g_bValidFlags[client] || !IsPlayerAlive(client) || GetClientTeam(client) != 2 ) return Plugin_Continue;
