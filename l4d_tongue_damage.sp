@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.8"
+#define PLUGIN_VERSION 		"1.9"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.9 (20-Jun-2022)
+	- Fixed the "choke_start" event throwing unhook event errors under certain conditions.
 
 1.8 (01-May-2022)
 	- Added cvar "l4d_tongue_damage_time_delay" to add a delay between being grabbed and when damage can start hurting players. Requested by "vikingo12".
@@ -154,7 +157,8 @@ public void OnPluginStart()
 	g_hCvarModesTog.AddChangeHook(ConVarChanged_Allow);
 	g_hCvarAllow.AddChangeHook(ConVarChanged_Allow);
 
-	HookEvent("tongue_grab",		Event_GrabStart);
+	HookEvent("tongue_grab", Event_GrabStart);
+	HookEvent("choke_start", Event_ChokeStart);
 }
 
 
@@ -167,7 +171,7 @@ public void OnConfigsExecuted()
 	IsAllowed();
 }
 
-public void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	IsAllowed();
 }
@@ -180,7 +184,7 @@ void IsAllowed()
 	if( g_bCvarAllow == false && bCvarAllow == true && bAllowMode == true )
 	{
 		g_bCvarAllow = true;
-		HookEvent("choke_start",		Event_ChokeStart);
+		HookEvent("round_end",			Event_RoundEnd, EventHookMode_PostNoCopy);
 		HookEvent("choke_end",			Event_ChokeStop);
 		HookEvent("tongue_release",		Event_GrabStop);
 	}
@@ -188,7 +192,7 @@ void IsAllowed()
 	else if( g_bCvarAllow == true && (bCvarAllow == false || bAllowMode == false) )
 	{
 		g_bCvarAllow = false;
-		UnhookEvent("choke_start",		Event_ChokeStart);
+		UnhookEvent("round_end",		Event_RoundEnd, EventHookMode_PostNoCopy);
 		UnhookEvent("choke_end",		Event_ChokeStop);
 		UnhookEvent("tongue_release",	Event_GrabStop);
 	}
@@ -252,7 +256,7 @@ bool IsAllowedGameMode()
 	return true;
 }
 
-public void OnGamemode(const char[] output, int caller, int activator, float delay)
+void OnGamemode(const char[] output, int caller, int activator, float delay)
 {
 	if( strcmp(output, "OnCoop") == 0 )
 		g_iCurrentMode = 1;
@@ -297,24 +301,27 @@ public void OnClientDisconnect(int client)
 	g_fDelay[client] = 0.0;
 }
 
-public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
+void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
 	ResetPlugin();
 }
 
-public void Event_ChokeStart(Event event, const char[] name, bool dontBroadcast)
+void Event_ChokeStart(Event event, const char[] name, bool dontBroadcast)
 {
-	int client = GetClientOfUserId(event.GetInt("victim"));
-	g_bChoking[client] = true;
+	if( g_bCvarAllow )
+	{
+		int client = GetClientOfUserId(event.GetInt("victim"));
+		g_bChoking[client] = true;
+	}
 }
 
-public void Event_ChokeStop(Event event, const char[] name, bool dontBroadcast)
+void Event_ChokeStop(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("victim"));
 	g_bChoking[client] = false;
 }
 
-public void Event_GrabStart(Event event, const char[] name, bool dontBroadcast)
+void Event_GrabStart(Event event, const char[] name, bool dontBroadcast)
 {
 	int userid = event.GetInt("victim");
 	int client = GetClientOfUserId(userid);
@@ -334,7 +341,7 @@ public void Event_GrabStart(Event event, const char[] name, bool dontBroadcast)
 	}
 }
 
-public void Event_GrabStop(Event event, const char[] name, bool dontBroadcast)
+void Event_GrabStop(Event event, const char[] name, bool dontBroadcast)
 {
 	int userid = event.GetInt("victim");
 	int client = GetClientOfUserId(userid);
@@ -350,7 +357,7 @@ public void Event_GrabStop(Event event, const char[] name, bool dontBroadcast)
 	}
 }
 
-public Action TimerDamage(Handle timer, any client)
+Action TimerDamage(Handle timer, any client)
 {
 	client = GetClientOfUserId(client);
 	if( client && IsClientInGame(client) && IsPlayerAlive(client) )
