@@ -336,7 +336,7 @@ public void OnPluginStart()
 	RegAdminCmd("sm_logit",			CmdLogIt,		ADMFLAG_ROOT, "<text>. Logs specified text to 'sourcemod/logs/sm_logit.txt'.");
 	RegAdminCmd("sm_gametime",		CmdGameTime,	ADMFLAG_ROOT, "Displays the GetGameTime() float.");
 	RegAdminCmd("sm_uptime",		CmdUpTime,		ADMFLAG_ROOT, "Displays how long the server has been up. Maybe inaccurate if server hibernation is active.");
-	RegAdminCmd("sm_playtime",		CmdPlayTime,	ADMFLAG_ROOT, "Displays how long players have been playing on the servver.");
+	RegAdminCmd("sm_playtime",		CmdPlayTime,	ADMFLAG_ROOT, "Displays how long players have been playing on the server.");
 	RegAdminCmd("sm_changes",		CmdChanges,		ADMFLAG_ROOT, "Displays how many map changes have occurred.");
 	RegAdminCmd("sm_createent",		CmdCreateEnt,	ADMFLAG_ROOT, "<classname>. Creates and removes the entity classname, reports success.");
 
