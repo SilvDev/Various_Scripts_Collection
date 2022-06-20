@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.38"
+#define PLUGIN_VERSION 		"1.39"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,10 @@
 
 ========================================================================================
 	Change Log:
+
+1.39 (20-Jun-2022)
+	- Added command "sm_playtime" to show how long players have been playing.
+	- Changed command "sm_clients" formatting to be clearer.
 
 1.38 (09-Jun-2022)
 	- Added command "sm_changes" to show how many map changes have occurred.
@@ -269,8 +273,8 @@ float g_vSavedPos[3];
 bool g_bFirst = true;
 int g_sprite;
 
-bool g_bDirector = true, g_bAll, g_bNB, g_bNospawn, g_bDamage;
-int g_iGAMETYPE, g_iEntsSpit[MAXPLAYERS], g_iLedge[MAXPLAYERS], g_iDamageRequestor, g_iTotalBots, g_iTotalPlays, g_iLastUserID, g_iGameTime, g_iMapChanges;
+bool g_bLateLoad, g_bDirector = true, g_bAll, g_bNB, g_bNospawn, g_bDamage;
+int g_iGAMETYPE, g_iEntsSpit[MAXPLAYERS], g_iLedge[MAXPLAYERS], g_iDamageRequestor, g_iTotalBots, g_iTotalPlays, g_iLastUserID, g_iGameTime, g_iPlayers, g_iPlayTime, g_iPlayedTime, g_iMapChanges;
 float g_vAng[MAXPLAYERS+1][3], g_vPos[MAXPLAYERS+1][3];
 
 ConVar sb_hold_position, sb_stop, sv_cheats, mp_gamemode, z_background_limit, z_boomer_limit, z_charger_limit, z_common_limit, z_hunter_limit, z_jockey_limit, z_minion_limit, z_smoker_limit, z_spitter_limit, director_no_bosses, director_no_mobs, director_no_specials;
@@ -313,6 +317,8 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 		default:					g_iGAMETYPE = GAME_ANY;
 	}
 
+	g_bLateLoad = late;
+
 	return APLRes_Success;
 }
 
@@ -330,6 +336,7 @@ public void OnPluginStart()
 	RegAdminCmd("sm_logit",			CmdLogIt,		ADMFLAG_ROOT, "<text>. Logs specified text to 'sourcemod/logs/sm_logit.txt'.");
 	RegAdminCmd("sm_gametime",		CmdGameTime,	ADMFLAG_ROOT, "Displays the GetGameTime() float.");
 	RegAdminCmd("sm_uptime",		CmdUpTime,		ADMFLAG_ROOT, "Displays how long the server has been up. Maybe inaccurate if server hibernation is active.");
+	RegAdminCmd("sm_playtime",		CmdPlayTime,	ADMFLAG_ROOT, "Displays how long players have been playing on the servver.");
 	RegAdminCmd("sm_changes",		CmdChanges,		ADMFLAG_ROOT, "Displays how many map changes have occurred.");
 	RegAdminCmd("sm_createent",		CmdCreateEnt,	ADMFLAG_ROOT, "<classname>. Creates and removes the entity classname, reports success.");
 
@@ -481,6 +488,18 @@ public void OnPluginStart()
 
 	// Other
 	g_iGameTime = GetTime();
+
+	if( g_bLateLoad )
+	{
+		for( int i = 1; i <= MaxClients; i++ )
+		{
+			if( IsClientInGame(i) && !IsFakeClient(i) )
+			{
+				g_iPlayTime = GetTime();
+				g_iPlayers++;
+			}
+		}
+	}
 }
 
 public void OnPluginEnd()
@@ -657,9 +676,9 @@ Action CmdUpTime(int client, int args)
 	int days = time / 86400;
 	int hours = (time / 3600) % 24;
 	int minutes = (time / 60) % 60;
-	int seconds =  time % 60;
+	int seconds = time % 60;
 
-	if( client > 0 && client <= MAXPLAYERS && IsClientInGame(client) )
+	if( client > 0 && client <= MaxClients && IsClientInGame(client) )
 	{
 		PrintToChat(client, "\x03Uptime: %d days %d hours %d minutes %d seconds", days, hours, minutes, seconds);
 	}
@@ -671,15 +690,36 @@ Action CmdUpTime(int client, int args)
 	return Plugin_Handled;
 }
 
-Action CmdChanges(int client, int args)
+Action CmdPlayTime(int client, int args)
 {
-	if( client > 0 && client <= MAXPLAYERS && IsClientInGame(client) )
+	// From nextmap plugin
+	int time = g_iPlayers ? g_iPlayedTime + GetTime() - g_iPlayTime : 0;
+	int days = time / 86400;
+	int hours = (time / 3600) % 24;
+	int minutes = (time / 60) % 60;
+	int seconds = time % 60;
+
+	if( client > 0 && client <= MaxClients && IsClientInGame(client) )
 	{
-		PrintToChat(client, "\x01Map changes: \x03%d", g_iMapChanges);
+		PrintToChat(client, "\x03Playtime: %d days %d hours %d minutes %d seconds", days, hours, minutes, seconds);
 	}
 	else if( client == 0 )
 	{
-		PrintToServer("Map changes: %d", g_iMapChanges);
+		PrintToServer("Playtime: %d days %d hours %d minutes %d seconds", days, hours, minutes, seconds);
+	}
+
+	return Plugin_Handled;
+}
+
+Action CmdChanges(int client, int args)
+{
+	if( client > 0 && client <= MaxClients && IsClientInGame(client) )
+	{
+		PrintToChat(client, "\x01Map Changes: \x03%d", g_iMapChanges);
+	}
+	else if( client == 0 )
+	{
+		PrintToServer("Map Changes: %d", g_iMapChanges);
 	}
 
 	return Plugin_Handled;
@@ -2537,7 +2577,7 @@ void GetSpeed(int client)
 
 Action CmdClients(int client, int args)
 {
-	ReplyToCommand(client, "Index. UserID. Team. SteamID. Name.");
+	ReplyToCommand(client, "Index: UserID: Team: %20s Name:", "SteamID:");
 	char steamID[64];
 
 	for( int i = 1; i <= MaxClients; i++ )
@@ -2888,9 +2928,19 @@ Action CmdAdm(int client, int args)
 public void OnClientPutInServer(int client)
 {
 	if( IsFakeClient(client) )
+	{
 		g_iTotalBots++;
+	}
 	else
+	{
 		g_iTotalPlays++;
+		g_iPlayers++;
+
+		if( g_iPlayers == 1 )
+		{
+			g_iPlayTime = GetTime();
+		}
+	}
 
 	int user = GetClientUserId(client);
 	if( user > g_iLastUserID ) g_iLastUserID = user;
@@ -2909,6 +2959,18 @@ public void OnClientDisconnect(int client)
 	{
 		SDKUnhook(client, SDKHook_OnTakeDamage, OnTakeDamage);
 	}
+
+	// Play time
+	if( !IsFakeClient(client) )
+	{
+		g_iPlayers--;
+
+		if( g_iPlayers == 0 )
+		{
+			g_iPlayedTime += GetTime() - g_iPlayTime;
+		}
+	}
+
 }
 
 Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype, int &weapon, float damageForce[3], float damagePosition[3])
