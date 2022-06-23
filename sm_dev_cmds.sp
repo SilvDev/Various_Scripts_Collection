@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.39"
+#define PLUGIN_VERSION 		"1.40"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.40 (24-Jun-2022)
+	- Fixed command "sm_playtime" sometimes breaking and not showing any playtime.
 
 1.39 (20-Jun-2022)
 	- Added command "sm_playtime" to show how long players have been playing.
@@ -2931,16 +2934,6 @@ public void OnClientPutInServer(int client)
 	{
 		g_iTotalBots++;
 	}
-	else
-	{
-		g_iTotalPlays++;
-		g_iPlayers++;
-
-		if( g_iPlayers == 1 )
-		{
-			g_iPlayTime = GetTime();
-		}
-	}
 
 	int user = GetClientUserId(client);
 	if( user > g_iLastUserID ) g_iLastUserID = user;
@@ -2950,6 +2943,20 @@ public void OnClientPutInServer(int client)
 	if( g_bDamage )
 	{
 		SDKHook(client, SDKHook_OnTakeDamage, OnTakeDamage);
+	}
+}
+
+public void OnClientConnected(int client)
+{
+	if( !IsFakeClient(client) )
+	{
+		g_iTotalPlays++;
+		g_iPlayers++;
+
+		if( g_iPlayers == 1 )
+		{
+			g_iPlayTime = GetTime();
+		}
 	}
 }
 
