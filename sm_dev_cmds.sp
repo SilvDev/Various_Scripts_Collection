@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.40"
+#define PLUGIN_VERSION 		"1.41"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.41 (24-Jun-2022)
+	- Fixed command "sm_playtime" not showing playtime when the server is empty.
 
 1.40 (24-Jun-2022)
 	- Fixed command "sm_playtime" sometimes breaking and not showing any playtime.
@@ -696,7 +699,7 @@ Action CmdUpTime(int client, int args)
 Action CmdPlayTime(int client, int args)
 {
 	// From nextmap plugin
-	int time = g_iPlayers ? g_iPlayedTime + GetTime() - g_iPlayTime : 0;
+	int time = g_iPlayers ? g_iPlayedTime + GetTime() - g_iPlayTime : g_iPlayedTime;
 	int days = time / 86400;
 	int hours = (time / 3600) % 24;
 	int minutes = (time / 60) % 60;
