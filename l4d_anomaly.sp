@@ -1,6 +1,6 @@
 /*
 *	Anomaly
-*	Copyright (C) 2021 Silvers
+*	Copyright (C) 2022 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.8"
+#define PLUGIN_VERSION 		"1.9"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.9 (25-Jun-2022)
+	- Changed the classname of the anomaly to prevent conflicts with other plugins that were expecting an actual "prop_physics" entity.
 
 1.8 (18-Nov-2021)
 	- Changed forward "L4D_OnGameModeChange" to be compatible with "Left4DHooks" plugin version 1.63 and newer.
@@ -238,7 +241,7 @@ public void OnMapStart()
 // ====================================================================================================
 //					COMMANDS
 // ====================================================================================================
-public Action CmdAnom(int client, int args)
+Action CmdAnom(int client, int args)
 {
 	if( !g_bCvarAllow )
 	{
@@ -253,7 +256,7 @@ public Action CmdAnom(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdAnomaly(int client, int args)
+Action CmdAnomaly(int client, int args)
 {
 	if( !client )
 	{
@@ -300,12 +303,12 @@ public void OnConfigsExecuted()
 	#endif
 }
 
-public void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	IsAllowed();
 }
 
-public void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	GetCvars();
 }
@@ -404,7 +407,7 @@ bool IsAllowedGameMode()
 // ====================================================================================================
 //					ANOMALY SPAWN
 // ====================================================================================================
-public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
+void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
 	g_iRoundStart = 0;
 	g_iPlayerSpawn = 0;
@@ -413,21 +416,21 @@ public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 	delete g_hTimer;
 }
 
-public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
+void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
 	if( g_iPlayerSpawn == 1 && g_iRoundStart == 0 )
 		CreateTimer(1.0, TimerStart, _, TIMER_FLAG_NO_MAPCHANGE);
 	g_iRoundStart = 1;
 }
 
-public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
+void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 {
 	if( g_iPlayerSpawn == 0 && g_iRoundStart == 1 )
 		CreateTimer(1.0, TimerStart, _, TIMER_FLAG_NO_MAPCHANGE);
 	g_iPlayerSpawn = 1;
 }
 
-public Action TimerStart(Handle timer)
+Action TimerStart(Handle timer)
 {
 	g_fFlowMax = L4D2Direct_GetMapMaxFlowDistance();
 
@@ -436,7 +439,7 @@ public Action TimerStart(Handle timer)
 	return Plugin_Continue;
 }
 
-public Action TimerSpawn(Handle timer)
+Action TimerSpawn(Handle timer)
 {
 	float flow;
 	int client = L4D_GetHighestFlowSurvivor();
@@ -506,7 +509,7 @@ void DeleteAnomaly(int entity)
 		StopSound(entity, SNDCHAN_AUTO, SOUND_VENDOR3);
 
 		// Prevent plugin conflicts for any plugins detecting "tank_rock" in "OnEntityDestroyed":
-		DispatchKeyValue(entity, "classname", "weapon_pistol");
+		DispatchKeyValue(entity, "classname", "anomaly");
 
 		RemoveEntity(entity);
 	}
@@ -567,7 +570,7 @@ void CreateAnomaly(float vPos[3])
 		EmitSoundToAll(SOUND_VENDOR3, entity, SNDCHAN_AUTO, SNDLEVEL_DISHWASHER); // Alarm sort of sound
 
 	// Change classname to prevent conflict with other plugins detecting "tank_rock".
-	DispatchKeyValue(entity, "classname", "prop_physics");
+	DispatchKeyValue(entity, "classname", "anomaly"); // Using a random classname that doesn't exist to prevent conflicts with other plugins
 
 	// Think function
 	g_fRandNext = 0.0;
@@ -583,7 +586,7 @@ void CreateAnomaly(float vPos[3])
 // ====================================================================================================
 //					ANOMALY THINK
 // ====================================================================================================
-public Action TimerThink(Handle timer, any entity)
+Action TimerThink(Handle timer, any entity)
 {
 	float fTickTime = GetGameTime();
 
@@ -802,7 +805,7 @@ void DoDamage(int entity, int client, float vPos[3], int type = 0)
 	}
 }
 
-public Action TimerColor(Handle timer)
+Action TimerColor(Handle timer)
 {
 	if( !g_iLighting || EntRefToEntIndex(g_iLighting) == INVALID_ENT_REFERENCE ) return Plugin_Stop;
 
@@ -1057,11 +1060,6 @@ bool SetTeleportEndPoint(int entity, float vPos[3], float vAng[3])
 	if( TR_DidHit(trace) )
 	{
 		TR_GetEndPosition(vPos, trace);
-
-		// For returning the ground angle, we don't need in this plugin.
-		// float vNorm[3];
-		// TR_GetPlaneNormal(trace, vNorm);
-		// GetVectorAngles(vNorm, vAng);
 
 		delete trace;
 		return true;
