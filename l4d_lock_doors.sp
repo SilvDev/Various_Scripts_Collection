@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.17"
+#define PLUGIN_VERSION 		"1.18"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,11 @@
 
 ========================================================================================
 	Change Log:
+
+1.18 (26-Jun-2022)
+	- Added command "sm_doors_random" to randomly open or close doors based on the random cvar settings.
+	- Increased the range of rescue door detection to prevent opening some rescue closets. Thanks to "gongo" for reporting.
+	- Blocked another model from being by the plugin (c5m2_park) which prevented common spawning. Thanks to "gongo" for reporting.
 
 1.17 (24-Jun-2022)
 	- Fixed health bugs under certain conditions. Thanks to "gongo" for reporting.
@@ -139,7 +144,7 @@
 #define SOUND_LOCKED			"doors/latchlocked2.wav"
 #define SOUND_UNLOCK			"doors/door_latch3.wav"
 
-#define DOOR_NEAR_RESCUE		150		// Range to info_survivor_rescue
+#define DOOR_NEAR_RESCUE		170		// Range to info_survivor_rescue
 #define DOOR_NEAR_VERSUS		10		// Range to match the same door on round 2 - value of 0 would probably be fine
 #define DEBUG_PRINT				0
 
@@ -207,13 +212,14 @@ StringMap g_hBlockedMaps;
 
 
 // Block door models
-char g_sBlockedModels[5][] =
+char g_sBlockedModels[6][] =
 {
 	"models/props_urban/outhouse_door001.mdl",
 	"models/props_unique/guncabinet01_ldoor.mdl",
 	"models/props_unique/guncabinet01_rdoor.mdl",
 	"models/props_waterfront/footlocker01.mdl",
-	"models/props_windows/window_urban_sash_32_72_full_gib08.mdl"
+	"models/props_windows/window_urban_sash_32_72_full_gib08.mdl",
+	"models/props_vehicles/ceda_door_rotating.mdl"
 };
 
 // Vocalize for Left 4 Dead 2
@@ -351,6 +357,7 @@ public void OnPluginStart()
 		RegAdminCmd("sm_doors_glow", CmdDoorsGlow, ADMFLAG_ROOT, "Debug testing command to show all doors.");
 	}
 
+	RegAdminCmd("sm_doors_random", CmdDoorsRandom, ADMFLAG_ROOT, "Randomly opens or closes doors based on the random cvar settings. This will mess up Versus saving and restoring.");
 	RegAdminCmd("sm_doors_health", CmdHealth, ADMFLAG_ROOT, "Returns the health of the door you're aiming at.");
 	RegAdminCmd("sm_doors_close", CmdDoorsClose, ADMFLAG_ROOT, "Closes all doors on the map.");
 	RegAdminCmd("sm_doors_open", CmdDoorsOpen, ADMFLAG_ROOT, "Opens all doors on the map.");
@@ -785,6 +792,27 @@ void ResetPlugin(bool state = false)
 // ====================================================================================================
 //					COMMANDS
 // ====================================================================================================
+Action CmdDoorsRandom(int client, int args)
+{
+	if( g_iCvarRandom )
+	{
+		int entity = -1;
+		while( (entity = FindEntityByClassname(entity, "prop_door_rotating")) != INVALID_ENT_REFERENCE )
+		{
+			g_iState[entity] = 0;
+			RandomDoor(entity);
+		}
+
+		ReplyToCommand(client, "[Doors] Randomly opened or closed doors.");
+	}
+	else
+	{
+		ReplyToCommand(client, "[Doors] Random doors not enabled.");
+	}
+
+	return Plugin_Handled;
+}
+
 Action CmdHealth(int client, int args)
 {
 	if( client )
@@ -814,7 +842,7 @@ Action CmdDoorsGlow(int client, int args)
 {
 	if( !client )
 	{
-		ReplyToCommand(client, "[Barricades] Command can only be used %s", IsDedicatedServer() ? "in game on a dedicated server." : "in chat on a Listen server.");
+		ReplyToCommand(client, "[Doors] Command can only be used %s", IsDedicatedServer() ? "in game on a dedicated server." : "in chat on a Listen server.");
 		return Plugin_Handled;
 	}
 
@@ -941,7 +969,7 @@ void SpawnPostMain(int entity)
 
 	for( int i = 0; i < sizeof(g_sBlockedModels); i++ )
 	{
-		if(	strcmp(sModel, g_sBlockedModels[i], false) == 0 )
+		if(	strcmp(sModel[6], g_sBlockedModels[i][6], false) == 0 )
 		{
 			#if DEBUG_PRINT
 			PrintToChatAll("\x04IGNORING BLOCKED DOOR MODEL: %d (%s)", entity, sModel);
