@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.9"
+#define PLUGIN_VERSION 		"1.10"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.10 (01-Aug-2022)
+	- Fixed the "choke_end" event throwing unhook event errors under certain conditions.
 
 1.9 (20-Jun-2022)
 	- Fixed the "choke_start" event throwing unhook event errors under certain conditions.
@@ -159,6 +162,7 @@ public void OnPluginStart()
 
 	HookEvent("tongue_grab", Event_GrabStart);
 	HookEvent("choke_start", Event_ChokeStart);
+	HookEvent("choke_end", Event_ChokeStop);
 }
 
 
@@ -185,7 +189,6 @@ void IsAllowed()
 	{
 		g_bCvarAllow = true;
 		HookEvent("round_end",			Event_RoundEnd, EventHookMode_PostNoCopy);
-		HookEvent("choke_end",			Event_ChokeStop);
 		HookEvent("tongue_release",		Event_GrabStop);
 	}
 
@@ -193,7 +196,6 @@ void IsAllowed()
 	{
 		g_bCvarAllow = false;
 		UnhookEvent("round_end",		Event_RoundEnd, EventHookMode_PostNoCopy);
-		UnhookEvent("choke_end",		Event_ChokeStop);
 		UnhookEvent("tongue_release",	Event_GrabStop);
 	}
 }
@@ -317,8 +319,11 @@ void Event_ChokeStart(Event event, const char[] name, bool dontBroadcast)
 
 void Event_ChokeStop(Event event, const char[] name, bool dontBroadcast)
 {
-	int client = GetClientOfUserId(event.GetInt("victim"));
-	g_bChoking[client] = false;
+	if( g_bCvarAllow )
+	{
+		int client = GetClientOfUserId(event.GetInt("victim"));
+		g_bChoking[client] = false;
+	}
 }
 
 void Event_GrabStart(Event event, const char[] name, bool dontBroadcast)
