@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.41"
+#define PLUGIN_VERSION 		"1.42"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.42 (01-Aug-2022)
+	- Fixed command "sm_clients" throwing an error if a client was not in game.
 
 1.41 (24-Jun-2022)
 	- Fixed command "sm_playtime" not showing playtime when the server is empty.
@@ -2594,7 +2597,8 @@ Action CmdClients(int client, int args)
 				steamID = "<BOT>";
 			else
 				GetClientAuthId(i, AuthId_Steam2, steamID, sizeof(steamID));
-			ReplyToCommand(client, "%4d %6d %4d     %20s %N", i, GetClientUserId(i), GetClientTeam(i), steamID, i);
+
+			ReplyToCommand(client, "%4d %6d %4d     %20s %N", i, GetClientUserId(i), IsClientInGame(i) ? GetClientTeam(i) : 0, steamID, i);
 		}
 	}
 	return Plugin_Handled;
