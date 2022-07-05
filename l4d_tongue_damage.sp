@@ -32,7 +32,7 @@
 ========================================================================================
 	Change Log:
 
-1.10 (01-Aug-2022)
+1.10 (01-Jul-2022)
 	- Fixed the "choke_end" event throwing unhook event errors under certain conditions.
 
 1.9 (20-Jun-2022)
