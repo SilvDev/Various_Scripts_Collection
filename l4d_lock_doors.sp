@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.18"
+#define PLUGIN_VERSION 		"1.19"
 
 /*=======================================================================================
 	Plugin Info:
@@ -32,10 +32,14 @@
 ========================================================================================
 	Change Log:
 
+1.19 (05-Jul-2022)
+	- Fixed random doors not working in L4D1 and throwing errors. Thanks to "gongo" for reporting.
+	- Fixed bug detecting tanks in L4D1 or regarding Jockey's as tanks in L4D2.
+
 1.18 (26-Jun-2022)
 	- Added command "sm_doors_random" to randomly open or close doors based on the random cvar settings.
 	- Increased the range of rescue door detection to prevent opening some rescue closets. Thanks to "gongo" for reporting.
-	- Blocked another model from being by the plugin (c5m2_park) which prevented common spawning. Thanks to "gongo" for reporting.
+	- Blocked another model from being by used the plugin (c5m2_park) which prevented common spawning. Thanks to "gongo" for reporting.
 
 1.17 (24-Jun-2022)
 	- Fixed health bugs under certain conditions. Thanks to "gongo" for reporting.
@@ -195,9 +199,9 @@ enum
 
 ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarDamageC, g_hCvarDamageI, g_hCvarDamageS, g_hCvarDamageT, g_hCvarHealthL, g_hCvarHealthO, g_hCvarHealthS, g_hCvarHealthT, g_hCvarInvin, g_hCvarKeys, g_hCvarMapBlock, g_hCvarRandom, g_hCvarRandomT, g_hCvarRange, g_hCvarText, g_hCvarVoca;
 float g_fCvarHealthL, g_fCvarHealthO, g_fCvarHealthS, g_fCvarRange;
-int g_iPlayerSpawn, g_iRoundStart, g_iRoundNumber, g_iBlockedMap, g_iCvarDamageC, g_iCvarDamageI, g_iCvarDamageS, g_iCvarDamageT, g_iCvarKeys, g_iCvarMapBlock, g_iCvarRandom, g_iCvarRandomT, g_iCvarText, g_iCvarVoca, g_iCvarHealthT;
+int g_iPlayerSpawn, g_iRoundStart, g_iRoundNumber, g_iBlockedMap, g_iClassTank, g_iCvarDamageC, g_iCvarDamageI, g_iCvarDamageS, g_iCvarDamageT, g_iCvarKeys, g_iCvarMapBlock, g_iCvarRandom, g_iCvarRandomT, g_iCvarText, g_iCvarVoca, g_iCvarHealthT;
 
-bool g_bCvarAllow, g_bCvarInvin, g_bBootedServer, g_bMapStarted, g_bRoundStarted, g_bRandomDoors, g_bLeft4DHooks, g_bLeft4Dead2, g_bGlow;
+bool g_bCvarAllow, g_bCvarInvin, g_bBootedServer, g_bIntro, g_bMapStarted, g_bRoundStarted, g_bRandomDoors, g_bLeft4DHooks, g_bLeft4Dead2, g_bGlow;
 float g_fLastUse[MAXPLAYERS+1], g_fLastPrint;
 float g_vPos[2048][3];
 int g_iEntity[2048];
@@ -302,6 +306,8 @@ public void OnAllPluginsLoaded()
 
 public void OnPluginStart()
 {
+	g_iClassTank = g_bLeft4Dead2 ? 8 : 5;
+
 	// Cvars
 	g_hCvarAllow =		CreateConVar("l4d_lock_doors_allow",			"1",				"0=Plugin off, 1=Plugin on.", CVAR_FLAGS );
 	g_hCvarModes =		CreateConVar("l4d_lock_doors_modes",			"",					"Turn on the plugin in these game modes, separate by commas (no spaces). (Empty = all).", CVAR_FLAGS );
@@ -514,6 +520,10 @@ void IsAllowed()
 		HookEvent("player_spawn",				Event_PlayerSpawn);
 		HookEvent("round_start",				Event_RoundStart,	EventHookMode_PostNoCopy);
 		HookEvent("round_end",					Event_RoundEnd,		EventHookMode_PostNoCopy);
+		if( !g_bLeft4Dead2 )
+		{
+			HookEvent("gameinstructor_draw",	Event_Draw,			EventHookMode_PostNoCopy);
+		}
 	}
 
 	else if( g_bCvarAllow == true && (bCvarAllow == false || bAllowMode == false) )
@@ -525,6 +535,10 @@ void IsAllowed()
 		UnhookEvent("player_spawn",				Event_PlayerSpawn);
 		UnhookEvent("round_start",				Event_RoundStart,	EventHookMode_PostNoCopy);
 		UnhookEvent("round_end",				Event_RoundEnd,		EventHookMode_PostNoCopy);
+		if( !g_bLeft4Dead2 )
+		{
+			UnhookEvent("gameinstructor_draw",	Event_Draw,			EventHookMode_PostNoCopy);
+		}
 
 		int entity = -1;
 		while( (entity = FindEntityByClassname(entity, "prop_door_rotating")) != INVALID_ENT_REFERENCE )
@@ -675,11 +689,17 @@ void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
 	g_bGlow = false;
+	g_bIntro = false;
 	g_bRandomDoors = false;
 	g_bRoundStarted = false;
 	g_iRoundStart = 0;
 	g_iPlayerSpawn = 0;
 	g_fLastPrint = 0.0;
+}
+
+void Event_Draw(Event event, const char[] name, bool dontBroadcast)
+{
+	g_bIntro = false;
 }
 
 Action TimerStart(Handle timer, any boot)
@@ -697,19 +717,23 @@ Action TimerStart(Handle timer, any boot)
 	// Random doors
 	if( g_iCvarRandom && g_bLeft4DHooks )
 	{
-		if( L4D_IsFirstMapInScenario() )
-		{
-			BlockMapCheck();
+		BlockMapCheck();
 
-			if( g_iBlockedMap == BLOCK_ALLOWED )
+		if( g_iBlockedMap == BLOCK_ALLOWED )
+		{
+			if( L4D_IsFirstMapInScenario() )
 			{
+				g_bIntro = true; // Only used for L4D1
+
 				delete g_hTimerRandom;
 				g_hTimerRandom = CreateTimer(1.0, TimerRandom, _, TIMER_REPEAT);
 			}
-		}
-		else
-		{
-			g_hTimerRandom = CreateTimer(1.0, TimerRandom);
+			else
+			{
+				g_bIntro = false; // Only used for L4D1
+
+				g_hTimerRandom = CreateTimer(1.0, TimerRandom);
+			}
 		}
 	}
 
@@ -730,6 +754,7 @@ public void OnMapStart()
 public void OnMapEnd()
 {
 	g_bGlow = false;
+	g_bIntro = false;
 	g_bMapStarted = false;
 	g_bRoundStarted = false;
 	g_iRoundNumber = 0;
@@ -1085,7 +1110,7 @@ void MatchRelatives(int entity)
 // ====================================================================================================
 Action TimerRandom(Handle timer)
 {
-	if( GameRules_GetProp("m_bInIntro") == 0 ) // Must wait until intro has finished, doors don't move during it
+	if( g_bLeft4Dead2 ? GameRules_GetProp("m_bInIntro") == 0 : g_bIntro == false ) // Must wait until intro has finished, doors don't move during it
 	{
 		g_hTimerRandom = CreateTimer(1.0, TimerRandom2);
 
@@ -1419,7 +1444,7 @@ Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, in
 			if( GetClientTeam(attacker) == 3 )
 			{
 				int class = GetEntProp(attacker, Prop_Send, "m_zombieClass");
-				if( (g_bLeft4Dead2 && class == 8) || g_bLeft4Dead2 && class == 5 )
+				if( class == g_iClassTank )
 					type = TYPE_TANK;
 				else
 					type = TYPE_INFECTED;
