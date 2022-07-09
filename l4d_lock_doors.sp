@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.19"
+#define PLUGIN_VERSION 		"1.20"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.20 (09-Jul-2022)
+	- Fixed sometimes ignoring blocked door models when using random doors. Thanks to "gongo" for reporting.
 
 1.19 (05-Jul-2022)
 	- Fixed random doors not working in L4D1 and throwing errors. Thanks to "gongo" for reporting.
@@ -825,7 +828,28 @@ Action CmdDoorsRandom(int client, int args)
 		while( (entity = FindEntityByClassname(entity, "prop_door_rotating")) != INVALID_ENT_REFERENCE )
 		{
 			g_iState[entity] = 0;
-			RandomDoor(entity);
+
+			if( GetEntProp(entity, Prop_Data, "m_bLocked") == 0 )
+			{
+				// Ignore certain models used on doors
+				static char sModel[64];
+				GetEntPropString(entity, Prop_Data, "m_ModelName", sModel, sizeof(sModel));
+
+				for( int i = 0; i < sizeof(g_sBlockedModels); i++ )
+				{
+					if(	strcmp(sModel[6], g_sBlockedModels[i][6], false) == 0 )
+					{
+						#if DEBUG_PRINT
+						PrintToChatAll("\x04IGNORING BLOCKED DOOR MODEL CR: %d (%s)", entity, sModel);
+						PrintToServer("IGNORING BLOCKED DOOR MODEL CR: %d (%s)", entity, sModel);
+						#endif
+
+						return Plugin_Handled;
+					}
+				}
+
+				RandomDoor(entity);
+			}
 		}
 
 		ReplyToCommand(client, "[Doors] Randomly opened or closed doors.");
@@ -1127,7 +1151,27 @@ Action TimerRandom2(Handle timer)
 	int entity = -1;
 	while( (entity = FindEntityByClassname(entity, "prop_door_rotating")) != INVALID_ENT_REFERENCE )
 	{
-		RandomDoor(entity);
+		if( GetEntProp(entity, Prop_Data, "m_bLocked") == 0 )
+		{
+			// Ignore certain models used on doors
+			static char sModel[64];
+			GetEntPropString(entity, Prop_Data, "m_ModelName", sModel, sizeof(sModel));
+
+			for( int i = 0; i < sizeof(g_sBlockedModels); i++ )
+			{
+				if(	strcmp(sModel[6], g_sBlockedModels[i][6], false) == 0 )
+				{
+					#if DEBUG_PRINT
+					PrintToChatAll("\x04IGNORING BLOCKED DOOR MODEL TR2: %d (%s)", entity, sModel);
+					PrintToServer("IGNORING BLOCKED DOOR MODEL TR2: %d (%s)", entity, sModel);
+					#endif
+
+					return Plugin_Continue;
+				}
+			}
+
+			RandomDoor(entity);
+		}
 	}
 
 	g_bRandomDoors = true;
