@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.5"
+#define PLUGIN_VERSION 		"1.6"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,10 @@
 
 ========================================================================================
 	Change Log:
+
+1.6 (14-Jul-2022)
+	- Fixed plugin version not being set.
+	- Fixed "Invalid memory access" error. Thanks to "Psyk0tik" for reporting and testing.
 
 1.5 (18-Apr-2022)
 	- Fixed some servers not displaying the updates and throwing an error. Thanks to "Psyk0tik" for reporting and testing.
@@ -119,7 +123,7 @@ public Plugin myinfo =
 	name = "[ANY] Plugin Updates Checker",
 	author = "SilverShot",
 	description = "Checks version cvars against a list of known latest plugin versions.",
-	version = "1.0",
+	version = PLUGIN_VERSION,
 	url = "https://forums.alliedmods.net/showthread.php?t=333430"
 }
 
@@ -189,7 +193,7 @@ public void OnConfigsExecuted()
 	}
 }
 
-public void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	GetCvars();
 }
@@ -197,7 +201,7 @@ public void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char
 void GetCvars()
 {
 	delete g_AlIgnore;
-	g_AlIgnore = CreateArray(MAX_LEN_CVARS);
+	g_AlIgnore = new ArrayList(MAX_LEN_CVARS);
 
 	char sTemp[512], sCvar[MAX_LEN_CVARS];
 
@@ -222,7 +226,7 @@ void GetCvars()
 // ====================================================================================================
 //					UPDATES CHECK
 // ====================================================================================================
-public Action CmdUpdates(int client, int args)
+Action CmdUpdates(int client, int args)
 {
 	CheckForUpdates(client);
 
@@ -433,7 +437,7 @@ void ProcessLists()
 // ====================================================================================================
 //					REST IN PAWN
 // ====================================================================================================
-public void OnFileDownloaded(HTTPStatus status, any value, const char[] error)
+void OnFileDownloaded(HTTPStatus status, any value, const char[] error)
 {
 	if( status == HTTPStatus_OK )
 	{
@@ -472,7 +476,7 @@ public void OnFileDownloaded(HTTPStatus status, any value, const char[] error)
 // ====================================================================================================
 //					STEAMTOOLS
 // ====================================================================================================
-public void OnSteamHTTPComplete(HTTPRequestHandle HTTPRequest, bool requestSuccessful, HTTPStatusCode statusCode, int main)
+void OnSteamHTTPComplete(HTTPRequestHandle HTTPRequest, bool requestSuccessful, HTTPStatusCode statusCode, int main)
 {
 	int length = Steam_GetHTTPResponseBodySize(HTTPRequest);
 	char[] body = new char[length];
@@ -504,7 +508,7 @@ public void OnSteamHTTPComplete(HTTPRequestHandle HTTPRequest, bool requestSucce
 // ====================================================================================================
 //					STEAMWORKS
 // ====================================================================================================
-public void OnRequestComplete(Handle hRequest, bool bFailure, bool bRequestSuccessful, EHTTPStatusCode eStatusCode, int main)
+void OnRequestComplete(Handle hRequest, bool bFailure, bool bRequestSuccessful, EHTTPStatusCode eStatusCode, int main)
 {
 	if( bRequestSuccessful && eStatusCode == k_EHTTPStatusCode200OK )
 	{
@@ -625,6 +629,7 @@ void CheckVersions(char[] response)
 
 	// Windows/Linux compatibility
 	ReplaceString(response, len, "\r\n", "\n");
+	len = strlen(response);
 
 	// Loop returned list
 	for( ;; )
@@ -777,7 +782,7 @@ void CheckVersions(char[] response)
 // ====================================================================================================
 //					UPDATE CONFIG
 // ====================================================================================================
-public Action CmdConfig(int client, int args)
+Action CmdConfig(int client, int args)
 {
 	char sPath[PLATFORM_MAX_PATH] = DATA_CONFIG_READ;
 	BuildPath(Path_SM, sPath, sizeof(sPath), sPath);
@@ -795,7 +800,7 @@ public Action CmdConfig(int client, int args)
 		File hFile = OpenFile(sPath, "r");
 		File hNew = OpenFile(sNew, "w");
 
-		while( ReadFileLine(hFile, sLine, sizeof(sLine)) )
+		while( hFile.ReadLine(sLine, sizeof(sLine)) )
 		{
 			ExplodeString(sLine, ",", sRead, sizeof(sRead), sizeof(sRead[]));
 			TrimString(sRead[0]);
@@ -847,7 +852,7 @@ void MySQL_Connect()
 	Database.Connect(OnMySQLConnect, DATABASE_NAME);
 }
 
-public void OnMySQLConnect(Database db, const char[] szError, any data)
+void OnMySQLConnect(Database db, const char[] szError, any data)
 {
 	if( db == null || szError[0] )
 	{
@@ -869,7 +874,7 @@ public void OnMySQLConnect(Database db, const char[] szError, any data)
 	g_hDB.Query(Database_OnConnect, szBuffer);
 }
 
-public void Database_OnConnect(Database db, DBResultSet results, const char[] error, any data)
+void Database_OnConnect(Database db, DBResultSet results, const char[] error, any data)
 {
 	if( results == null )
 	{
@@ -881,7 +886,7 @@ public void Database_OnConnect(Database db, DBResultSet results, const char[] er
 	g_hDB.Query(Database_OnLoadData, szBuffer);
 }
 
-public void Database_OnLoadData(Database db, DBResultSet results, const char[] error, any data)
+void Database_OnLoadData(Database db, DBResultSet results, const char[] error, any data)
 {
 	if( results != null )
 	{
@@ -912,7 +917,7 @@ public void Database_OnLoadData(Database db, DBResultSet results, const char[] e
 	}
 }
 
-public void Database_OnSaveData(Database db, DBResultSet results, const char[] error, any data)
+void Database_OnSaveData(Database db, DBResultSet results, const char[] error, any data)
 {
 	if( results == null )
 	{
@@ -930,7 +935,7 @@ public void Database_OnSaveData(Database db, DBResultSet results, const char[] e
 // ====================================================================================================
 //					AUTO UPDATE + LOG
 // ====================================================================================================
-public Action TimerUpdate(Handle timer)
+Action TimerUpdate(Handle timer)
 {
 	// if( g_iLastChecked && GetTime() - g_iLastChecked > MAX_LEN_TIMEOUT )
 	if( g_iLastChecked && GetTime() - g_iLastChecked > MAX_LEN_TIMEOUT )
