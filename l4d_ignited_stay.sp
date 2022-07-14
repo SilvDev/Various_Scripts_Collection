@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.5"
+#define PLUGIN_VERSION 		"1.6"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.6 (14-Jul-2022)
+	- Changes to fix warnings when compiling on SourceMod 1.11.
 
 1.5 (10-Oct-2021)
 	- Fixed an error that could occur with invalid clients.
@@ -181,13 +184,13 @@ public void OnAllPluginsLoaded()
 // ====================================================================================================
 //					COMMANDS
 // ====================================================================================================
-public Action CmdFlameMe(int client, int args)
+stock Action CmdFlameMe(int client, int args)
 {
 	SDKHooks_TakeDamage(client, 0, 0, 1.0, DMG_BURN);
 	return Plugin_Handled;
 }
 
-public Action CmdIgnite(int client, int args)
+stock Action CmdIgnite(int client, int args)
 {
 	int entity = GetClientAimTarget(client, false);
 	if( entity != -1 )
@@ -195,7 +198,7 @@ public Action CmdIgnite(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CmdFlame(int client, int args)
+stock Action CmdFlame(int client, int args)
 {
 	g_iFlamed = 0;
 
@@ -253,7 +256,7 @@ public void OnConfigsExecuted()
 	IsAllowed();
 }
 
-public void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	GetCvars();
 }
@@ -272,7 +275,7 @@ void GetCvars()
 	g_iCvarTypes = g_hCvarTypes.IntValue;
 }
 
-public void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	IsAllowed();
 }
@@ -420,7 +423,7 @@ bool IsAllowedGameMode()
 	return true;
 }
 
-public void OnGamemode(const char[] output, int caller, int activator, float delay)
+void OnGamemode(const char[] output, int caller, int activator, float delay)
 {
 	if( strcmp(output, "OnCoop") == 0 )
 		g_iCurrentMode = 1;
@@ -457,7 +460,7 @@ public void OnClientDisconnect(int client)
 // ====================
 // Re-ignite the held throwable if player ran into fire, since this makes the flames on the held object disappear
 // ====================
-public Action OnPlayerDamage(int client, int &attacker, int &inflictor, float &damage, int &damagetype)
+Action OnPlayerDamage(int client, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
 	if( (damagetype & DMG_BURN|DMG_SLOWBURN) && GetClientTeam(client) == 2 )
 	{
@@ -484,9 +487,11 @@ public Action OnPlayerDamage(int client, int &attacker, int &inflictor, float &d
 			}
 		}
 	}
+
+	return Plugin_Continue;
 }
 
-public Action TimerReflame(Handle timer, any client)
+Action TimerReflame(Handle timer, any client)
 {
 	if( (client = GetClientOfUserId(client)) && IsClientInGame(client) )
 	{
@@ -508,6 +513,8 @@ public Action TimerReflame(Handle timer, any client)
 			}
 		}
 	}
+
+	return Plugin_Continue;
 }
 
 // ====================
@@ -548,7 +555,7 @@ public void OnEntityCreated(int entity, const char[] classname)
 	}
 	else if( g_bLeft4Dead2 && g_bWatchSpawn && strcmp(classname, "weapon_gascan") == 0 )
 	{
-		CreateTimer(0.1, DelayedSpawn, EntIndexToEntRef(entity));
+		CreateTimer(0.1, TimerDelayedSpawn, EntIndexToEntRef(entity));
 		g_bWatchSpawn = false;
 	}
 	else if( g_bLeft4Dead2 && strcmp(classname, "weapon_scavenge_item_spawn") == 0 )
@@ -558,7 +565,7 @@ public void OnEntityCreated(int entity, const char[] classname)
 }
 
 // Delay before finding matching spawner. Next frame required for getting vPos, but too early because the gascan takes time to fall into position so it would be near enough to spawner
-public Action DelayedSpawn(Handle timer, int entity)
+Action TimerDelayedSpawn(Handle timer, int entity)
 {
 	entity = EntRefToEntIndex(entity);
 
@@ -566,6 +573,8 @@ public Action DelayedSpawn(Handle timer, int entity)
 	{
 		FindScavengeGas(entity);
 	}
+
+	return Plugin_Continue;
 }
 
 // ====================
@@ -575,7 +584,7 @@ public Action DelayedSpawn(Handle timer, int entity)
 // With no life they whistle for 2.0 seconds then explode, but if picked up this cancels the explosion
 // This fixes that
 // ====================
-public void OnSpawnAir(int entity)
+void OnSpawnAir(int entity)
 {
 	static char modelname[45];
 	GetEntPropString(entity, Prop_Data, "m_ModelName", modelname, sizeof(modelname));
@@ -587,7 +596,7 @@ public void OnSpawnAir(int entity)
 	}
 }
 
-public Action OnTakeDamage(int entity, int &attacker, int &inflictor, float &damage, int &damagetype)
+Action OnTakeDamage(int entity, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
 	// Taken more damage than health, it's going to explode!
 	if( GetEntProp(entity, Prop_Data, "m_iHealth") - RoundToFloor(damage) <= 0.0 )
@@ -600,9 +609,11 @@ public Action OnTakeDamage(int entity, int &attacker, int &inflictor, float &dam
 		if( g_iCvarOxygen == 0 )			SDKHook(entity, SDKHook_Use, OnUseOxygenBlock);
 		else								SDKHook(entity, SDKHook_Use, OnUseOxygenGrab);
 	}
+
+	return Plugin_Continue;
 }
 
-public Action OnUseOxygenGrab(int entity, int client)
+Action OnUseOxygenGrab(int entity, int client)
 {
 	// Must wait a frame to get the new held entity index.
 	// When picking up a prop_physics Oxygen Tank (and other prop_physics), it changes to weapon_oxygentank (etc) when held.
@@ -611,9 +622,11 @@ public Action OnUseOxygenGrab(int entity, int client)
 	dPack.WriteCell(GetClientUserId(client));
 	dPack.WriteCell(entity);
 	RequestFrame(OnNextFrameOxygen, dPack);
+
+	return Plugin_Continue;
 }
 
-public void OnNextFrameOxygen(DataPack dPack)
+void OnNextFrameOxygen(DataPack dPack)
 {
 	dPack.Reset();
 	int client = dPack.ReadCell();
@@ -636,7 +649,7 @@ public void OnNextFrameOxygen(DataPack dPack)
 	}
 }
 
-public Action OnUseOxygenBlock(int entity, int client)
+Action OnUseOxygenBlock(int entity, int client)
 {
 	return Plugin_Handled;
 }
@@ -648,13 +661,13 @@ public Action OnUseOxygenBlock(int entity, int client)
 // ====================
 // Watch for entityflame entities spawning
 // ====================
-public void OnSpawnFire(int entity)
+void OnSpawnFire(int entity)
 {
 	// Only on next frame is the owner populated
 	RequestFrame(OnNextFrameSpawnFire, EntIndexToEntRef(entity));
 }
 
-public void OnNextFrameSpawnFire(int entity)
+void OnNextFrameSpawnFire(int entity)
 {
 	entity = EntRefToEntIndex(entity);
 	if( entity == INVALID_ENT_REFERENCE || !IsValidEntity(entity) ) return;
@@ -743,7 +756,7 @@ public void OnNextFrameSpawnFire(int entity)
 // ====================
 // Cvar setting to block picking up objects on fire
 // ====================
-public Action OnUseBlock(int entity, int client)
+Action OnUseBlock(int entity, int client)
 {
 	// Sometimes the game makes it not on fire, lets verify or unhook.
 	int flame = GetEntPropEnt(entity, Prop_Send, "m_hEffectEntity");
@@ -763,7 +776,7 @@ public Action OnUseBlock(int entity, int client)
 	return Plugin_Continue;
 }
 
-public void OnUseGrab(int entity, int client)
+void OnUseGrab(int entity, int client)
 {
 	// Explode?
 	float time = g_fFireTime[entity];
@@ -847,7 +860,7 @@ public void OnUseGrab(int entity, int client)
 // ====================
 // L4D1: Picking up object that's on fire
 // ====================
-public void OnGrabFrame(DataPack dPack)
+void OnGrabFrame(DataPack dPack)
 {
 	dPack.Reset();
 	int client = dPack.ReadCell();
@@ -918,7 +931,7 @@ public void OnGrabFrame(DataPack dPack)
 // ====================
 // Block prop damage to allow flames
 // ====================
-public Action OnPropTakeDamage(int entity, int &attacker, int &inflictor, float &damage, int &damagetype)
+Action OnPropTakeDamage(int entity, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
 	if( attacker > MaxClients )
 	{
@@ -935,7 +948,7 @@ public Action OnPropTakeDamage(int entity, int &attacker, int &inflictor, float 
 // ====================
 // Watch time until detonate
 // ====================
-public Action TimerTest(Handle timer, any entity)
+Action TimerTest(Handle timer, any entity)
 {
 	entity = EntRefToEntIndex(entity);
 	if( entity != INVALID_ENT_REFERENCE )
@@ -1086,7 +1099,7 @@ void DetonateExplosive(int client, int entity)
 	}
 }
 
-public Action OnTransmitExplosive(int entity, int client)
+Action OnTransmitExplosive(int entity, int client)
 {
 	return Plugin_Handled;
 }
@@ -1094,7 +1107,7 @@ public Action OnTransmitExplosive(int entity, int client)
 // ====================
 // Fix Scavenge Gascans not respawning
 // ====================
-public Action TimerRespawn(Handle timer, any entity)
+Action TimerRespawn(Handle timer, any entity)
 {
 	entity = EntRefToEntIndex(entity);
 
@@ -1112,12 +1125,14 @@ public Action TimerRespawn(Handle timer, any entity)
 		PrintToChatAll("IS: SCAV SpawnItem");
 		#endif
 	}
+
+	return Plugin_Continue;
 }
 
 // ====================
 // Events
 // ====================
-public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
+void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
 	g_iFlamed = 0;
 
@@ -1141,12 +1156,12 @@ public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 		}
 		// */
 
-		CreateTimer(5.0, DelayedFind, _, TIMER_FLAG_NO_MAPCHANGE);
+		CreateTimer(5.0, TimerDelayedFind, _, TIMER_FLAG_NO_MAPCHANGE);
 	}
 }
 
 // Dropped: L4D2 prop_physics is thrown, ignite if required
-public void Event_DropToProp(Event event, const char[] name, bool dontBroadcast)
+void Event_DropToProp(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
 	int entity = event.GetInt("propid");
@@ -1156,9 +1171,10 @@ public void Event_DropToProp(Event event, const char[] name, bool dontBroadcast)
 // ====================
 // Match Scavenge spawners with Gascans
 // ====================
-public Action DelayedFind(Handle timer)
+Action TimerDelayedFind(Handle timer)
 {
 	FindScavengeGas();
+	return Plugin_Continue;
 }
 
 void FindScavengeGas(int target = 0)
@@ -1247,7 +1263,7 @@ void FindScavengeGas(int target = 0)
 // ====================
 // Dropped: weapon_gascan is thrown, ignite if required
 // ====================
-public void OnSwitch(int client, int weapon)
+void OnSwitch(int client, int weapon)
 {
 	if( weapon == -1 ) return;
 
