@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.42"
+#define PLUGIN_VERSION 		"1.43"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,10 @@
 
 ========================================================================================
 	Change Log:
+
+1.43 (16-Jul-2022)
+	- Changed "sm_prop*" commands to allow editing members elements for example "m_iAmmo.005" to modify element array 005. Requested by "Sreaper".
+	- Added list of known entity property keys to better get or set their values.
 
 1.42 (01-Aug-2022)
 	- Fixed command "sm_clients" throwing an error if a client was not in game.
@@ -289,6 +293,7 @@ float g_vAng[MAXPLAYERS+1][3], g_vPos[MAXPLAYERS+1][3];
 ConVar sb_hold_position, sb_stop, sv_cheats, mp_gamemode, z_background_limit, z_boomer_limit, z_charger_limit, z_common_limit, z_hunter_limit, z_jockey_limit, z_minion_limit, z_smoker_limit, z_spitter_limit, director_no_bosses, director_no_mobs, director_no_specials;
 int g_iHaloIndex, g_iLaserIndex, g_iOutputs[MAX_OUTPUTS][2];
 char g_sOutputs[MAX_OUTPUTS][64];
+StringMap g_hEntityKeys;
 
 enum
 {
@@ -509,6 +514,46 @@ public void OnPluginStart()
 			}
 		}
 	}
+
+	// Property Field stuff
+	g_hEntityKeys = new StringMap();
+	g_hEntityKeys.SetValue("moveparent", true);
+	g_hEntityKeys.SetValue("m_hActiveWeapon", true);
+	g_hEntityKeys.SetValue("m_hAttachedToEntity", true);
+	g_hEntityKeys.SetValue("m_hAttachEntity", true);
+	g_hEntityKeys.SetValue("m_hBuildableButtonUseEnt", true);
+	g_hEntityKeys.SetValue("m_hColorCorrectionCtrl", true);
+	g_hEntityKeys.SetValue("m_hConstraintEntity", true);
+	g_hEntityKeys.SetValue("m_hControlPointEnts", true);
+	g_hEntityKeys.SetValue("m_hEffectEntity", true);
+	g_hEntityKeys.SetValue("m_hElevator", true);
+	g_hEntityKeys.SetValue("m_hEntAttached", true);
+	g_hEntityKeys.SetValue("m_hGasNozzle", true);
+	g_hEntityKeys.SetValue("m_hGroundEntity", true);
+	g_hEntityKeys.SetValue("m_hLastWeapon", true);
+	g_hEntityKeys.SetValue("m_hMoveParent", true);
+	g_hEntityKeys.SetValue("m_hMyWeapons", true);
+	g_hEntityKeys.SetValue("m_hObserverTarget", true);
+	g_hEntityKeys.SetValue("m_holdingObject", true);
+	g_hEntityKeys.SetValue("m_hOwner", true);
+	g_hEntityKeys.SetValue("m_hOwnerEntity", true);
+	g_hEntityKeys.SetValue("m_hPlayer", true);
+	g_hEntityKeys.SetValue("m_hPlayerOwner", true);
+	g_hEntityKeys.SetValue("m_hPostProcessCtrl", true);
+	g_hEntityKeys.SetValue("m_hProps", true);
+	g_hEntityKeys.SetValue("m_hRagdoll", true);
+	g_hEntityKeys.SetValue("m_hScriptUseTarget", true);
+	g_hEntityKeys.SetValue("m_hStartPoint", true);
+	g_hEntityKeys.SetValue("m_hTargetEntity", true);
+	g_hEntityKeys.SetValue("m_hThrower", true);
+	g_hEntityKeys.SetValue("m_hTonemapController", true);
+	g_hEntityKeys.SetValue("m_hUseEntity", true);
+	g_hEntityKeys.SetValue("m_hVehicle", true);
+	g_hEntityKeys.SetValue("m_hViewEntity", true);
+	g_hEntityKeys.SetValue("m_hViewModel", true);
+	g_hEntityKeys.SetValue("m_hViewPosition", true);
+	g_hEntityKeys.SetValue("m_hWeapon", true);
+	g_hEntityKeys.SetValue("m_hZoomOwner", true);
 }
 
 public void OnPluginEnd()
@@ -3106,14 +3151,35 @@ Action CmdPropMe(int client, int args)
 	return Plugin_Handled;
 }
 
-void PropertyValue(int client, int entity, int args, const char sProp[64], const char sValue[64])
+void PropertyValue(int client, int entity, int args, char sProp[64], const char sValue[64])
 {
-	char sClass[64], sValueTemp[64], sTemp[3][16];
+	char sClass[64], sValueTemp[64], sMember[8], sTemp[3][16];
 	float vVec[3];
 	PropFieldType proptype;
 	GetEntityNetClass(entity, sClass, sizeof(sClass));
 
+	// Member offset
+	int member;
+	int pos;
+	if( (pos = FindCharInString(sProp, '.', true)) != -1 )
+	{
+		int len = strlen(sProp);
+		for( int i = pos + 1; i < len; i++ )
+		{
+			if( IsCharNumeric(sProp[i]) == false )
+			{
+				pos = 0;
+				break;
+			}
+		}
 
+		if( pos )
+		{
+			member = StringToInt(sProp[pos + 1]);
+			sProp[pos] = '\x0';
+			Format(sMember, sizeof(sMember), ".%03d", member);
+		}
+	}
 
 	// READ
 	if( args == 1 )
@@ -3122,44 +3188,56 @@ void PropertyValue(int client, int entity, int args, const char sProp[64], const
 		int offset = FindSendPropInfo(sClass, sProp, proptype);
 		if( offset > 0 )
 		{
+			if( member && GetEntPropArraySize(entity, Prop_Send, sProp) <= member )
+			{
+				ReplyToCommand(client, "Member size %00d is too large for this entity Prop_Send. Maximum %d member elements (starting from index 0).", member, GetEntPropArraySize(entity, Prop_Send, sProp));
+				member = 0;
+			}
+
+			bool na;
+			if( g_hEntityKeys.GetValue(sProp, na) )
+			{
+				proptype = PropField_Entity;
+			}
+
 			if( proptype == PropField_Integer )
 			{
 				if( client )
-					PrintToChat(client, "\x05%d\x01) \x03Prop_Send\x01 integer \"%s\" \"%s\" is \x05%d", entity, sClass, sProp, GetEntProp(entity, Prop_Send, sProp));
+					PrintToChat(client, "\x05%d\x01) \x03Prop_Send\x01 integer \"%s\" \"%s%s\" is \x05%d", entity, sClass, sProp, sMember, GetEntProp(entity, Prop_Send, sProp, _, member));
 				else
-					ReplyToCommand(client, "%d) Prop_Send integer \"%s\" \"%s\" is %d", entity, sClass, sProp, GetEntProp(entity, Prop_Send, sProp));
+					ReplyToCommand(client, "%d) Prop_Send integer \"%s\" \"%s%s\" is %d", entity, sClass, sProp, sMember, GetEntProp(entity, Prop_Send, sProp, _, member));
 			}
 			else if( proptype == PropField_Entity )
 			{
 				if( client )
-					PrintToChat(client, "\x05%d\x01) \x03Prop_Send\x01 entity \"%s\" \"%s\" is \x05%d", entity, sClass, sProp, GetEntPropEnt(entity, Prop_Send, sProp));
+					PrintToChat(client, "\x05%d\x01) \x03Prop_Send\x01 entity \"%s\" \"%s%s\" is \x05%d", entity, sClass, sProp, sMember, GetEntPropEnt(entity, Prop_Send, sProp, member));
 				else
-					ReplyToCommand(client, "%d) Prop_Send entity \"%s\" \"%s\" is %d", entity, sClass, sProp, GetEntPropEnt(entity, Prop_Send, sProp));
+					ReplyToCommand(client, "%d) Prop_Send entity \"%s\" \"%s%s\" is %d", entity, sClass, sProp, sMember, GetEntPropEnt(entity, Prop_Send, sProp, member));
 			}
 			else if( proptype == PropField_Float )
 			{
 				if( client )
-					PrintToChat(client, "\x05%d\x01) \x03Prop_Send\x01 float \"%s\" \"%s\" is \x05%f", entity, sClass, sProp, GetEntPropFloat(entity, Prop_Send, sProp));
+					PrintToChat(client, "\x05%d\x01) \x03Prop_Send\x01 float \"%s\" \"%s%s\" is \x05%f", entity, sClass, sProp, sMember, GetEntPropFloat(entity, Prop_Send, sProp, member));
 				else
-					ReplyToCommand(client, "%d) Prop_Send float \"%s\" \"%s\" is %f", entity, sClass, sProp, GetEntPropFloat(entity, Prop_Send, sProp));
+					ReplyToCommand(client, "%d) Prop_Send float \"%s\" \"%s%s\" is %f", entity, sClass, sProp, sMember, GetEntPropFloat(entity, Prop_Send, sProp, member));
 			}
 			else if( proptype == PropField_String || proptype == PropField_String_T )
 			{
-				GetEntPropString(entity, Prop_Send, sProp, sValueTemp, sizeof(sValueTemp));
+				GetEntPropString(entity, Prop_Send, sProp, sValueTemp, sizeof(sValueTemp), member);
 
 				if( client )
-					PrintToChat(client, "\x05%d\x01) \x03Prop_Send\x01 string \"%s\" \"%s\" is \x05%s", entity, sClass, sProp, sValueTemp);
+					PrintToChat(client, "\x05%d\x01) \x03Prop_Send\x01 string \"%s\" \"%s%s\" is \x05%s", entity, sClass, sProp, sMember, sValueTemp);
 				else
-					ReplyToCommand(client, "%d) Prop_Send string \"%s\" \"%s\" is %s", entity, sClass, sProp, sValueTemp);
+					ReplyToCommand(client, "%d) Prop_Send string \"%s\" \"%s%s\" is %s", entity, sClass, sProp, sMember, sValueTemp);
 			}
 			else if( proptype == PropField_Vector )
 			{
-				GetEntPropVector(entity, Prop_Send, sProp, vVec);
+				GetEntPropVector(entity, Prop_Send, sProp, vVec, member);
 
 				if( client )
-					PrintToChat(client, "\x05%d\x01) \x03Prop_Send\x01 vector \"%s\" \"%s\" is \x05%f %f %f", entity, sClass, sProp, vVec[0], vVec[1], vVec[2]);
+					PrintToChat(client, "\x05%d\x01) \x03Prop_Send\x01 vector \"%s\" \"%s%s\" is \x05%f %f %f", entity, sClass, sProp, sMember, vVec[0], vVec[1], vVec[2]);
 				else
-					ReplyToCommand(client, "%d) Prop_Send vector \"%s\" \"%s\" is %f %f %f", entity, sClass, sProp, vVec[0], vVec[1], vVec[2]);
+					ReplyToCommand(client, "%d) Prop_Send vector \"%s\" \"%s%s\" is %f %f %f", entity, sClass, sProp, sMember, vVec[0], vVec[1], vVec[2]);
 			}
 			else
 			{
@@ -3185,44 +3263,56 @@ void PropertyValue(int client, int entity, int args, const char sProp[64], const
 		offset = FindDataMapInfo(entity, sProp, proptype);
 		if( offset != -1 )
 		{
+			if( member && GetEntPropArraySize(entity, Prop_Data, sProp) <= member )
+			{
+				ReplyToCommand(client, "Member size %00d is too large for this entity Prop_Data. Maximum %d member elements (starting from index 0).", member, GetEntPropArraySize(entity, Prop_Data, sProp));
+				member = 0;
+			}
+
+			bool na;
+			if( g_hEntityKeys.GetValue(sProp, na) )
+			{
+				proptype = PropField_Entity;
+			}
+
 			if( proptype == PropField_Integer )
 			{
 				if( client )
-					PrintToChat(client, "\x05%d\x01) \x05Prop_Data\x01 integer \"%s\" \"%s\" is \x05%d", entity, sClass, sProp, GetEntProp(entity, Prop_Data, sProp));
+					PrintToChat(client, "\x05%d\x01) \x05Prop_Data\x01 integer \"%s\" \"%s%s\" is \x05%d", entity, sClass, sProp, sMember, GetEntProp(entity, Prop_Data, sProp, _, member));
 				else
-					ReplyToCommand(client, "%d) Prop_Data integer \"%s\" \"%s\" is %d", entity, sClass, sProp, GetEntProp(entity, Prop_Data, sProp));
+					ReplyToCommand(client, "%d) Prop_Data integer \"%s\" \"%s%s\" is %d", entity, sClass, sProp, sMember, GetEntProp(entity, Prop_Data, sProp, _, member));
 			}
 			else if( proptype == PropField_Entity )
 			{
 				if( client )
-					PrintToChat(client, "\x05%d\x01) \x05Prop_Data\x01 entity \"%s\" \"%s\" is \x05%d", entity, sClass, sProp, GetEntPropEnt(entity, Prop_Data, sProp));
+					PrintToChat(client, "\x05%d\x01) \x05Prop_Data\x01 entity \"%s\" \"%s%s\" is \x05%d", entity, sClass, sProp, sMember, GetEntPropEnt(entity, Prop_Data, sProp, member));
 				else
-					ReplyToCommand(client, "%d) Prop_Data entity \"%s\" \"%s\" is %d", entity, sClass, sProp, GetEntPropEnt(entity, Prop_Data, sProp));
+					ReplyToCommand(client, "%d) Prop_Data entity \"%s\" \"%s%s\" is %d", entity, sClass, sProp, sMember, GetEntPropEnt(entity, Prop_Data, sProp, member));
 			}
 			else if( proptype == PropField_Float )
 			{
 				if( client )
-					PrintToChat(client, "\x05%d\x01) \x05Prop_Data\x01 float \"%s\" \"%s\" is \x05%f", entity, sClass, sProp, GetEntPropFloat(entity, Prop_Data, sProp));
+					PrintToChat(client, "\x05%d\x01) \x05Prop_Data\x01 float \"%s\" \"%s%s\" is \x05%f", entity, sClass, sProp, sMember, GetEntPropFloat(entity, Prop_Data, sProp, member));
 				else
-					ReplyToCommand(client, "%d) Prop_Data float \"%s\" \"%s\" is %f", entity, sClass, sProp, GetEntPropFloat(entity, Prop_Data, sProp));
+					ReplyToCommand(client, "%d) Prop_Data float \"%s\" \"%s%s\" is %f", entity, sClass, sProp, sMember, GetEntPropFloat(entity, Prop_Data, sProp, member));
 			}
 			else if( proptype == PropField_String || proptype == PropField_String_T )
 			{
-				GetEntPropString(entity, Prop_Data, sProp, sValueTemp, sizeof(sValueTemp));
+				GetEntPropString(entity, Prop_Data, sProp, sValueTemp, sizeof(sValueTemp), member);
 
 				if( client )
-					PrintToChat(client, "\x05%d\x01) \x05Prop_Data\x01 string \"%s\" \"%s\" is \x05%s", entity, sClass, sProp, sValueTemp);
+					PrintToChat(client, "\x05%d\x01) \x05Prop_Data\x01 string \"%s\" \"%s%s\" is \x05%s", entity, sClass, sProp, sMember, sValueTemp);
 				else
-					ReplyToCommand(client, "%d) Prop_Data string \"%s\" \"%s\" is %s", entity, sClass, sProp, sValueTemp);
+					ReplyToCommand(client, "%d) Prop_Data string \"%s\" \"%s%s\" is %s", entity, sClass, sProp, sMember, sValueTemp);
 			}
 			else if( proptype == PropField_Vector )
 			{
-				GetEntPropVector(entity, Prop_Data, sProp, vVec);
+				GetEntPropVector(entity, Prop_Data, sProp, vVec, member);
 
 				if( client )
-					PrintToChat(client, "\x05%d\x01) \x05Prop_Data\x01 vector \"%s\" \"%s\" is \x05%f %f %f", entity, sClass, sProp, vVec[0], vVec[1], vVec[2]);
+					PrintToChat(client, "\x05%d\x01) \x05Prop_Data\x01 vector \"%s\" \"%s%s\" is \x05%f %f %f", entity, sClass, sProp, sMember, vVec[0], vVec[1], vVec[2]);
 				else
-					ReplyToCommand(client, "%d) Prop_Data vector \"%s\" \"%s\" is %f %f %f", entity, sClass, sProp, vVec[0], vVec[1], vVec[2]);
+					ReplyToCommand(client, "%d) Prop_Data vector \"%s\" \"%s%s\" is %f %f %f", entity, sClass, sProp, sMember, vVec[0], vVec[1], vVec[2]);
 			}
 			else
 			{
@@ -3252,45 +3342,57 @@ void PropertyValue(int client, int entity, int args, const char sProp[64], const
 		int offset = FindSendPropInfo(sClass, sProp, proptype);
 		if( offset > 0 )
 		{
+			if( member && GetEntPropArraySize(entity, Prop_Send, sProp) <= member )
+			{
+				ReplyToCommand(client, "Member size %00d is too large for this entity Prop_Data. Maximum %d member elements (starting from index 0).", member, GetEntPropArraySize(entity, Prop_Send, sProp));
+				member = 0;
+			}
+
+			bool na;
+			if( g_hEntityKeys.GetValue(sProp, na) )
+			{
+				proptype = PropField_Entity;
+			}
+
 			if( proptype == PropField_Integer )
 			{
 				int value = StringToInt(sValue);
 
-				SetEntProp(entity, Prop_Send, sProp, value);
+				SetEntProp(entity, Prop_Send, sProp, value, _, member);
 
 				if( client )
-					PrintToChat(client, "\x05%d\x01) Set \x03Prop_Send\x01 integer \"%s\" \"%s\" to \x05%d", entity, sClass, sProp, value);
+					PrintToChat(client, "\x05%d\x01) Set \x03Prop_Send\x01 integer \"%s\" \"%s%s\" to \x05%d", entity, sClass, sProp, sMember, value);
 				else
-					ReplyToCommand(client, "%d) Set Prop_Send integer \"%s\" \"%s\" to %d", entity, sClass, sProp, value);
+					ReplyToCommand(client, "%d) Set Prop_Send integer \"%s\" \"%s%s\" to %d", entity, sClass, sProp, sMember, value);
 			}
 			else if( proptype == PropField_Entity )
 			{
 				int value = StringToInt(sValue);
-				SetEntPropEnt(entity, Prop_Send, sProp, value);
+				SetEntPropEnt(entity, Prop_Send, sProp, value, member);
 
 				if( client )
-					PrintToChat(client, "\x05%d\x01) Set \x03Prop_Send\x01 entity \"%s\" \"%s\" to \x05%d", entity, sClass, sProp, value);
+					PrintToChat(client, "\x05%d\x01) Set \x03Prop_Send\x01 entity \"%s\" \"%s%s\" to \x05%d", entity, sClass, sProp, sMember, value);
 				else
-					ReplyToCommand(client, "%d) Set Prop_Send entity \"%s\" \"%s\" to %d", entity, sClass, sProp, value);
+					ReplyToCommand(client, "%d) Set Prop_Send entity \"%s\" \"%s%s\" to %d", entity, sClass, sProp, sMember, value);
 			}
 			else if( proptype == PropField_Float )
 			{
 				float value = StringToFloat(sValue);
-				SetEntPropFloat(entity, Prop_Send, sProp, value);
+				SetEntPropFloat(entity, Prop_Send, sProp, value, member);
 
 				if( client )
-					PrintToChat(client, "\x05%d\x01) Set \x03Prop_Send\x01 float \"%s\" \"%s\" to \x05%f", entity, sClass, sProp, value);
+					PrintToChat(client, "\x05%d\x01) Set \x03Prop_Send\x01 float \"%s\" \"%s%s\" to \x05%f", entity, sClass, sProp, sMember, value);
 				else
-					ReplyToCommand(client, "%d) Set Prop_Send float \"%s\" \"%s\" to %f", entity, sClass, sProp, value);
+					ReplyToCommand(client, "%d) Set Prop_Send float \"%s\" \"%s%s\" to %f", entity, sClass, sProp, sMember, value);
 			}
 			else if( proptype == PropField_String || proptype == PropField_String_T )
 			{
-				SetEntPropString(entity, Prop_Send, sProp, sValue);
+				SetEntPropString(entity, Prop_Send, sProp, sValue, member);
 
 				if( client )
-					PrintToChat(client, "\x05%d\x01) Set \x03Prop_Send\x01 string \"%s\" \"%s\" to \x05%s", entity, sClass, sProp, sValue);
+					PrintToChat(client, "\x05%d\x01) Set \x03Prop_Send\x01 string \"%s\" \"%s%s\" to \x05%s", entity, sClass, sProp, sMember, sValue);
 				else
-					ReplyToCommand(client, "%d) Set Prop_Send string \"%s\" \"%s\" to %s", entity, sClass, sProp, sValue);
+					ReplyToCommand(client, "%d) Set Prop_Send string \"%s\" \"%s%s\" to %s", entity, sClass, sProp, sMember, sValue);
 			}
 			else if( proptype == PropField_Vector )
 			{
@@ -3299,12 +3401,12 @@ void PropertyValue(int client, int entity, int args, const char sProp[64], const
 				vVec[1] = StringToFloat(sTemp[1]);
 				vVec[2] = StringToFloat(sTemp[2]);
 
-				SetEntPropVector(entity, Prop_Send, sProp, vVec);
+				SetEntPropVector(entity, Prop_Send, sProp, vVec, member);
 
 				if( client )
-					PrintToChat(client, "\x05%d\x01) Set \x03Prop_Send\x01 vector \"%s\" \"%s\" to \x05%f %f %f", entity, sClass, sProp, vVec[0], vVec[1], vVec[2]);
+					PrintToChat(client, "\x05%d\x01) Set \x03Prop_Send\x01 vector \"%s\" \"%s%s\" to \x05%f %f %f", entity, sClass, sProp, sMember, vVec[0], vVec[1], vVec[2]);
 				else
-					ReplyToCommand(client, "%d) Set Prop_Send vector \"%s\" \"%s\" to %f %f %f", entity, sClass, sProp, vVec[0], vVec[1], vVec[2]);
+					ReplyToCommand(client, "%d) Set Prop_Send vector \"%s\" \"%s%s\" to %f %f %f", entity, sClass, sProp, sMember, vVec[0], vVec[1], vVec[2]);
 			}
 			else
 			{
@@ -3330,44 +3432,56 @@ void PropertyValue(int client, int entity, int args, const char sProp[64], const
 		offset = FindDataMapInfo(entity, sProp, proptype);
 		if( offset != -1 )
 		{
+			if( member && GetEntPropArraySize(entity, Prop_Data, sProp) <= member )
+			{
+				ReplyToCommand(client, "Member size %00d is too large for this entity Prop_Data. Maximum %d member elements (starting from index 0).", member, GetEntPropArraySize(entity, Prop_Data, sProp));
+				member = 0;
+			}
+
+			bool na;
+			if( g_hEntityKeys.GetValue(sProp, na) )
+			{
+				proptype = PropField_Entity;
+			}
+
 			if( proptype == PropField_Integer )
 			{
 				int value = StringToInt(sValue);
-				SetEntProp(entity, Prop_Data, sProp, value);
+				SetEntProp(entity, Prop_Data, sProp, value, _, member);
 
 				if( client )
-					PrintToChat(client, "\x05%d\x01) Set \x05Prop_Data\x01 integer \"%s\" \"%s\" to \x05%d", entity, sClass, sProp, value);
+					PrintToChat(client, "\x05%d\x01) Set \x05Prop_Data\x01 integer \"%s\" \"%s%s\" to \x05%d", entity, sClass, sProp, sMember, value);
 				else
-					ReplyToCommand(client, "%d) Set Prop_Data integer \"%s\" \"%s\" to %d", entity, sClass, sProp, value);
+					ReplyToCommand(client, "%d) Set Prop_Data integer \"%s\" \"%s%s\" to %d", entity, sClass, sProp, sMember, value);
 			}
 			else if( proptype == PropField_Entity )
 			{
 				int value = StringToInt(sValue);
-				SetEntPropEnt(entity, Prop_Data, sProp, value);
+				SetEntPropEnt(entity, Prop_Data, sProp, value, member);
 
 				if( client )
-					PrintToChat(client, "\x05%d\x01) Set \x05Prop_Data\x01 entity \"%s\" \"%s\" to \x05%d", entity, sClass, sProp, value);
+					PrintToChat(client, "\x05%d\x01) Set \x05Prop_Data\x01 entity \"%s\" \"%s%s\" to \x05%d", entity, sClass, sProp, sMember, value);
 				else
-					ReplyToCommand(client, "%d) Set Prop_Data entity \"%s\" \"%s\" to %d", entity, sClass, sProp, value);
+					ReplyToCommand(client, "%d) Set Prop_Data entity \"%s\" \"%s%s\" to %d", entity, sClass, sProp, sMember, value);
 			}
 			else if( proptype == PropField_Float )
 			{
 				float value = StringToFloat(sValue);
-				SetEntPropFloat(entity, Prop_Data, sProp, value);
+				SetEntPropFloat(entity, Prop_Data, sProp, value, member);
 
 				if( client )
-					PrintToChat(client, "\x05%d\x01) Set \x05Prop_Data\x01 float \"%s\" \"%s\" to \x05%f", entity, sClass, sProp, value);
+					PrintToChat(client, "\x05%d\x01) Set \x05Prop_Data\x01 float \"%s\" \"%s%s\" to \x05%f", entity, sClass, sProp, sMember, value);
 				else
-					ReplyToCommand(client, "%d) Set Prop_Data float \"%s\" \"%s\" to %f", entity, sClass, sProp, value);
+					ReplyToCommand(client, "%d) Set Prop_Data float \"%s\" \"%s%s\" to %f", entity, sClass, sProp, sMember, value);
 			}
 			else if( proptype == PropField_String || proptype == PropField_String_T )
 			{
-				SetEntPropString(entity, Prop_Data, sProp, sValue);
+				SetEntPropString(entity, Prop_Data, sProp, sValue, member);
 
 				if( client )
-					PrintToChat(client, "\x05%d\x01) Set \x05Prop_Data\x01 string \"%s\" \"%s\" to \x05%s", entity, sClass, sProp, sValue);
+					PrintToChat(client, "\x05%d\x01) Set \x05Prop_Data\x01 string \"%s\" \"%s%s\" to \x05%s", entity, sClass, sProp, sMember, sValue);
 				else
-					ReplyToCommand(client, "%d) Set Prop_Data string \"%s\" \"%s\" to %s", entity, sClass, sProp, sValue);
+					ReplyToCommand(client, "%d) Set Prop_Data string \"%s\" \"%s%s\" to %s", entity, sClass, sProp, sMember, sValue);
 			}
 			else if( proptype == PropField_Vector )
 			{
@@ -3376,12 +3490,12 @@ void PropertyValue(int client, int entity, int args, const char sProp[64], const
 				vVec[1] = StringToFloat(sTemp[1]);
 				vVec[2] = StringToFloat(sTemp[2]);
 
-				SetEntPropVector(entity, Prop_Data, sProp, vVec);
+				SetEntPropVector(entity, Prop_Data, sProp, vVec, member);
 
 				if( client )
-					PrintToChat(client, "\x05%d\x01) Set \x05Prop_Data\x01 vector \"%s\" \"%s\" to \x05%f %f %f", entity, sClass, sProp, vVec[0], vVec[1], vVec[2]);
+					PrintToChat(client, "\x05%d\x01) Set \x05Prop_Data\x01 vector \"%s\" \"%s%s\" to \x05%f %f %f", entity, sClass, sProp, sMember, vVec[0], vVec[1], vVec[2]);
 				else
-					ReplyToCommand(client, "%d) Set Prop_Data vector \"%s\" \"%s\" to %f %f %f", entity, sClass, sProp, vVec[0], vVec[1], vVec[2]);
+					ReplyToCommand(client, "%d) Set Prop_Data vector \"%s\" \"%s%s\" to %f %f %f", entity, sClass, sProp, sMember, vVec[0], vVec[1], vVec[2]);
 			}
 			else
 			{
