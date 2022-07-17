@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.43"
+#define PLUGIN_VERSION 		"1.44"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.44 (17-Jul-2022)
+	- Fixed compile warnings on SM 1.11 when using SMLib.
 
 1.43 (16-Jul-2022)
 	- Changed "sm_prop*" commands to allow editing members elements for example "m_iAmmo.005" to modify element array 005. Requested by "Sreaper".
@@ -278,7 +281,6 @@ enum
 	SOLID_LAST,
 };
 #endif
-
 
 
 
@@ -1526,7 +1528,7 @@ Action CmdDistDir(int client, int args)
 	return Plugin_Handled;
 }
 
-stock bool GetNonCollideEndPoint(int client, float vEnd[3], float vEndNonCol[3])
+bool GetNonCollideEndPoint(int client, float vEnd[3], float vEndNonCol[3])
 {
 	float vMin[3], vMax[3], vStart[3];
 	GetClientAbsOrigin(client, vStart);
@@ -1567,7 +1569,7 @@ stock float GetDistanceToVec(int client, float vEnd[3])
 	return fDistance;
 }
 
-stock bool GetDirectionEndPoint(int client, float vEndPos[3])
+bool GetDirectionEndPoint(int client, float vEndPos[3])
 {
 	float vDir[3], vPos[3];
 	GetClientEyePosition(client, vPos);
@@ -1600,7 +1602,7 @@ Action CmdDistFloor(int client, int args)
 	return Plugin_Handled;
 }
 
-stock float GetDistanceToFloor(int client, float maxheight = 3000.0)
+float GetDistanceToFloor(int client, float maxheight = 3000.0)
 {
 	float vStart[3], fDistance = 0.0;
 
@@ -1651,7 +1653,7 @@ Action CmdDistRoof(int client, int args)
 	return Plugin_Handled;
 }
 
-stock float GetDistanceToRoof(int client, float maxheight = 3000.0)
+float GetDistanceToRoof(int client, float maxheight = 3000.0)
 {
 	float vMin[3], vMax[3], vOrigin[3], vEnd[3], vStart[3], fDistance = 0.0;
 	GetClientAbsOrigin(client, vStart);
@@ -1698,7 +1700,7 @@ bool TraceRay_DontHitSelf(int iEntity, int iMask, any data)
 }
 */
 
-stock void LaserP(float start[3], float end[3], int color[4], float width = 3.0)
+void LaserP(float start[3], float end[3], int color[4], float width = 3.0)
 {
 	TE_SetupBeamPoints(start, end, g_sprite, 0, 0, 0, 10.0, width, width, 7, 0.0, color, 5);
 	TE_SendToAll();
@@ -2226,7 +2228,7 @@ Action CmdColli(int client, int args)
 		}
 	}
 
-	if( GetEntProp(entity, Prop_Send, "m_nSolidType", 1) == SOLID_NONE )
+	if( GetEntProp(entity, Prop_Send, "m_nSolidType", 1) == view_as<int>(SOLID_NONE) )
 	{
 		ReplyToCommand(client, "[SM] sm_collision: Set target %d solid.", entity);
 		SetEntitySolid(entity, true);
@@ -2760,13 +2762,13 @@ Action CmdSolid(int client, int args)
 	sTemp[0] = 0;
 	switch( flags )
 	{
-		case SOLID_NONE:						sTemp = "SOLID_NONE = 0";
-		case SOLID_BSP:							sTemp = "SOLID_BSP = 1";
-		case SOLID_BBOX:						sTemp = "SOLID_BBOX = 2";
-		case SOLID_OBB:							sTemp = "SOLID_OBB = 3";
-		case SOLID_OBB_YAW:						sTemp = "SOLID_OBB_YAW = 4";
-		case SOLID_CUSTOM:						sTemp = "SOLID_CUSTOM = 5";
-		case SOLID_VPHYSICS:					sTemp = "SOLID_VPHYSICS = 6";
+		case view_as<int>(SOLID_NONE):							sTemp = "SOLID_NONE = 0";
+		case view_as<int>(SOLID_BSP):							sTemp = "SOLID_BSP = 1";
+		case view_as<int>(SOLID_BBOX):							sTemp = "SOLID_BBOX = 2";
+		case view_as<int>(SOLID_OBB):							sTemp = "SOLID_OBB = 3";
+		case view_as<int>(SOLID_OBB_YAW):						sTemp = "SOLID_OBB_YAW = 4";
+		case view_as<int>(SOLID_CUSTOM):						sTemp = "SOLID_CUSTOM = 5";
+		case view_as<int>(SOLID_VPHYSICS):						sTemp = "SOLID_VPHYSICS = 6";
 	}
 
 	ReplyToCommand(client, "SolidType_t %d = %s", flags, sTemp);
@@ -2786,16 +2788,16 @@ Action CmdSolidF(int client, int args)
 	int flags = StringToInt(sTemp);
 
 	sTemp[0] = 0;
-	if( flags & FSOLID_CUSTOMRAYTEST )			StrCat(sTemp, sizeof(sTemp), "FSOLID_CUSTOMRAYTEST = 0x0001; ");
-	if( flags & FSOLID_CUSTOMBOXTEST )			StrCat(sTemp, sizeof(sTemp), "FSOLID_CUSTOMBOXTEST = 0x0002; ");
-	if( flags & FSOLID_NOT_SOLID )				StrCat(sTemp, sizeof(sTemp), "FSOLID_NOT_SOLID = 0x0004; ");
-	if( flags & FSOLID_TRIGGER )				StrCat(sTemp, sizeof(sTemp), "FSOLID_TRIGGER = 0x0008; ");
-	if( flags & FSOLID_NOT_STANDABLE )			StrCat(sTemp, sizeof(sTemp), "FSOLID_NOT_STANDABLE = 0x0010; ");
-	if( flags & FSOLID_VOLUME_CONTENTS )		StrCat(sTemp, sizeof(sTemp), "FSOLID_VOLUME_CONTENTS = 0x0020; ");
-	if( flags & FSOLID_FORCE_WORLD_ALIGNED )	StrCat(sTemp, sizeof(sTemp), "FSOLID_FORCE_WORLD_ALIGNED = 0x0040; ");
-	if( flags & FSOLID_USE_TRIGGER_BOUNDS )		StrCat(sTemp, sizeof(sTemp), "FSOLID_USE_TRIGGER_BOUNDS = 0x0080; ");
-	if( flags & FSOLID_ROOT_PARENT_ALIGNED )	StrCat(sTemp, sizeof(sTemp), "FSOLID_ROOT_PARENT_ALIGNED = 0x0100; ");
-	if( flags & FSOLID_TRIGGER_TOUCH_DEBRIS )	StrCat(sTemp, sizeof(sTemp), "FSOLID_TRIGGER_TOUCH_DEBRIS = 0x0200; ");
+	if( flags & view_as<int>(FSOLID_CUSTOMRAYTEST) )			StrCat(sTemp, sizeof(sTemp), "FSOLID_CUSTOMRAYTEST = 0x0001; ");
+	if( flags & view_as<int>(FSOLID_CUSTOMBOXTEST) )			StrCat(sTemp, sizeof(sTemp), "FSOLID_CUSTOMBOXTEST = 0x0002; ");
+	if( flags & view_as<int>(FSOLID_NOT_SOLID) )				StrCat(sTemp, sizeof(sTemp), "FSOLID_NOT_SOLID = 0x0004; ");
+	if( flags & view_as<int>(FSOLID_TRIGGER) )					StrCat(sTemp, sizeof(sTemp), "FSOLID_TRIGGER = 0x0008; ");
+	if( flags & view_as<int>(FSOLID_NOT_STANDABLE) )			StrCat(sTemp, sizeof(sTemp), "FSOLID_NOT_STANDABLE = 0x0010; ");
+	if( flags & view_as<int>(FSOLID_VOLUME_CONTENTS) )			StrCat(sTemp, sizeof(sTemp), "FSOLID_VOLUME_CONTENTS = 0x0020; ");
+	if( flags & view_as<int>(FSOLID_FORCE_WORLD_ALIGNED) )		StrCat(sTemp, sizeof(sTemp), "FSOLID_FORCE_WORLD_ALIGNED = 0x0040; ");
+	if( flags & view_as<int>(FSOLID_USE_TRIGGER_BOUNDS) )		StrCat(sTemp, sizeof(sTemp), "FSOLID_USE_TRIGGER_BOUNDS = 0x0080; ");
+	if( flags & view_as<int>(FSOLID_ROOT_PARENT_ALIGNED) )		StrCat(sTemp, sizeof(sTemp), "FSOLID_ROOT_PARENT_ALIGNED = 0x0100; ");
+	if( flags & view_as<int>(FSOLID_TRIGGER_TOUCH_DEBRIS) )		StrCat(sTemp, sizeof(sTemp), "FSOLID_TRIGGER_TOUCH_DEBRIS = 0x0200; ");
 
 	if( sTemp[0] ) sTemp[strlen(sTemp) - 2] = 0; // Clear last "; "
 
@@ -4713,7 +4715,7 @@ void ExecuteCheatCommand(const char[] command, const char[] value = "")
 	SetCommandFlags(command, flags);
 }
 
-stock void SetEntitySolid(int entity, bool doSolid)
+void SetEntitySolid(int entity, bool doSolid)
 {
 	int m_nSolidType	= GetEntProp(entity, Prop_Data, "m_nSolidType", 1);
 	int m_usSolidFlags	= GetEntProp(entity, Prop_Data, "m_usSolidFlags", 2);
@@ -4721,18 +4723,18 @@ stock void SetEntitySolid(int entity, bool doSolid)
 	if( doSolid )
 	{
 		if( m_nSolidType == 0 )
-			SetEntProp(entity, Prop_Send,	"m_nSolidType",		SOLID_VPHYSICS,	1);
+			SetEntProp(entity, Prop_Send, "m_nSolidType", view_as<int>(SOLID_VPHYSICS), 1);
 
-		if( m_usSolidFlags & FSOLID_NOT_SOLID )
-			SetEntProp(entity, Prop_Send,	"m_usSolidFlags", 	m_usSolidFlags & ~FSOLID_NOT_SOLID,	2);
+		if( m_usSolidFlags & view_as<int>(FSOLID_NOT_SOLID) )
+			SetEntProp(entity, Prop_Send, "m_usSolidFlags", m_usSolidFlags &~ view_as<int>(FSOLID_NOT_SOLID), 2);
 	}
 	else
 	{
 		if( m_nSolidType != 0 )
-			SetEntProp(entity, Prop_Send,	"m_nSolidType",		view_as<int>(SOLID_NONE),	1);
+			SetEntProp(entity, Prop_Send, "m_nSolidType", view_as<int>(SOLID_NONE),	1);
 
-		if( m_usSolidFlags & FSOLID_NOT_SOLID == 0 )
-			SetEntProp(entity, Prop_Send,	"m_usSolidFlags", 	m_usSolidFlags | FSOLID_NOT_SOLID,	2);
+		if( m_usSolidFlags & view_as<int>(FSOLID_NOT_SOLID) == 0 )
+			SetEntProp(entity, Prop_Send, "m_usSolidFlags", m_usSolidFlags | view_as<int>(FSOLID_NOT_SOLID), 2);
 	}
 }
 
