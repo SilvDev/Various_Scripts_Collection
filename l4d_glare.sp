@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"2.11"
+#define PLUGIN_VERSION 		"2.12"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,11 @@
 
 ========================================================================================
 	Change Log:
+
+2.12 (04-Aug-2022)
+	- Changes to fix floating beams and broken beams, mostly in L4D1. Thanks to "gongo" for reporting and help testing.
+	- Changes to support unloading and late loading of the "Attachments_API" plugin.
+	- Fixed the "Auto Shotgun" weapon not having beams in L4D1.
 
 2.11 (11-Jun-2022)
 	- Fixed not removing the beam on client disconnect. Thanks to "gongo" for reporting.
@@ -144,6 +149,7 @@ int g_iPlayerEnum[MAXPLAYERS+1];
 int g_iWeaponIndex[MAXPLAYERS+1];
 int g_iGlareColor[MAXPLAYERS+1];
 bool g_bDetected[MAXPLAYERS+1];
+Handle g_hTimerCreate[MAXPLAYERS+1];
 Handle g_hTimerDetect;
 StringMap g_hColors;
 StringMap g_hWeapons;
@@ -268,6 +274,7 @@ public void OnPluginStart()
 	g_hWeapons.SetValue("pumpshotgun", 1);
 	g_hWeapons.SetValue("shotgun_chrome", 1);
 	g_hWeapons.SetValue("hunting_rifle", 1);
+	g_hWeapons.SetValue("autoshotgun", 1);
 
 	if( g_bLeft4Dead2 )
 	{
@@ -277,7 +284,6 @@ public void OnPluginStart()
 		g_hWeapons.SetValue("rifle_sg552", 1);
 		g_hWeapons.SetValue("rifle_desert", 1);
 		g_hWeapons.SetValue("rifle_ak47", 1);
-		g_hWeapons.SetValue("autoshotgun", 1);
 		g_hWeapons.SetValue("shotgun_spas", 1);
 		g_hWeapons.SetValue("sniper_awp", 1);
 		g_hWeapons.SetValue("sniper_military", 1);
@@ -304,23 +310,45 @@ public void Attachments_OnPluginEnd()
 public void OnPluginEnd()
 {
 	for( int i = 1; i <= MaxClients; i++ )
+	{
+		g_iLightState[i] = LIGHT_OFF;
+		g_iWeaponIndex[i] = 0;
+		g_iPlayerEnum[i] = 0;
+		g_iWeaponIndex[i] = 0;
+		delete g_hTimerCreate[i];
+
 		DeleteLight(i);
+	}
 }
 
 public void OnClientDisconnect(int client)
 {
+	delete g_hTimerCreate[client];
 	DeleteLight(client);
 }
 
-public void OnClientConnected(int client)
+public void OnClientPutInServer(int client)
 {
 	g_iGlareColor[client] = g_iCvarColor;
 
 	if( g_iCvarBots == 2 && IsFakeClient(client) )
 	{
-		g_iLightState[client] = LIGHT_ON;
+		g_iLightState[client] = LIGHT_OFF;
 		g_iGlareColor[client] = GetRandomInt(0, 16776960);
 	}
+
+	/* Set beam colors for specific bots
+	if( IsFakeClient(client) )
+	{
+		char name[MAX_NAME_LENGTH];
+		GetClientName(client, name, sizeof name);
+
+		if( strcmp(name, "Bill") == 0 || strcmp(name, "Nick") == 0 )			g_iGlareColor[client] = GetColor("0 255 0");
+		else if( strcmp(name, "Zoey") == 0 || strcmp(name, "Rochelle") == 0 )	g_iGlareColor[client] = GetColor("255 0 0");
+		else if( strcmp(name, "Francis") == 0 || strcmp(name, "Coach") == 0 )	g_iGlareColor[client] = GetColor("0 0 255");
+		else if( strcmp(name, "Louis") == 0 || strcmp(name, "Ellis") == 0 )		g_iGlareColor[client] = GetColor("255 100 0");
+	}
+	// */
 }
 
 public void OnClientCookiesCached(int client)
@@ -346,7 +374,7 @@ public void OnClientCookiesCached(int client)
 				SetEntProp(entity, Prop_Send, "m_clrRender", g_iGlareColor[client]);
 				AcceptEntityInput(entity, "LightOff");
 
-				if( g_iPlayerEnum[client] == 0 && IsClientInGame(client) && GetEntProp(client, Prop_Send, "m_fEffects") == 4 )
+				if( g_iPlayerEnum[client] == 0 && IsClientInGame(client) && GetEntProp(client, Prop_Send, "m_fEffects") & 4 )
 					CreateTimer(0.1, TimerLightOn, GetClientUserId(client));
 			}
 		}
@@ -388,6 +416,7 @@ Action CmdGlare(int client, int args)
 			if( g_hColors.GetString(sColor, sColor, sizeof(sColor)) )
 			{
 				g_iGlareColor[client] = GetColor(sColor);
+				g_iLightState[client] = LIGHT_OFF;
 
 				if( g_iCvarCustom == 2 )
 				{
@@ -402,14 +431,13 @@ Action CmdGlare(int client, int args)
 					SetVariantString(sColor);
 					AcceptEntityInput(entity, "color");
 					AcceptEntityInput(entity, "LightOff");
-					if( g_iPlayerEnum[client] == 0 && GetEntProp(client, Prop_Send, "m_fEffects") == 4 )
+					if( g_iPlayerEnum[client] == 0 && GetEntProp(client, Prop_Send, "m_fEffects") & 4 )
 						CreateTimer(0.1, TimerLightOn, GetClientUserId(client));
 				}
-				else
-				{
-					DeleteLight(client);
-					CreateLight(client);
-				}
+				// else
+				// {
+					// CreateLight(client);
+				// }
 			}
 		}
 	}
@@ -427,6 +455,7 @@ Action CmdGlare(int client, int args)
 			ExplodeString(sColor, " ", sSplit, sizeof(sSplit), sizeof(sSplit[]));
 			Format(sColor, sizeof(sColor), "%d %d %d", StringToInt(sSplit[0]), StringToInt(sSplit[1]), StringToInt(sSplit[2]));
 			g_iGlareColor[client] = GetColor(sColor);
+			g_iLightState[client] = LIGHT_OFF;
 
 			if( g_iCvarCustom == 2 )
 			{
@@ -441,14 +470,13 @@ Action CmdGlare(int client, int args)
 				SetVariantString(sColor);
 				AcceptEntityInput(entity, "color");
 				AcceptEntityInput(entity, "LightOff");
-				if( g_iPlayerEnum[client] == 0 && GetEntProp(client, Prop_Send, "m_fEffects") == 4 )
+				if( g_iPlayerEnum[client] == 0 && GetEntProp(client, Prop_Send, "m_fEffects") & 4 )
 					CreateTimer(0.1, TimerLightOn, GetClientUserId(client));
 			}
-			else
-			{
-				DeleteLight(client);
-				CreateLight(client);
-			}
+			// else
+			// {
+				// CreateLight(client);
+			// }
 		}
 	}
 
@@ -521,7 +549,7 @@ int Menu_Light(Menu menu, MenuAction action, int client, int index)
 			menu.GetItem(index, sColor, sizeof(sColor));
 
 			g_iGlareColor[client] = GetColor(sColor);
-			g_iLightState[client] = GetEntProp(client, Prop_Send, "m_fEffects") == 4 ? LIGHT_ON : LIGHT_OFF;
+			g_iLightState[client] = GetEntProp(client, Prop_Send, "m_fEffects") & 4 ? LIGHT_ON : LIGHT_OFF;
 
 			if( g_iCvarCustom == 2 )
 			{
@@ -538,13 +566,12 @@ int Menu_Light(Menu menu, MenuAction action, int client, int index)
 				SetVariantString(sColor);
 				AcceptEntityInput(entity, "color");
 				AcceptEntityInput(entity, "LightOff");
-				if( g_iPlayerEnum[client] == 0 && GetEntProp(client, Prop_Send, "m_fEffects") == 4 )
+				if( g_iPlayerEnum[client] == 0 && GetEntProp(client, Prop_Send, "m_fEffects") & 4 )
 					CreateTimer(0.1, TimerLightOn, GetClientUserId(client));
 			}
 			else
 			{
-				DeleteLight(client);
-				CreateLight(client);
+				// CreateLight(client);
 			}
 		}
 	}
@@ -638,7 +665,7 @@ void IsAllowed()
 			{
 				if( IsClientInGame(i) )
 				{
-					OnClientConnected(i);
+					OnClientPutInServer(i);
 					OnClientCookiesCached(i);
 				}
 			}
@@ -655,6 +682,10 @@ void IsAllowed()
 
 		for( int i = 1; i <= MaxClients; i++ )
 		{
+			g_iLightState[i] = LIGHT_OFF;
+			g_iWeaponIndex[i] = 0;
+			g_iPlayerEnum[i] = 0;
+			g_iWeaponIndex[i] = 0;
 			DeleteLight(i);
 		}
 	}
@@ -737,6 +768,7 @@ void OnGamemode(const char[] output, int caller, int activator, float delay)
 // ====================================================================================================
 void HookEvents()
 {
+	HookEvent("round_end",						Event_RoundEnd,	EventHookMode_PostNoCopy);
 	HookEvent("round_start",					Event_RoundStart,	EventHookMode_PostNoCopy);
 	HookEvent("player_ledge_grab",				Event_LedgeGrab);
 	HookEvent("revive_begin",					Event_ReviveStart);
@@ -759,6 +791,7 @@ void HookEvents()
 
 void UnhookEvents()
 {
+	UnhookEvent("round_end",					Event_RoundEnd,	EventHookMode_PostNoCopy);
 	UnhookEvent("round_start",					Event_RoundStart,	EventHookMode_PostNoCopy);
 	UnhookEvent("player_ledge_grab",			Event_LedgeGrab);
 	UnhookEvent("revive_begin",					Event_ReviveStart);
@@ -779,9 +812,17 @@ void UnhookEvents()
 	}
 }
 
+void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
+{
+	for( int i = 1; i <= MaxClients; i++ )
+	{
+		DeleteLight(i);
+	}
+}
+
 void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
-	for( int i = 1; i <= MAXPLAYERS; i++ )
+	for( int i = 1; i <= MaxClients; i++ )
 	{
 		g_iPlayerEnum[i] = 0;
 		g_iWeaponIndex[i] = 0;
@@ -811,7 +852,9 @@ void Event_BlockStart(Event event, const char[] name, bool dontBroadcast)
 	{
 		int client = GetClientOfUserId(event.GetInt("victim"));
 		if( client > 0 )
+		{
 			g_iPlayerEnum[client] |= ENUM_BLOCKED;
+		}
 	}
 }
 
@@ -819,50 +862,66 @@ void Event_BlockEnd(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("victim"));
 	if( client > 0 )
+	{
 		g_iPlayerEnum[client] &= ~ENUM_BLOCKED;
+	}
 }
 
 void Event_BlockHunter(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("victim"));
 	if( client > 0 )
+	{
 		g_iPlayerEnum[client] |= ENUM_POUNCED;
+	}
 }
 
 void Event_BlockEndHunt(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("victim"));
 	if( client > 0 )
+	{
 		g_iPlayerEnum[client] &= ~ENUM_POUNCED;
+	}
 }
 
 void Event_LedgeGrab(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
 	if( client > 0 )
+	{
 		g_iPlayerEnum[client] |= ENUM_ONLEDGE;
+	}
 }
 
 void Event_ReviveStart(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("subject"));
 	if( client > 0 )
+	{
 		g_iPlayerEnum[client] |= ENUM_INREVIVE;
+	}
 
 	client = GetClientOfUserId(event.GetInt("userid"));
 	if( client > 0 )
+	{
 		g_iPlayerEnum[client] |= ENUM_INREVIVE;
+	}
 }
 
 void Event_ReviveEnd(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("subject"));
 	if( client > 0 )
+	{
 		g_iPlayerEnum[client] &= ~ENUM_INREVIVE;
+	}
 
 	client = GetClientOfUserId(event.GetInt("userid"));
 	if( client > 0 )
+	{
 		g_iPlayerEnum[client] &= ~ENUM_INREVIVE;
+	}
 }
 
 void Event_ReviveSuccess(Event event, const char[] name, bool dontBroadcast)
@@ -876,7 +935,9 @@ void Event_ReviveSuccess(Event event, const char[] name, bool dontBroadcast)
 
 	client = GetClientOfUserId(event.GetInt("userid"));
 	if( client > 0 )
+	{
 		g_iPlayerEnum[client] &= ~ENUM_INREVIVE;
+	}
 }
 
 void Event_Unblock(Event event, const char[] name, bool dontBroadcast)
@@ -884,8 +945,11 @@ void Event_Unblock(Event event, const char[] name, bool dontBroadcast)
 	int client = GetClientOfUserId(event.GetInt("userid"));
 	if( client > 0)
 	{
+		DeleteLight(client);
+		g_iWeaponIndex[client] = 0;
 		g_iPlayerEnum[client] = 0;
 		g_bDetected[client] = false;
+		delete g_hTimerCreate[client];
 	}
 }
 
@@ -924,7 +988,7 @@ Action TimerDetect(Handle timer)
 	}
 
 	return Plugin_Continue;
-}	
+}
 
 public void TP_OnThirdPersonChanged(int client, bool bIsThirdPerson)
 {
@@ -948,7 +1012,11 @@ void SetView(int client, bool bSetView)
 {
 	g_bDetected[client] = bSetView;
 	DeleteLight(client);
-	CreateLight(client);
+	
+	if( g_iLightState[client] == LIGHT_ON )
+	{
+		CreateLight(client);
+	}
 }
 
 
@@ -962,89 +1030,83 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 	{
 		if( g_iLightState[client] == LIGHT_DEFAULT ) return Plugin_Continue;
 
-		int entity = g_iLightIndex[client];
-
 		if( GetClientTeam(client) == 2 && IsPlayerAlive(client) && (g_iCvarBots || !IsFakeClient(client)) )
 		{
-			if( IsValidEntRef(entity) == false )
+			// Last weapon or player model changed.
+			int active = GetEntPropEnt(client, Prop_Data, "m_hActiveWeapon");
+
+			if( g_iWeaponIndex[client] != active )
 			{
-				g_iLightState[client] = LIGHT_ON;
-				CreateLight(client);
+				g_iWeaponIndex[client] = active;
+
+				// No weapon, turn off light.
+				if( active == -1 )
+				{
+					g_iPlayerEnum[client] |= ENUM_BLOCK;
+					g_iLightState[client] = LIGHT_OFF;
+					DeleteLight(client);
+					return Plugin_Continue;
+				}
+
+				g_iPlayerEnum[client] &= ~ENUM_BLOCK;
+
+				char sTemp[32];
+				GetClientWeapon(client, sTemp, sizeof(sTemp));
+
+				int val;
+				if( g_hWeapons.GetValue(sTemp[7], val) == false )
+				{
+					g_iPlayerEnum[client] |= ENUM_BLOCK;
+				}
+
+				// Re-attach to different gun
+				int entity = g_iLightIndex[client];
+				if( g_iPlayerEnum[client] == 0 && IsValidEntRef(entity) )
+				{
+					int bone = GetEntPropEnt(entity, Prop_Send, "moveparent");
+					if( bone == -1 ) bone = Attachments_GetWorldModel(client, active);
+
+					SetVariantString("!activator");
+					AcceptEntityInput(entity, "SetParent", bone);
+					SetVariantString(ATTACHMENT_POINT);
+					AcceptEntityInput(entity, "SetParentAttachment", bone, bone);
+
+					TeleportEntity(entity, NULL_VECTOR, view_as<float>({-90.0, 0.0, 0.0}), NULL_VECTOR);
+				}
+			}
+			else if( GetEntProp(client, Prop_Send, "m_usingMountedWeapon") != 0 )
+			{
+				g_iPlayerEnum[client] |= ENUM_MINIGUN;
 			}
 			else
 			{
-				// Last weapon or player model changed.
-				int active = GetEntPropEnt(client, Prop_Data, "m_hActiveWeapon");
+				g_iPlayerEnum[client] &= ~ENUM_MINIGUN;
+			}
 
-				if( g_iWeaponIndex[client] != active )
+			// Light on, else off
+			if( g_iPlayerEnum[client] == 0 && GetEntProp(client, Prop_Send, "m_fEffects") & 4 )
+			{
+				if( g_iLightState[client] == LIGHT_OFF )
 				{
-					g_iWeaponIndex[client] = active;
-
-					// No weapon, turn off light.
-					if( active == -1 )
-					{
-						g_iPlayerEnum[client] |= ENUM_BLOCK;
-						AcceptEntityInput(entity, "LightOff");
-						g_iLightState[client] = LIGHT_OFF;
-						return Plugin_Continue;
-					}
-
-					g_iPlayerEnum[client] &= ~ENUM_BLOCK;
-
-					char sTemp[32];
-					GetClientWeapon(client, sTemp, sizeof(sTemp));
-
-					int val;
-					if( g_hWeapons.GetValue(sTemp[7], val) == false )
-					{
-						g_iPlayerEnum[client] |= ENUM_BLOCK;
-					}
-
-					// Re-attach to different gun
-					if( g_iPlayerEnum[client] == 0 )
-					{
-						int bone = GetEntPropEnt(entity, Prop_Send, "moveparent");
-						if( bone == -1 ) bone = Attachments_GetWorldModel(client, active);
-
-						SetVariantString("!activator");
-						AcceptEntityInput(entity, "SetParent", bone);
-						SetVariantString(ATTACHMENT_POINT);
-						AcceptEntityInput(entity, "SetParentAttachment", bone, bone);
-
-						TeleportEntity(entity, NULL_VECTOR, view_as<float>({-90.0, 0.0, 0.0}), NULL_VECTOR);
-					}
+					g_iLightState[client] = LIGHT_ON;
+					CreateLight(client);
 				}
-				else if( GetEntProp(client, Prop_Send, "m_usingMountedWeapon") != 0 )
+			}
+			else
+			{
+				if( g_iLightState[client] == LIGHT_ON )
 				{
-					g_iPlayerEnum[client] |= ENUM_MINIGUN;
-				}
-				else
-				{
-					g_iPlayerEnum[client] &= ~ENUM_MINIGUN;
-				}
-
-				if( g_iPlayerEnum[client] == 0 && GetEntProp(client, Prop_Send, "m_fEffects") == 4 )
-				{
-					if( g_iLightState[client] == LIGHT_OFF )
-					{
-						AcceptEntityInput(entity, "LightOn");
-						g_iLightState[client] = LIGHT_ON;
-					}
-				}
-				else
-				{
-					if( g_iLightState[client] == LIGHT_ON )
-					{
-						AcceptEntityInput(entity, "LightOff");
-						g_iLightState[client] = LIGHT_OFF;
-					}
+					g_iLightState[client] = LIGHT_OFF;
+					DeleteLight(client);
 				}
 			}
 		}
 		else
 		{
-			if( IsValidEntRef(entity) == true )
+			if( IsValidEntRef(g_iLightIndex[client]) == true )
+			{
 				DeleteLight(client);
+			}
 		}
 	}
 
@@ -1053,33 +1115,52 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 
 public void Attachments_OnWeaponSwitch(int client, int weapon, int ent_views, int ent_world)
 {
-	// Turn off between change to prevent flash at players feet
-	int entity = g_iLightIndex[client];
-	if( IsValidEntRef(entity) )
+	DeleteLight(client);
+
+	if( g_iLightState[client] == LIGHT_ON )
 	{
-		AcceptEntityInput(entity, "LightOff");
-		g_iLightState[client] = LIGHT_OFF;
+		CreateLight(client);
 	}
 }
 
 void DeleteLight(int client)
 {
+	delete g_hTimerCreate[client];
+
 	int entity = g_iLightIndex[client];
 	g_iLightIndex[client] = 0;
 
 	if( IsValidEntRef(entity) )
 	{
+		AcceptEntityInput(entity, "ClearParent");
 		RemoveEntity(entity);
 	}
 }
 
 void CreateLight(int client)
 {
-	int entity = g_iLightIndex[client];
-	if( IsValidEntRef(entity) )
-		return;
+	DeleteLight(client);
 
-	entity = CreateEntityByName("beam_spotlight");
+	delete g_hTimerCreate[client];
+
+	g_hTimerCreate[client] = CreateTimer(0.3, TimerCreate, GetClientUserId(client));
+}
+
+Action TimerCreate(Handle timer, int client)
+{
+	client = GetClientOfUserId(client);
+	if( client && IsClientInGame(client) )
+	{
+		g_hTimerCreate[client] = null;
+		CreateBeam(client);
+	}
+
+	return Plugin_Continue;
+}
+
+void CreateBeam(int client)
+{
+	int entity = CreateEntityByName("beam_spotlight");
 	if( entity == -1)
 		return;
 
