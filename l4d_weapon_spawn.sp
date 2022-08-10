@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.11"
+#define PLUGIN_VERSION 		"1.12"
 
 /*======================================================================================
 	Plugin Info:
@@ -32,11 +32,14 @@
 ========================================================================================
 	Change Log:
 
-1.11 (04-June-2022)
+1.12 (10-Aug-2022)
+	- Fixed the plugin attempting to back up the data file even after converting to version 2 format. Thanks to "HarryPotter" for reporting.
+
+1.11 (04-Jun-2022)
 	- Fixed not updating the full data config if an index was missing. Now throws errors to warn about missing indexes.
 	- Plugin will auto backs up the previous data config before updating it.
 
-1.10 (04-June-2022)
+1.10 (04-Jun-2022)
 	- L4D2: Plugin now automatically converts old /data/ configs to use the new index values. Previous version was spawning the wrong types.
 	- Thanks to "KoMiKoZa" for reporting.
 
@@ -393,13 +396,13 @@ public void OnPluginStart()
 			KeyValues hFile = new KeyValues("spawns");
 			if( hFile.ImportFromFile(sPath) )
 			{
-				char sNew[PLATFORM_MAX_PATH];
-				BuildPath(Path_SM, sNew, sizeof(sNew), "%s.backup", CONFIG_SPAWNS);
-				RenameFile(sNew, sPath);
-
 				// Version check
 				if( hFile.GetNum("version", 1) != 2 )
 				{
+					char sNew[PLATFORM_MAX_PATH];
+					BuildPath(Path_SM, sNew, sizeof(sNew), "%s.backup", CONFIG_SPAWNS);
+					RenameFile(sNew, sPath);
+
 					int iNew[] = { 2, 6, 13, 10, 8, 0, 20, 21, 25, 23, 9, 5, 18, 17, 3, 4, 7, 11, 12, 14, 15, 16, 19, 1, 22, 26, 27, 28, 24 };
 
 					hFile.GotoFirstSubKey(false);
