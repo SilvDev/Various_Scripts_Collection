@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.44"
+#define PLUGIN_VERSION 		"1.45"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.45 (10-Aug-2022)
+	- Changed command "sm_del" to no longer delete clients.
 
 1.44 (17-Jul-2022)
 	- Fixed compile warnings on SM 1.11 when using SMLib.
@@ -1766,7 +1769,7 @@ Action CmdDel(int client, int args)
 	}
 
 	int entity = GetClientAimTarget(client, false);
-	if( entity > 0 )
+	if( entity > MaxClients )
 		RemoveEntity(entity);
 	return Plugin_Handled;
 }
