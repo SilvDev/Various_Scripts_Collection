@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION		"1.8"
+#define PLUGIN_VERSION		"1.9"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,10 @@
 
 ========================================================================================
 	Change Log:
+
+1.9 (10-Aug-2022)
+	- Fixed weapons not following the "l4d_common_health_headshot" scale value to prevent insta-kill headshots.
+	- Fixed client crashes related to changing headless zombies into half-headless. Thanks to "Toranks" for reporting and testing.
 
 1.8 (29-May-2022)
 	- Fixed errors in L4D1 about "m_iRequestedWound1" missing.
@@ -132,11 +136,11 @@
 
 ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarChainsaw, g_hCvarChainsaw2, g_hCvarHeadshot, g_hCvarHeadshotMelee, g_hCvarHeadshotOne, g_hCvarLauncher, g_hCvarLauncher2, g_hCvarMelee, g_hCvarMelee2, g_hCvarOxygen, g_hCvarOxygen2, g_hCvarPipebomb, g_hCvarPipebomb2, g_hCvarPropane, g_hCvarPropane2;
 ConVar g_hCvarHealthCeda, g_hCvarHealthClown, g_hCvarHealthFallen, g_hCvarHealthJimmy, g_hCvarHealthMud, g_hCvarHealthRiot, g_hCvarHealthRoad;
-bool g_bCvarAllow, g_bLeft4Dead2, g_bPipebombIgnore, g_bCvarHeadshotOne;
+bool g_bCvarAllow, g_bLeft4Dead2, g_bTraceAttack, g_bPipebombIgnore, g_bCvarHeadshotOne;
 int g_iMaxHealth[2048], g_iPropType, g_iCvarChainsaw2, g_iCvarLauncher2, g_iCvarMelee2, g_iCvarOxygen2, g_iCvarPipebomb2, g_iCvarPropane2;
 int g_iCvarHealthCeda, g_iCvarHealthClown, g_iCvarHealthFallen, g_iCvarHealthJimmy, g_iCvarHealthMud, g_iCvarHealthRiot, g_iCvarHealthRoad;
 float g_fLastHit[2048][2048], g_fMelee[MAXPLAYERS+1], g_fGameTime, g_fCvarChainsaw, g_fCvarHeadshot, g_fCvarHeadshotMelee, g_fCvarLauncher, g_fCvarMelee, g_fCvarOxygen, g_fCvarPipebomb, g_fCvarPropane;
-int g_iFrameTick, g_iFrameCount;
+
 
 
 // ====================================================================================================
@@ -308,6 +312,7 @@ void IsAllowed()
 		int entity = -1;
 		while( (entity = FindEntityByClassname(entity, "infected")) != INVALID_ENT_REFERENCE )
 		{
+			SDKHook(entity, SDKHook_TraceAttack, OnTraceAttack);
 			SDKHook(entity, SDKHook_OnTakeDamageAlive, OnTakeDamage);
 
 			g_iMaxHealth[entity] = GetEntProp(entity, Prop_Data, "m_iHealth");
@@ -333,6 +338,7 @@ void IsAllowed()
 		int entity = -1;
 		while( (entity = FindEntityByClassname(entity, "infected")) != INVALID_ENT_REFERENCE )
 		{
+			SDKUnhook(entity, SDKHook_TraceAttack, OnTraceAttack);
 			SDKUnhook(entity, SDKHook_OnTakeDamageAlive, OnTakeDamage);
 		}
 	}
@@ -532,6 +538,7 @@ void SpawnPost(int entity)
 		}
 	}
 
+	SDKHook(entity, SDKHook_TraceAttack, OnTraceAttack);
 	SDKHook(entity, SDKHook_OnTakeDamageAlive, OnTakeDamage);
 
 	g_iMaxHealth[entity] = GetEntProp(entity, Prop_Data, "m_iHealth");
@@ -540,6 +547,23 @@ void SpawnPost(int entity)
 	{
 		g_fLastHit[entity][x] = 0.0;
 	}
+}
+
+Action OnTraceAttack(int victim, int &attacker, int &inflictor, float &damage, int &damagetype, int &ammotype, int hitbox, int hitgroup)
+{
+	g_bTraceAttack = true;
+
+	// Change the hitgroup here, so it's registered when calling OnTakeDamage, otherwise we won't get the accurate value 
+	SetEntProp(victim, Prop_Data, "m_LastHitGroup", hitgroup);
+
+	// Fire this here, but without changing damage, so that wounds can be set as early as possible (TraceAttack = before wounds are set, TraceAttack post = after wounds are set)
+	// This way the server doesn't crash or update the wounds conflicting with our changes
+	OnTakeDamage(victim, attacker, inflictor, damage, damagetype);
+
+	// Allow damage again
+	g_bTraceAttack = false;
+
+	return Plugin_Continue;
 }
 
 Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
@@ -658,12 +682,15 @@ Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, in
 					return Plugin_Continue;
 				}
 
-				// Prevent multiple hits from the same weapon in the same few frames otherwise we affect multiple times
-				switch( type )
+				if( !g_bTraceAttack )
 				{
-					case 1:		g_fLastHit[victim][inflictor] = GetGameTime() + 0.5;	// Melee, block same swing
-					case 2:		g_fLastHit[victim][inflictor] = GetGameTime();			// Chainsaw, block same frame, allow multiple hits
-					default:	g_fLastHit[victim][inflictor] = GetGameTime() + 0.1;	// Others, block close hits (just in case), allow multiple hits
+					// Prevent multiple hits from the same weapon in the same few frames otherwise we affect multiple times
+					switch( type )
+					{
+						case 1:		g_fLastHit[victim][inflictor] = GetGameTime() + 0.5;	// Melee, block same swing
+						case 2:		g_fLastHit[victim][inflictor] = GetGameTime();			// Chainsaw, block same frame, allow multiple hits
+						default:	g_fLastHit[victim][inflictor] = GetGameTime() + 0.1;	// Others, block close hits (just in case), allow multiple hits
+					}
 				}
 
 				// Prevent certain gibbed wounds, e.g. to stop legless zombies running around after multiple melee hits or explosions
@@ -673,8 +700,11 @@ Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, in
 				}
 
 				// Change damage
-				return Plugin_Changed;
-			} else {
+				if( !g_bTraceAttack )
+					return Plugin_Changed;
+			}
+			else
+			{
 				// Headshot scale
 				if( g_fCvarHeadshot && attacker >= 1 && attacker <= MaxClients && GetClientTeam(attacker) == 2 && GetEntProp(victim, Prop_Data, "m_LastHitGroup") == 1 )
 				{
@@ -685,19 +715,24 @@ Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, in
 						DoWounds(victim);
 					}
 
-					return Plugin_Changed;
+					if( !g_bTraceAttack )
+						return Plugin_Changed;
 				}
 			}
-		} else {
+		}
+		else
+		{
 			// Prevent insta-kill from headshots - triggers on multiple hits with 0.0 damage killing them.
-			if( health - damage > 0.0 && GetEntProp(victim, Prop_Data, "m_LastHitGroup") == 1 )
+			if( !g_bTraceAttack && g_fCvarHeadshot && health - damage > 0.0 && GetEntProp(victim, Prop_Data, "m_LastHitGroup") == 1 )
 			{
 				SetEntProp(victim, Prop_Data, "m_LastHitGroup", 2);
 			}
 		}
-	} else {
+	}
+	else
+	{
 		// Block insta-kill with melee weapon (prevents common death when multiple are hit at once):
-		if( g_bLeft4Dead2 && g_fCvarMelee && attacker >= 1 && attacker <= MaxClients && GetGameTime() - g_fMelee[attacker] < 0.6 )
+		if( !g_bTraceAttack && g_bLeft4Dead2 && g_fCvarMelee && attacker >= 1 && attacker <= MaxClients && GetGameTime() - g_fMelee[attacker] < 0.6 )
 		{
 			float test = GetEntProp(victim, Prop_Data, "m_iHealth") - damage;
 
@@ -709,9 +744,27 @@ Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, in
 	}
 
 	// Prevent insta-kill from headshots - for weapons etc
-	if( !g_bCvarHeadshotOne && GetEntProp(victim, Prop_Data, "m_LastHitGroup") == 1 && GetEntProp(victim, Prop_Data, "m_iHealth") - damage > 0.0 )
+	if( !g_bCvarHeadshotOne && GetEntProp(victim, Prop_Data, "m_LastHitGroup") == 1 )
 	{
-		SetEntProp(victim, Prop_Data, "m_LastHitGroup", 2);
+		bool changed;
+
+		// Headshot scale
+		if( g_fCvarHeadshot && attacker >= 1 && attacker <= MaxClients && GetClientTeam(attacker) == 2)
+		{
+			damage *= g_fCvarHeadshot;
+			changed = true;
+		}
+
+		// Prevent headless and insta-kill
+		if( GetEntProp(victim, Prop_Data, "m_iHealth") - damage > 0.0 )
+		{
+			DoWounds(victim);
+		}
+
+		if( changed && !g_bTraceAttack )
+		{
+			return Plugin_Changed;
+		}
 	}
 
 	return Plugin_Continue;
@@ -719,44 +772,19 @@ Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, in
 
 void DoWounds(int victim)
 {
-	// Prevent insta-kill from headshots
+	bool headless;
+
 	if( GetEntProp(victim, Prop_Data, "m_LastHitGroup") == 1 )
 	{
+		headless = true;
+
+		// Prevent insta-kill from headshots
 		SetEntProp(victim, Prop_Data, "m_LastHitGroup", 2);
 	}
 
-	// Prevent triggering multiple wounds in the same frame
-	DoTickTest(victim);
-}
 
-void DoTickTest(int victim)
-{
-	if( g_iFrameTick == GetGameTickCount() )
-	{
-		g_iFrameCount++;
-	} else {
-		g_iFrameCount = 0;
-		g_iFrameTick = GetGameTickCount();
-	}
 
-	if( g_iFrameCount >= 2)
-	{
-		RequestFrame(OnFrameWounds, EntIndexToEntRef(victim));
-	} else {
-		DoWoundsMain(victim);
-	}
-}
-
-void OnFrameWounds(int victim)
-{
-	if( EntRefToEntIndex(victim) != INVALID_ENT_REFERENCE )
-	{
-		DoTickTest(victim);
-	}
-}
-
-void DoWoundsMain(int victim)
-{
+	// Main wounds changing routine to prevent: armless, legless, headless
 	int wound1 = GetEntProp(victim, Prop_Send, "m_iRequestedWound1");
 	int wound2 = GetEntProp(victim, Prop_Send, "m_iRequestedWound2");
 	int gender = GetEntProp(victim, Prop_Send, "m_Gender");
@@ -775,11 +803,20 @@ void DoWoundsMain(int victim)
 					if( wound2 == -1 )
 						SetEntProp(victim, Prop_Send, "m_iRequestedWound2", wound);
 				}
+				/*
 				case HEAD_1, HEAD_2:
 				{
 					SetEntProp(victim, Prop_Send, "m_iRequestedWound1", 6);
 					if( wound2 == -1 )
 						SetEntProp(victim, Prop_Send, "m_iRequestedWound2", 6);
+				}
+				*/
+				case -1:
+				{
+					if( headless )
+					{
+						SetHeadless(victim);
+					}
 				}
 			}
 
@@ -793,11 +830,20 @@ void DoWoundsMain(int victim)
 						SetEntProp(victim, Prop_Send, "m_iRequestedWound1", wound);
 					SetEntProp(victim, Prop_Send, "m_iRequestedWound2", wound);
 				}
+				/*
 				case HEAD_1, HEAD_2:
 				{
 					if( wound1 == -1 )
 						SetEntProp(victim, Prop_Send, "m_iRequestedWound1", 6);
 					SetEntProp(victim, Prop_Send, "m_iRequestedWound2", 6);
+				}
+				*/
+				case -1:
+				{
+					if( headless )
+					{
+						SetHeadless(victim);
+					}
 				}
 			}
 		}
@@ -814,11 +860,20 @@ void DoWoundsMain(int victim)
 					if( wound2 == -1 )
 						SetEntProp(victim, Prop_Send, "m_iRequestedWound2", wound);
 				}
+				/*
 				case HEAD_1, HEAD_2:
 				{
 					SetEntProp(victim, Prop_Send, "m_iRequestedWound1", 6);
 					if( wound2 == -1 )
 						SetEntProp(victim, Prop_Send, "m_iRequestedWound2", 6);
+				}
+				*/
+				case -1:
+				{
+					if( headless )
+					{
+						SetHeadless(victim);
+					}
 				}
 			}
 
@@ -832,11 +887,20 @@ void DoWoundsMain(int victim)
 						SetEntProp(victim, Prop_Send, "m_iRequestedWound1", wound);
 					SetEntProp(victim, Prop_Send, "m_iRequestedWound2", wound);
 				}
+				/*
 				case HEAD_1, HEAD_2:
 				{
 					if( wound1 == -1 )
 						SetEntProp(victim, Prop_Send, "m_iRequestedWound1", 6);
 					SetEntProp(victim, Prop_Send, "m_iRequestedWound2", 6);
+				}
+				*/
+				case -1:
+				{
+					if( headless )
+					{
+						SetHeadless(victim);
+					}
 				}
 			}
 		}
@@ -895,4 +959,14 @@ void DoWoundsMain(int victim)
 			}
 		}
 	}
+}
+
+void SetHeadless(int victim)
+{
+	// Set headless to half-head wounds
+	if( GetEntProp(victim, Prop_Send, "m_iRequestedWound1") == -1 )
+		SetEntProp(victim, Prop_Send, "m_iRequestedWound1", 6);
+
+	if( GetEntProp(victim, Prop_Send, "m_iRequestedWound2") == -1 )
+		SetEntProp(victim, Prop_Send, "m_iRequestedWound2", 6);
 }
