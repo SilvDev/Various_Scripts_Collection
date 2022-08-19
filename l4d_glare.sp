@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"2.12"
+#define PLUGIN_VERSION 		"2.13"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+2.13 (19-Aug-2022)
+	- Changes attempting to fix invalid handles. Thanks to "gongo" and "ur5efj" for reporting.
 
 2.12 (04-Aug-2022)
 	- Changes to fix floating beams and broken beams, mostly in L4D1. Thanks to "gongo" for reporting and help testing.
@@ -315,7 +318,6 @@ public void OnPluginEnd()
 		g_iWeaponIndex[i] = 0;
 		g_iPlayerEnum[i] = 0;
 		g_iWeaponIndex[i] = 0;
-		delete g_hTimerCreate[i];
 
 		DeleteLight(i);
 	}
@@ -323,7 +325,6 @@ public void OnPluginEnd()
 
 public void OnClientDisconnect(int client)
 {
-	delete g_hTimerCreate[client];
 	DeleteLight(client);
 }
 
@@ -569,10 +570,10 @@ int Menu_Light(Menu menu, MenuAction action, int client, int index)
 				if( g_iPlayerEnum[client] == 0 && GetEntProp(client, Prop_Send, "m_fEffects") & 4 )
 					CreateTimer(0.1, TimerLightOn, GetClientUserId(client));
 			}
-			else
-			{
+			// else
+			// {
 				// CreateLight(client);
-			}
+			// }
 		}
 	}
 
@@ -592,6 +593,7 @@ public void OnMapStart()
 public void OnMapEnd()
 {
 	g_bMapStarted = false;
+	OnPluginEnd();
 }
 
 public void OnConfigsExecuted()
@@ -768,8 +770,8 @@ void OnGamemode(const char[] output, int caller, int activator, float delay)
 // ====================================================================================================
 void HookEvents()
 {
-	HookEvent("round_end",						Event_RoundEnd,	EventHookMode_PostNoCopy);
-	HookEvent("round_start",					Event_RoundStart,	EventHookMode_PostNoCopy);
+	HookEvent("round_end",						Event_RoundEnd, EventHookMode_PostNoCopy);
+	HookEvent("round_start",					Event_RoundStart, EventHookMode_PostNoCopy);
 	HookEvent("player_ledge_grab",				Event_LedgeGrab);
 	HookEvent("revive_begin",					Event_ReviveStart);
 	HookEvent("revive_end",						Event_ReviveEnd);
@@ -791,8 +793,8 @@ void HookEvents()
 
 void UnhookEvents()
 {
-	UnhookEvent("round_end",					Event_RoundEnd,	EventHookMode_PostNoCopy);
-	UnhookEvent("round_start",					Event_RoundStart,	EventHookMode_PostNoCopy);
+	UnhookEvent("round_end",					Event_RoundEnd, EventHookMode_PostNoCopy);
+	UnhookEvent("round_start",					Event_RoundStart, EventHookMode_PostNoCopy);
 	UnhookEvent("player_ledge_grab",			Event_LedgeGrab);
 	UnhookEvent("revive_begin",					Event_ReviveStart);
 	UnhookEvent("revive_end",					Event_ReviveEnd);
@@ -814,10 +816,7 @@ void UnhookEvents()
 
 void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
-	for( int i = 1; i <= MaxClients; i++ )
-	{
-		DeleteLight(i);
-	}
+	OnPluginEnd();
 }
 
 void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
@@ -851,7 +850,7 @@ void Event_BlockStart(Event event, const char[] name, bool dontBroadcast)
 	if( g_bCvarAllow )
 	{
 		int client = GetClientOfUserId(event.GetInt("victim"));
-		if( client > 0 )
+		if( client )
 		{
 			g_iPlayerEnum[client] |= ENUM_BLOCKED;
 		}
@@ -861,7 +860,7 @@ void Event_BlockStart(Event event, const char[] name, bool dontBroadcast)
 void Event_BlockEnd(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("victim"));
-	if( client > 0 )
+	if( client )
 	{
 		g_iPlayerEnum[client] &= ~ENUM_BLOCKED;
 	}
@@ -870,7 +869,7 @@ void Event_BlockEnd(Event event, const char[] name, bool dontBroadcast)
 void Event_BlockHunter(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("victim"));
-	if( client > 0 )
+	if( client )
 	{
 		g_iPlayerEnum[client] |= ENUM_POUNCED;
 	}
@@ -879,7 +878,7 @@ void Event_BlockHunter(Event event, const char[] name, bool dontBroadcast)
 void Event_BlockEndHunt(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("victim"));
-	if( client > 0 )
+	if( client )
 	{
 		g_iPlayerEnum[client] &= ~ENUM_POUNCED;
 	}
@@ -888,7 +887,7 @@ void Event_BlockEndHunt(Event event, const char[] name, bool dontBroadcast)
 void Event_LedgeGrab(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
-	if( client > 0 )
+	if( client )
 	{
 		g_iPlayerEnum[client] |= ENUM_ONLEDGE;
 	}
@@ -897,13 +896,13 @@ void Event_LedgeGrab(Event event, const char[] name, bool dontBroadcast)
 void Event_ReviveStart(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("subject"));
-	if( client > 0 )
+	if( client )
 	{
 		g_iPlayerEnum[client] |= ENUM_INREVIVE;
 	}
 
 	client = GetClientOfUserId(event.GetInt("userid"));
-	if( client > 0 )
+	if( client )
 	{
 		g_iPlayerEnum[client] |= ENUM_INREVIVE;
 	}
@@ -912,13 +911,13 @@ void Event_ReviveStart(Event event, const char[] name, bool dontBroadcast)
 void Event_ReviveEnd(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("subject"));
-	if( client > 0 )
+	if( client )
 	{
 		g_iPlayerEnum[client] &= ~ENUM_INREVIVE;
 	}
 
 	client = GetClientOfUserId(event.GetInt("userid"));
-	if( client > 0 )
+	if( client )
 	{
 		g_iPlayerEnum[client] &= ~ENUM_INREVIVE;
 	}
@@ -927,14 +926,14 @@ void Event_ReviveEnd(Event event, const char[] name, bool dontBroadcast)
 void Event_ReviveSuccess(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("subject"));
-	if( client > 0 )
+	if( client )
 	{
 		g_iPlayerEnum[client] &= ~ENUM_INREVIVE;
 		g_iPlayerEnum[client] &= ~ENUM_ONLEDGE;
 	}
 
 	client = GetClientOfUserId(event.GetInt("userid"));
-	if( client > 0 )
+	if( client )
 	{
 		g_iPlayerEnum[client] &= ~ENUM_INREVIVE;
 	}
@@ -943,13 +942,12 @@ void Event_ReviveSuccess(Event event, const char[] name, bool dontBroadcast)
 void Event_Unblock(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
-	if( client > 0)
+	if( client )
 	{
 		DeleteLight(client);
 		g_iWeaponIndex[client] = 0;
 		g_iPlayerEnum[client] = 0;
 		g_bDetected[client] = false;
-		delete g_hTimerCreate[client];
 	}
 }
 
@@ -1141,8 +1139,6 @@ void CreateLight(int client)
 {
 	DeleteLight(client);
 
-	delete g_hTimerCreate[client];
-
 	g_hTimerCreate[client] = CreateTimer(0.3, TimerCreate, GetClientUserId(client));
 }
 
@@ -1151,9 +1147,10 @@ Action TimerCreate(Handle timer, int client)
 	client = GetClientOfUserId(client);
 	if( client && IsClientInGame(client) )
 	{
-		g_hTimerCreate[client] = null;
 		CreateBeam(client);
 	}
+
+	g_hTimerCreate[client] = null;
 
 	return Plugin_Continue;
 }
