@@ -1,6 +1,6 @@
 /*
 *	Heartbeat (Revive Fix - Post Revive Options)
-*	Copyright (C) 2021 Silvers
+*	Copyright (C) 2022 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.7"
+#define PLUGIN_VERSION 		"1.8"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,10 @@
 
 ========================================================================================
 	Change Log:
+
+1.8 (25-Aug-2022)
+	- Changes to fix warnings when compiling on SM 1.11.
+	- Fixed native "Heartbeat_GetRevives" return type wrongfully set as void instead of int.
 
 1.7 (31-Mar-2021)
 	- Added command "sm_heartbeat" to toggle or specify someone as black and white health status.
@@ -82,18 +86,18 @@ bool g_bHookedDamagePost[MAXPLAYERS+1];
 
 
 /**
- * Gets the revive count of a client.
- * @remarks:				Because this plugin overwrites "m_currentReviveCount" netprop in L4D1, this native allows you to get the actual revive value for clients.
+ * @brief Gets the revive count of a client.
+ * @remarks Because this plugin overwrites "m_currentReviveCount" netprop in L4D1, this native allows you to get the actual revive value for clients.
  *
  * @param client			Client index to affect.
  *
- * @noreturn
+ * @return					Number or revives
  */
-native void Heartbeat_GetRevives(int client);
+native int Heartbeat_GetRevives(int client);
 
 /**
- * Sets the revive count on a client.
- * @remarks:				Because this plugin overwrites "m_currentReviveCount" netprop in L4D1, this native allows you to set the actual revive value for clients.
+ * @brief Sets the revive count on a client.
+ * @remarks Because this plugin overwrites "m_currentReviveCount" netprop in L4D1, this native allows you to set the actual revive value for clients.
  *
  * @param client			Client index to affect.
  * @param reviveCount		The Survivors revive count.
@@ -216,7 +220,7 @@ public void OnPluginStart()
 	RegAdminCmd("sm_heartbeat", CmdHeatbeat, ADMFLAG_ROOT, "Set someone as black and white health status or toggle their state. Usage: sm_heartbeat [#userid|name] [state: 0=Healed. 1=Black and white.]");
 }
 
-public Action CmdHeatbeat(int client, int args)
+Action CmdHeatbeat(int client, int args)
 {
 	int state;
 
@@ -304,7 +308,7 @@ public Action CmdHeatbeat(int client, int args)
 	return Plugin_Handled;
 }
 
-public Action CommandListener(int client, const char[] command, int args)
+Action CommandListener(int client, const char[] command, int args)
 {
 	if( args > 0 )
 	{
@@ -316,14 +320,16 @@ public Action CommandListener(int client, const char[] command, int args)
 			ResetCount(client);
 		}
 	}
+
+	return Plugin_Continue;
 }
 
-public int Native_GetRevives(Handle plugin, int numParams)
+int Native_GetRevives(Handle plugin, int numParams)
 {
 	return g_iReviveCount[GetNativeCell(1)];
 }
 
-public int Native_SetRevives(Handle plugin, int numParams)
+int Native_SetRevives(Handle plugin, int numParams)
 {
 	int client = GetNativeCell(1);
 	g_iReviveCount[client] = GetNativeCell(2);
@@ -332,6 +338,8 @@ public int Native_SetRevives(Handle plugin, int numParams)
 	{
 		ReviveLogic(client, GetClientUserId(client));
 	}
+
+	return 0;
 }
 
 
@@ -344,12 +352,12 @@ public void OnConfigsExecuted()
 	IsAllowed();
 }
 
-public void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	IsAllowed();
 }
 
-public void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	GetCvars();
 }
@@ -376,20 +384,20 @@ void IsAllowed()
 	{
 		g_bCvarAllow = true;
 		HookEvent("bot_player_replace",		Event_BotReplace);
-		HookEvent("player_death",		Event_Spawned);
-		HookEvent("player_spawn",		Event_Spawned);
-		HookEvent("heal_success",		Event_Healed);
-		HookEvent("revive_success",		Event_Revive);
+		HookEvent("player_death",			Event_Spawned);
+		HookEvent("player_spawn",			Event_Spawned);
+		HookEvent("heal_success",			Event_Healed);
+		HookEvent("revive_success",			Event_Revive);
 	}
 
 	else if( g_bCvarAllow == true && (bCvarAllow == false || bAllowMode == false) )
 	{
 		g_bCvarAllow = false;
 		UnhookEvent("bot_player_replace",	Event_BotReplace);
-		UnhookEvent("player_death",		Event_Spawned);
-		UnhookEvent("player_spawn",		Event_Spawned);
-		UnhookEvent("heal_success",		Event_Healed);
-		UnhookEvent("revive_success",	Event_Revive);
+		UnhookEvent("player_death",			Event_Spawned);
+		UnhookEvent("player_spawn",			Event_Spawned);
+		UnhookEvent("heal_success",			Event_Healed);
+		UnhookEvent("revive_success",		Event_Revive);
 	}
 }
 
@@ -448,7 +456,7 @@ bool IsAllowedGameMode()
 	return true;
 }
 
-public void OnGamemode(const char[] output, int caller, int activator, float delay)
+void OnGamemode(const char[] output, int caller, int activator, float delay)
 {
 	if( strcmp(output, "OnCoop") == 0 )
 		g_iCurrentMode = 1;
@@ -495,7 +503,7 @@ float GetTempHealth(int client)
 	return fHealth < 0.0 ? 0.0 : fHealth;
 }
 
-public Action OnTakeDamagePost(int client, int &attacker, int &inflictor, float &damage, int &damagetype)
+Action OnTakeDamagePost(int client, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
 	if( g_iReviveCount[client] < g_iCvarVocal )
 	{
@@ -504,9 +512,11 @@ public Action OnTakeDamagePost(int client, int &attacker, int &inflictor, float 
 		SDKUnhook(client, SDKHook_OnTakeDamageAlivePost, OnTakeDamagePost);
 		g_bHookedDamagePost[client] = false;
 	}
+
+	return Plugin_Continue;
 }
 
-public Action OnTakeDamageMain(int client, int &attacker, int &inflictor, float &damage, int &damagetype)
+Action OnTakeDamageMain(int client, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
 	int health = GetClientHealth(client) + RoundToFloor(GetTempHealth(client));
 
@@ -534,6 +544,8 @@ public Action OnTakeDamageMain(int client, int &attacker, int &inflictor, float 
 			}
 		}
 	}
+
+	return Plugin_Continue;
 }
 
 
@@ -541,7 +553,7 @@ public Action OnTakeDamageMain(int client, int &attacker, int &inflictor, float 
 // ====================================================================================================
 //					EVENTS
 // ====================================================================================================
-public void Event_BotReplace(Event event, const char[] name, bool dontBroadcast)
+void Event_BotReplace(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
 	if( client )
@@ -552,7 +564,7 @@ public void Event_BotReplace(Event event, const char[] name, bool dontBroadcast)
 	}
 }
 
-public void Event_Spawned(Event event, const char[] name, bool dontBroadcast)
+void Event_Spawned(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
 	if( client )
@@ -564,13 +576,13 @@ public void Event_Spawned(Event event, const char[] name, bool dontBroadcast)
 	}
 }
 
-public void Event_Healed(Event event, const char[] name, bool dontBroadcast)
+void Event_Healed(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("subject"));
 	ResetCount(client);
 }
 
-public void Event_Revive(Event event, const char[] name, bool dontBroadcast)
+void Event_Revive(Event event, const char[] name, bool dontBroadcast)
 {
 	int userid;
 	if( (userid = event.GetInt("subject")) && event.GetInt("ledge_hang") == 0 )
