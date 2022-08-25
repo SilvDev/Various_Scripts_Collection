@@ -1,5 +1,5 @@
 /*
-*	Special Infected Stumble - Grenade Launcher
+*	Stumble - Grenade Launcher
 *	Copyright (C) 2022 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
@@ -18,19 +18,23 @@
 
 
 
-#define PLUGIN_VERSION 		"2.3"
+#define PLUGIN_VERSION 		"2.4"
 
 /*======================================================================================
 	Plugin Info:
 
-*	Name	:	[L4D2] Special Infected Stumble - Grenade Launcher
+*	Name	:	[L4D2] Stumble - Grenade Launcher
 *	Author	:	SilverShot
-*	Descrp	:	Stumbles Special Infected when hurt by a Grenade Launcher.
+*	Descrp	:	Stumbles Survivors, Special Infected and the Witch when hurt by a Grenade Launcher. Includes a damage multiplier cvar.
 *	Link	:	https://forums.alliedmods.net/showthread.php?t=322063
 *	Plugins	:	https://sourcemod.net/plugins.php?exact=exact&sortby=title&search=1&author=Silvers
 
 ========================================================================================
 	Change Log:
+
+2.4 (25-Aug-2022)
+	- Added cvar "l4d2_si_stumble_multiplier" to multiply against the damage received from the Grenade Launcher projectile.
+	- Renamed the plugin from "Special Infected Stumble - Grenade Launcher" to "Stumble - Grenade Launcher" for clarity.
 
 2.3 (10-Aug-2022)
 	- Added cvar "l4d2_si_stumble_witch" to stumble the Witch, especially for Realism or Expert difficulty. Thanks to "HarryPotter" for adding parts.
@@ -75,9 +79,9 @@
 #define CVAR_FLAGS			FCVAR_NOTIFY
 
 
-ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarRange, g_hCvarSelf, g_hCvarSpecial, g_hCvarSurvivors, g_hCvarWitch;
+ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarMulti, g_hCvarRange, g_hCvarSelf, g_hCvarSpecial, g_hCvarSurvivors, g_hCvarWitch;
 bool g_bCvarAllow, g_bMapStarted, g_bLateLoad, g_bCvarSelf, g_bCvarSurvivors, g_bCvarWitch;
-float g_fCvarRange;
+float g_fCvarMulti, g_fCvarRange;
 int g_iCvarSpecial;
 
 
@@ -87,9 +91,9 @@ int g_iCvarSpecial;
 // ====================================================================================================
 public Plugin myinfo =
 {
-	name = "[L4D2] Special Infected Stumble - Grenade Launcher",
+	name = "[L4D2] Stumble - Grenade Launcher",
 	author = "SilverShot",
-	description = "Stumbles Special Infected when hurt by a Grenade Launcher.",
+	description = "Stumbles Survivors, Special Infected and the Witch when hurt by a Grenade Launcher. Includes a damage multiplier cvar.",
 	version = PLUGIN_VERSION,
 	url = "https://forums.alliedmods.net/showthread.php?t=322063"
 }
@@ -116,6 +120,7 @@ public void OnPluginStart()
 	g_hCvarModes =			CreateConVar(	"l4d2_si_stumble_modes",			"",					"Turn on the plugin in these game modes, separate by commas (no spaces). (Empty = all).", CVAR_FLAGS );
 	g_hCvarModesOff =		CreateConVar(	"l4d2_si_stumble_modes_off",		"",					"Turn off the plugin in these game modes, separate by commas (no spaces). (Empty = none).", CVAR_FLAGS );
 	g_hCvarModesTog =		CreateConVar(	"l4d2_si_stumble_modes_tog",		"0",				"Turn on the plugin in these game modes. 0=All, 1=Coop, 2=Survival, 4=Versus, 8=Scavenge. Add numbers together.", CVAR_FLAGS );
+	g_hCvarMulti =			CreateConVar(	"l4d2_si_stumble_multiplier",		"1.0",				"Multiply the damage received by this amount.", CVAR_FLAGS );
 	g_hCvarRange =			CreateConVar(	"l4d2_si_stumble_range",			"200.0",			"The distance the special infected must be to the Grenade Launcher projectile impact to stumble.", CVAR_FLAGS );
 	g_hCvarSelf =			CreateConVar(	"l4d2_si_stumble_self",				"0",				"0=Off. 1=On. Should you be able to stumble yourself.", CVAR_FLAGS );
 	g_hCvarSpecial =		CreateConVar(	"l4d2_si_stumble_special",			"127",				"Which Special Infected to affect: 1=Smoker, 2=Boomer, 4=Hunter, 8=Spitter, 16=Jockey, 32=Charger, 64=Tank. 127=All. Add numbers together.", CVAR_FLAGS );
@@ -130,6 +135,7 @@ public void OnPluginStart()
 	g_hCvarModesOff.AddChangeHook(ConVarChanged_Allow);
 	g_hCvarModesTog.AddChangeHook(ConVarChanged_Allow);
 	g_hCvarAllow.AddChangeHook(ConVarChanged_Allow);
+	g_hCvarMulti.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarRange.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarSelf.AddChangeHook(ConVarChanged_Special);
 	g_hCvarSpecial.AddChangeHook(ConVarChanged_Special);
@@ -185,6 +191,7 @@ void ConVarChanged_Special(Handle convar, const char[] oldValue, const char[] ne
 
 void GetCvars()
 {
+	g_fCvarMulti = g_hCvarMulti.FloatValue;
 	g_fCvarRange = g_hCvarRange.FloatValue;
 	g_bCvarSelf = g_hCvarSelf.BoolValue;
 	g_iCvarSpecial = g_hCvarSpecial.IntValue;
@@ -406,6 +413,9 @@ Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, in
 					StaggerClient(GetClientUserId(victim), vPos);
 				}
 			}
+
+			damage *= g_fCvarMulti;
+			return Plugin_Changed;
 		}
 	}
 
