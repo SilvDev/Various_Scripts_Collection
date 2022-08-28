@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"2.13"
+#define PLUGIN_VERSION 		"2.14"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,14 @@
 
 ========================================================================================
 	Change Log:
+
+2.14 (28-Aug-2022)
+	- Really fixed invalid handles.
+
+	- Explanation: the forward "Attachments_OnWeaponSwitch" triggers when someone disconnects and their weapon drops.
+	- This triggered the plugin to attempt to create a light for that player while they were disconnecting and still in-game.
+	- At that point another timer handle was being created but never cleared because they were already disconnecting.
+	- This happens before OnClientDisconnect_Post. Using a bool to store when someone is disconnecting prevents the bug.
 
 2.13 (19-Aug-2022)
 	- Changes attempting to fix invalid handles. Thanks to "gongo" and "ur5efj" for reporting.
@@ -152,6 +160,7 @@ int g_iPlayerEnum[MAXPLAYERS+1];
 int g_iWeaponIndex[MAXPLAYERS+1];
 int g_iGlareColor[MAXPLAYERS+1];
 bool g_bDetected[MAXPLAYERS+1];
+bool g_bQuitting[MAXPLAYERS+1];
 Handle g_hTimerCreate[MAXPLAYERS+1];
 Handle g_hTimerDetect;
 StringMap g_hColors;
@@ -325,7 +334,13 @@ public void OnPluginEnd()
 
 public void OnClientDisconnect(int client)
 {
+	g_bQuitting[client] = true;
 	DeleteLight(client);
+}
+
+public void OnClientDisconnect_Post(int client)
+{
+	g_bQuitting[client] = false;
 }
 
 public void OnClientPutInServer(int client)
@@ -1139,7 +1154,10 @@ void CreateLight(int client)
 {
 	DeleteLight(client);
 
-	g_hTimerCreate[client] = CreateTimer(0.3, TimerCreate, GetClientUserId(client));
+	if( !g_bQuitting[client] )
+	{
+		g_hTimerCreate[client] = CreateTimer(0.3, TimerCreate, GetClientUserId(client));
+	}
 }
 
 Action TimerCreate(Handle timer, int client)
