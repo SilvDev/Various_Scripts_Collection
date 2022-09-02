@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION		"1.6"
+#define PLUGIN_VERSION		"1.7"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.7 (02-Sep-2022)
+	- Fixed client not connected errors. Thanks to "jjambo789" for reporting.
 
 1.6 (03-Jun-2022)
 	- Fixed client not connected errors. Thanks to "ZBzibing" for reporting.
@@ -2339,7 +2342,7 @@ void ExecuteCommand(int client, int index)
 		if( num == MaxClients )
 		{
 			pass = false;
-			if( IsClientInGame(client) )
+			if( IsClientInGame(i) )
 			{
 				client = i;
 				bot = IsFakeClient(client);
