@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.9"
+#define PLUGIN_VERSION 		"1.10"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,10 @@
 
 ========================================================================================
 	Change Log:
+
+1.10 (20-Sep-2022)
+	- Added cvars "l4d_anomaly_type_infected", "l4d_anomaly_type_special", "l4d_anomaly_type_survivor" and "l4d_anomaly_type_witch" to control the damage type.
+	- Requested by "Sam B".
 
 1.9 (25-Jun-2022)
 	- Changed the classname of the anomaly to prevent conflicts with other plugins that were expecting an actual "prop_physics" entity.
@@ -117,13 +121,13 @@ static const char g_sSoundsZap[][]	=
 
 
 ConVar g_hCvarMPGameMode, g_hCvarAllow, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarDamageDist, g_hCvarDamageInfe, g_hCvarDamageSpec, g_hCvarDamageSurv, g_hCvarDamageWitch, g_hCvarDamageTime,
-		g_hCvarRandDist, g_hCvarRandMax, g_hCvarRandMin, g_hCvarSpawnMax, g_hCvarSpawnMin;
+		g_hCvarRandDist, g_hCvarRandMax, g_hCvarRandMin, g_hCvarSpawnMax, g_hCvarSpawnMin, g_hCvarTypeInfe, g_hCvarTypeSpec, g_hCvarTypeSurv, g_hCvarTypeWitch;
 
 Handle g_hTimer;
 bool g_bCvarAllow, g_bLeft4Dead2;
 float g_fCvarDamageDist, g_fCvarDamageTime, g_fCvarRandDist, g_fCvarRandMax, g_fCvarRandMin, g_fCvarSpawnMax, g_fCvarSpawnMin, g_fFlowMax, g_fFlowMin, g_fRandNext;
 float g_fTickDmgs, g_fTickMove, g_fTickHeight, g_vLastPos[3], g_vSpawnPos[3];
-int g_iCvarDamageInfe, g_iCvarDamageSpec, g_iCvarDamageSurv, g_iCvarDamageWitch;
+int g_iCvarDamageInfe, g_iCvarDamageSpec, g_iCvarDamageSurv, g_iCvarDamageWitch, g_iCvarTypeInfe, g_iCvarTypeSpec, g_iCvarTypeSurv, g_iCvarTypeWitch;
 int g_iAnomaly;
 int g_iLighting;
 int g_iPlayerSpawn, g_iRoundStart;
@@ -176,9 +180,17 @@ public void OnPluginStart()
 	g_hCvarRandMin =		CreateConVar(	"l4d_anomaly_random_min",			"2.0",					"0.0=Off. Display random sparks and sound after this many seconds minimum.", CVAR_FLAGS );
 	g_hCvarSpawnMax =		CreateConVar(	"l4d_anomaly_spawn_max",			"70.0",					"0.0=Off. Automatically spawns anomaly when Survivors pass between this minimum and maximum map flow distance percent.", CVAR_FLAGS, true, 0.0, true, 100.0 );
 	g_hCvarSpawnMin =		CreateConVar(	"l4d_anomaly_spawn_min",			"20.0",					"0.0=Off. Automatically spawns anomaly when Survivors pass between this minimum and maximum map flow distance percent.", CVAR_FLAGS, true, 0.0, true, 100.0 );
+	g_hCvarTypeInfe =		CreateConVar(	"l4d_anomaly_type_infected",		g_bLeft4Dead2 ? "33554432" : "536870912",						"The type of damage to deal to Common Infected.", CVAR_FLAGS );
+	g_hCvarTypeSpec =		CreateConVar(	"l4d_anomaly_type_special",			"16777216",				"The type of damage to deal to Special Infected.", CVAR_FLAGS );
+	g_hCvarTypeSurv =		CreateConVar(	"l4d_anomaly_type_survivor",		"16777216",				"The type of damage to deal to Survivors.", CVAR_FLAGS );
+	g_hCvarTypeWitch =		CreateConVar(	"l4d_anomaly_type_witch",			"64",					"The type of damage to deal to Witches.", CVAR_FLAGS );
 	CreateConVar(							"l4d_anomaly_version",				PLUGIN_VERSION,			"Anomaly plugin version.", FCVAR_NOTIFY|FCVAR_DONTRECORD);
 	AutoExecConfig(true,					"l4d_anomaly");
 
+		
+		
+			
+		
 	g_hCvarMPGameMode = FindConVar("mp_gamemode");
 	g_hCvarAllow.AddChangeHook(ConVarChanged_Allow);
 	g_hCvarModes.AddChangeHook(ConVarChanged_Allow);
@@ -195,6 +207,10 @@ public void OnPluginStart()
 	g_hCvarRandMin.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarSpawnMax.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarSpawnMin.AddChangeHook(ConVarChanged_Cvars);
+	g_hCvarTypeInfe.AddChangeHook(ConVarChanged_Cvars);
+	g_hCvarTypeSpec.AddChangeHook(ConVarChanged_Cvars);
+	g_hCvarTypeSurv.AddChangeHook(ConVarChanged_Cvars);
+	g_hCvarTypeWitch.AddChangeHook(ConVarChanged_Cvars);
 
 
 
@@ -326,6 +342,10 @@ void GetCvars()
 	g_fCvarRandMin = g_hCvarRandMin.FloatValue;
 	g_fCvarSpawnMax = g_hCvarSpawnMax.FloatValue;
 	g_fCvarSpawnMin = g_hCvarSpawnMin.FloatValue;
+	g_iCvarTypeInfe = g_hCvarTypeInfe.IntValue;
+	g_iCvarTypeSpec = g_hCvarTypeSpec.IntValue;
+	g_iCvarTypeSurv = g_hCvarTypeSurv.IntValue;
+	g_iCvarTypeWitch = g_hCvarTypeWitch.IntValue;
 
 	if( g_fCvarSpawnMin && g_fCvarSpawnMax )
 		g_fFlowMin = GetRandomFloat(g_fCvarSpawnMin, g_fCvarSpawnMax);
@@ -773,10 +793,10 @@ void DoDamage(int entity, int client, float vPos[3], int type = 0)
 	// Damage
 	switch( type )
 	{
-		case 2:		SDKHooks_TakeDamage(client, entity, entity, float(g_iCvarDamageSurv), DMG_PLASMA, -1, NULL_VECTOR, vEnd); // Survivor
-		case 3:		SDKHooks_TakeDamage(client, entity, entity, float(g_iCvarDamageSpec), DMG_PLASMA, -1, NULL_VECTOR, vEnd); // Special Infected
-		case 4:		SDKHooks_TakeDamage(client, entity, entity, float(g_iCvarDamageInfe), g_bLeft4Dead2 ? DMG_AIRBOAT : DMG_BUCKSHOT, -1, NULL_VECTOR, vEnd);	// Common L4D2 / L4D1
-		case 5:		SDKHooks_TakeDamage(client, entity, entity, float(g_iCvarDamageWitch), DMG_BLAST, -1, NULL_VECTOR, vEnd);	// Witch
+		case 2:		SDKHooks_TakeDamage(client, entity, entity, float(g_iCvarDamageSurv), g_iCvarTypeSurv, -1, NULL_VECTOR, vEnd); // Survivor
+		case 3:		SDKHooks_TakeDamage(client, entity, entity, float(g_iCvarDamageSpec), g_iCvarTypeSpec, -1, NULL_VECTOR, vEnd); // Special Infected
+		case 4:		SDKHooks_TakeDamage(client, entity, entity, float(g_iCvarDamageInfe), g_iCvarTypeInfe, -1, NULL_VECTOR, vEnd);	// Common L4D2 / L4D1
+		case 5:		SDKHooks_TakeDamage(client, entity, entity, float(g_iCvarDamageWitch),g_iCvarTypeWitch, -1, NULL_VECTOR, vEnd);	// Witch
 	}
 
 
