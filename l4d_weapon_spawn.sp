@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.12"
+#define PLUGIN_VERSION 		"1.13"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.13 (20-Sep-2022)
+	- Fixed incorrect model list. Thanks to "HarryPotter" for reporting.
 
 1.12 (10-Aug-2022)
 	- Fixed the plugin attempting to back up the data file even after converting to version 2 format. Thanks to "HarryPotter" for reporting.
@@ -156,8 +159,8 @@ static char g_sWeaponModels[MAX_WEAPONS][] =
 	"models/w_models/weapons/w_autoshot_m4super.mdl",
 	"models/w_models/weapons/w_sniper_mini14.mdl",
 	"models/w_models/weapons/w_smg_uzi.mdl",
-	"models/w_models/weapons/w_pumpshotgun_A.mdl",
-	"models/w_models/weapons/w_pistol_a.mdl",
+	"models/w_models/weapons/w_shotgun.mdl",
+	"models/w_models/weapons/w_pistol_1911.mdl",
 	"models/w_models/weapons/w_eq_molotov.mdl",
 	"models/w_models/weapons/w_eq_pipebomb.mdl",
 	"models/w_models/weapons/w_eq_medkit.mdl",
@@ -229,7 +232,7 @@ static char g_sWeapons2[MAX_WEAPONS2][] =
 };
 static char g_sWeaponModels2[MAX_WEAPONS2][] =
 {
-	"models/w_models/weapons/w_pistol_a.mdl",
+	"models/w_models/weapons/w_pistol_b.mdl",
 	"models/w_models/weapons/w_desert_eagle.mdl",
 	"models/w_models/weapons/w_rifle_m16a2.mdl",
 	"models/w_models/weapons/w_rifle_ak47.mdl",
@@ -237,10 +240,10 @@ static char g_sWeaponModels2[MAX_WEAPONS2][] =
 	"models/w_models/weapons/w_desert_rifle.mdl",
 	"models/w_models/weapons/w_autoshot_m4super.mdl",
 	"models/w_models/weapons/w_shotgun_spas.mdl",
-	"models/w_models/weapons/w_pumpshotgun_A.mdl",
 	"models/w_models/weapons/w_shotgun.mdl",
-	"models/w_models/weapons/w_smg_a.mdl",
+	"models/w_models/weapons/w_pumpshotgun_a.mdl",
 	"models/w_models/weapons/w_smg_uzi.mdl",
+	"models/w_models/weapons/w_smg_a.mdl",
 	"models/w_models/weapons/w_smg_mp5.mdl",
 	"models/w_models/weapons/w_sniper_mini14.mdl",
 	"models/w_models/weapons/w_sniper_awp.mdl",
@@ -252,12 +255,12 @@ static char g_sWeaponModels2[MAX_WEAPONS2][] =
 	"models/w_models/weapons/w_eq_molotov.mdl",
 	"models/w_models/weapons/w_eq_pipebomb.mdl",
 	"models/w_models/weapons/w_eq_bile_flask.mdl",
-	"models/w_models/weapons/w_eq_adrenaline.mdl",
 	"models/w_models/weapons/w_eq_painpills.mdl",
+	"models/w_models/weapons/w_eq_adrenaline.mdl",
 	"models/w_models/weapons/w_eq_medkit.mdl",
 	"models/w_models/weapons/w_eq_defibrillator.mdl",
 	"models/w_models/weapons/w_eq_explosive_ammopack.mdl",
-	"models/w_models/weapons/w_eq_incendiary_ammopack.mdl",
+	"models/w_models/weapons/w_eq_incendiary_ammopack.mdl"
 };
 
 
