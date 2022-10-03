@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.13"
+#define PLUGIN_VERSION 		"1.14"
 
 /*======================================================================================
 	Plugin Info:
@@ -32,7 +32,7 @@
 ========================================================================================
 	Change Log:
 
-1.17 (03-Oct-2022)
+1.14 (03-Oct-2022)
 	- Added cvar "l4d2_cola_time" to control how often to heal someone holding a gnome.
 	- Now uses the "m_iMaxHealth" value instead of the "MAX_MAIN_HEALTH" define. Thanks to "Haigen" for changing.
 	- Now checks if a Survivor is pinned to allow or disallow healing. Thanks to "Haigen" for fixing.
@@ -184,7 +184,7 @@ public void OnPluginStart()
 	g_hCvarRate =		CreateConVar(	"l4d2_cola_rate",		"1.5",			"The rate at which players are healed. HP per second.", CVAR_FLAGS );
 	g_hCvarSafe =		CreateConVar(	"l4d2_cola_safe",		"0",			"On round start spawn the cola: 0=Off, 1=In the saferoom, 2=Equip to random player.", CVAR_FLAGS );
 	g_hCvarTemp =		CreateConVar(	"l4d2_cola_temp",		"5",			"-1=Add temporary health, 0=Add to main health. Values between 1 and 100 creates a chance to give temp health, else main health.", CVAR_FLAGS );
-	g_hCvarTime =		CreateConVar(	"l4d2_cola_time",		"5",			"-1=Add temporary health, 0=Add to main health. Values between 1 and 100 creates a chance to give temp health, else main health.", CVAR_FLAGS );
+	g_hCvarTime =		CreateConVar(	"l4d2_cola_time",		"1.0",			"0=Off. Interval in seconds, for healing someone holding the cola.", CVAR_FLAGS );
 	g_hCvarField =					CreateConVar(	"l4d2_cola_healing_field",						"1",			"0=Off. 1=Heal players around the player holding the cola.", CVAR_FLAGS, true, 0.0, true, 1.0 );
 	g_hCvarFieldRefreshTime =		CreateConVar(	"l4d2_cola_healing_field_refresh_time",			"1.5",			"0=Off. Interval in seconds, for the healing field trigger the heal and beacon again.", CVAR_FLAGS, true, 0.0 );
 	g_hCvarFieldHealAmount =		CreateConVar(	"l4d2_cola_healing_field_heal_amount",			"2.0",			"Heal amount from being inside the healing field.", CVAR_FLAGS, true, 0.0 );
