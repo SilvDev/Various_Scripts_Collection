@@ -32,6 +32,12 @@
 ========================================================================================
 	Change Log:
 
+1.17 (03-Sep-2022)
+	- Added cvar "l4d2_cola_time" to control how often to heal someone holding a gnome.
+	- Now uses the "m_iMaxHealth" value instead of the "MAX_MAIN_HEALTH" define. Thanks to "Haigen" for changing.
+	- Now checks if a Survivor is pinned to allow or disallow healing. Thanks to "Haigen" for fixing.
+	- Removed unused define "MAX_INCAP_HEALTH" - uses the games "survivor_incap_health" cvar value.
+
 1.13 (15-Sep-2021)
 	- Added cvar "l4d2_cola_healing_field_self" to determine if the Healing Field can heal yourself or not.
 	- Changed cvar "l4d2_cola_temp" to be a chance of giving temporary health.
@@ -58,7 +64,7 @@
 	- Added cvars:
 		"l4d2_cola_healing_field", "l4d2_cola_healing_field_refresh_time", "l4d2_cola_healing_field_heal_amount", "l4d2_cola_healing_field_heal_amount_incap",
 		"l4d2_cola_healing_field_heal_beacon", "l4d2_cola_healing_field_color", "l4d2_cola_healing_field_start_radius", "l4d2_cola_healing_field_end_radius",
-		"l4d2_cola_healing_field_duration", "l4d2_cola_healing_field_width", "l4d2_cola_healing_field_amplitude".	
+		"l4d2_cola_healing_field_duration", "l4d2_cola_healing_field_width", "l4d2_cola_healing_field_amplitude".
 
 	- See threads main post for details on the cvars.
 
@@ -113,18 +119,16 @@
 #define CONFIG_SPAWNS		"data/l4d2_cola.cfg"
 
 #define MAX_COLAS			32
-#define MAX_MAIN_HEALTH		100 // Maximum health someone can have (main + temporary health)
-#define MAX_INCAP_HEALTH	300 // Maximum health someone can have while incapped (main + temporary health)
 
 #define MODEL_COLA			"models/w_models/weapons/w_cola.mdl"
 
 
 Handle g_hTimerHeal;
 Menu g_hMenuAng, g_hMenuPos;
-ConVar g_hCvarAllow, g_hCvarDecayRate, g_hCvarGlow, g_hCvarGlowCol, g_hCvarFull, g_hCvarHeal, g_hCvarMaxM, g_hCvarMaxT, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarRandom, g_hCvarRate, g_hCvarSafe, g_hCvarTemp;
+ConVar g_hCvarAllow, g_hCvarDecayRate, g_hCvarGlow, g_hCvarGlowCol, g_hCvarFull, g_hCvarHeal, g_hCvarMaxM, g_hCvarMaxT, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarRandom, g_hCvarRate, g_hCvarSafe, g_hCvarTemp, g_hCvarTime;
 int g_iColaCount, g_iCola[MAXPLAYERS+1], g_iColas[MAX_COLAS][2], g_iCvarGlow, g_iCvarGlowCol, g_iCvarFull, g_iCvarHeal, g_iCvarMaxM, g_iCvarRandom, g_iCvarSafe, g_iCvarTemp, g_iMap, g_iPlayerSpawn, g_iRoundStart;
 bool g_bCvarAllow, g_bMapStarted, g_bLoaded;
-float g_fCvarMaxT, g_fCvarDecayRate, g_fCvarRate, g_fHealTime[MAXPLAYERS+1];
+float g_fCvarMaxT, g_fCvarDecayRate, g_fCvarRate, g_fCvarTime, g_fHealTime[MAXPLAYERS+1];
 
 
 // Healing Field stuff:
@@ -180,6 +184,7 @@ public void OnPluginStart()
 	g_hCvarRate =		CreateConVar(	"l4d2_cola_rate",		"1.5",			"The rate at which players are healed. HP per second.", CVAR_FLAGS );
 	g_hCvarSafe =		CreateConVar(	"l4d2_cola_safe",		"0",			"On round start spawn the cola: 0=Off, 1=In the saferoom, 2=Equip to random player.", CVAR_FLAGS );
 	g_hCvarTemp =		CreateConVar(	"l4d2_cola_temp",		"5",			"-1=Add temporary health, 0=Add to main health. Values between 1 and 100 creates a chance to give temp health, else main health.", CVAR_FLAGS );
+	g_hCvarTime =		CreateConVar(	"l4d2_cola_time",		"5",			"-1=Add temporary health, 0=Add to main health. Values between 1 and 100 creates a chance to give temp health, else main health.", CVAR_FLAGS );
 	g_hCvarField =					CreateConVar(	"l4d2_cola_healing_field",						"1",			"0=Off. 1=Heal players around the player holding the cola.", CVAR_FLAGS, true, 0.0, true, 1.0 );
 	g_hCvarFieldRefreshTime =		CreateConVar(	"l4d2_cola_healing_field_refresh_time",			"1.5",			"0=Off. Interval in seconds, for the healing field trigger the heal and beacon again.", CVAR_FLAGS, true, 0.0 );
 	g_hCvarFieldHealAmount =		CreateConVar(	"l4d2_cola_healing_field_heal_amount",			"2.0",			"Heal amount from being inside the healing field.", CVAR_FLAGS, true, 0.0 );
@@ -210,6 +215,7 @@ public void OnPluginStart()
 	g_hCvarRate.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarSafe.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarTemp.AddChangeHook(ConVarChanged_Cvars);
+	g_hCvarTime.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarDecayRate.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarIncapHealth = FindConVar("survivor_incap_health");
 	g_hCvarIncapHealth.AddChangeHook(ConVarChanged_Cvars);
@@ -321,12 +327,12 @@ public void OnConfigsExecuted()
 	IsAllowed();
 }
 
-public void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	IsAllowed();
 }
 
-public void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	GetCvars();
 }
@@ -343,6 +349,7 @@ void GetCvars()
 	g_fCvarRate = g_hCvarRate.FloatValue;
 	g_iCvarSafe = g_hCvarSafe.IntValue;
 	g_iCvarTemp = g_hCvarTemp.IntValue;
+	g_fCvarTime = g_hCvarTime.FloatValue;
 	g_fCvarDecayRate = g_hCvarDecayRate.FloatValue;
 	g_iCvarIncapHealth = g_hCvarIncapHealth.IntValue;
 	g_bCvarField = g_hCvarField.BoolValue;
@@ -446,7 +453,7 @@ bool IsAllowedGameMode()
 	return true;
 }
 
-public void OnGamemode(const char[] output, int caller, int activator, float delay)
+void OnGamemode(const char[] output, int caller, int activator, float delay)
 {
 	if( strcmp(output, "OnCoop") == 0 )
 		g_iCurrentMode = 1;
@@ -463,26 +470,26 @@ public void OnGamemode(const char[] output, int caller, int activator, float del
 // ====================================================================================================
 //					EVENTS
 // ====================================================================================================
-public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
+void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
 	ResetPlugin(false);
 }
 
-public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
+void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
 	if( g_iPlayerSpawn == 1 && g_iRoundStart == 0 )
 		CreateTimer(g_iMap == 1 ? 5.0 : 1.0, TimerStart, _, TIMER_FLAG_NO_MAPCHANGE);
 	g_iRoundStart = 1;
 }
 
-public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
+void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 {
 	if( g_iPlayerSpawn == 0 && g_iRoundStart == 1 )
 		CreateTimer(g_iMap == 1 ? 5.0 : 1.0, TimerStart, _, TIMER_FLAG_NO_MAPCHANGE);
 	g_iPlayerSpawn = 1;
 }
 
-public Action TimerStart(Handle timer)
+Action TimerStart(Handle timer)
 {
 	g_iMap = 0;
 	ResetPlugin();
@@ -526,9 +533,11 @@ public Action TimerStart(Handle timer)
 				EquipPlayerWeapon(client, entity);
 		}
 	}
+
+	return Plugin_Continue;
 }
 
-public void Event_ItemPickup(Event event, const char[] name, bool dontBroadcast)
+void Event_ItemPickup(Event event, const char[] name, bool dontBroadcast)
 {
 	if( g_iCvarHeal || g_bCvarField )
 	{
@@ -541,7 +550,7 @@ public void Event_ItemPickup(Event event, const char[] name, bool dontBroadcast)
 
 			if( g_iCvarHeal && g_hTimerHeal == null )
 			{
-				g_hTimerHeal = CreateTimer(0.1, TimerHeal, _, TIMER_REPEAT);
+				g_hTimerHeal = CreateTimer(g_fCvarTime, TimerHeal, _, TIMER_REPEAT);
 			}
 
 			if( g_bCvarField && g_hTimerHealingField == null )
@@ -552,7 +561,7 @@ public void Event_ItemPickup(Event event, const char[] name, bool dontBroadcast)
 	}
 }
 
-public Action TimerHeal(Handle timer)
+Action TimerHeal(Handle timer)
 {
 	int entity;
 	bool healed;
@@ -564,7 +573,7 @@ public Action TimerHeal(Handle timer)
 			entity = g_iCola[i];
 			if( entity )
 			{
-				if( IsClientInGame(i) && IsPlayerAlive(i) && entity == GetEntPropEnt(i, Prop_Send, "m_hActiveWeapon") )
+				if( IsClientInGame(i) && IsPlayerAlive(i) && entity == GetEntPropEnt(i, Prop_Send, "m_hActiveWeapon") && !IsPinned(i) )
 				{
 					HealClient(i);
 					healed = true;
@@ -587,6 +596,7 @@ public Action TimerHeal(Handle timer)
 void HealClient(int client)
 {
 	int iHealth = GetClientHealth(client);
+	int iMaxHealth = GetEntProp(client, Prop_Send, "m_iMaxHealth");
 
 	float fGameTime = GetGameTime();
 	float fHealthTime = GetEntPropFloat(client, Prop_Send, "m_healthBufferTime");
@@ -611,13 +621,13 @@ void HealClient(int client)
 			SetEntPropFloat(client, Prop_Send, "m_healthBufferTime", fGameTime);
 		}
 		// Reached maximum health
-		else if( iHealth + fHealth >= MAX_MAIN_HEALTH )
+		else if( iHealth + fHealth >= iMaxHealth )
 		{
 			// Heal to max allowed temp, or to max main health
 			if( fHealth >= g_fCvarMaxT )
 				SetEntPropFloat(client, Prop_Send, "m_healthBuffer", g_fCvarMaxT);
 			else
-				SetEntPropFloat(client, Prop_Send, "m_healthBuffer", float(MAX_MAIN_HEALTH - iHealth));
+				SetEntPropFloat(client, Prop_Send, "m_healthBuffer", float(iMaxHealth - iHealth));
 			SetEntPropFloat(client, Prop_Send, "m_healthBufferTime", fGameTime);
 		}
 
@@ -631,7 +641,7 @@ void HealClient(int client)
 	else
 	{
 		// Heal main health
-		if( fGameTime - g_fHealTime[client] > 1.0 )
+		if( fGameTime - g_fHealTime[client] > g_fCvarTime )
 		{
 			g_fHealTime[client] = fGameTime;
 
@@ -645,21 +655,21 @@ void HealClient(int client)
 				SetEntPropFloat(client, Prop_Send, "m_healthBufferTime", fGameTime);
 			}
 
-			else if( iHealth >= MAX_MAIN_HEALTH )
+			else if( iHealth >= iMaxHealth )
 			{
-				iHealth = MAX_MAIN_HEALTH;
+				iHealth = iMaxHealth;
 
 				SetEntPropFloat(client, Prop_Send, "m_healthBuffer", 0.0);
 				SetEntPropFloat(client, Prop_Send, "m_healthBufferTime", fGameTime);
 			}
 
-			else if( iHealth + fHealth >= MAX_MAIN_HEALTH )
+			else if( iHealth + fHealth >= iMaxHealth )
 			{
-				SetEntPropFloat(client, Prop_Send, "m_healthBuffer", float(MAX_MAIN_HEALTH - iHealth));
+				SetEntPropFloat(client, Prop_Send, "m_healthBuffer", float(iMaxHealth - iHealth));
 				SetEntPropFloat(client, Prop_Send, "m_healthBufferTime", fGameTime);
 			}
 
-			if( iHealth <= g_iCvarMaxM && iHealth <= MAX_MAIN_HEALTH )
+			if( iHealth <= g_iCvarMaxM && iHealth <= iMaxHealth )
 			{
 				SetEntityHealth(client, iHealth);
 			}
@@ -672,7 +682,7 @@ void HealClient(int client)
 // ====================================================================================================
 //					HEALING FIELD
 // ====================================================================================================
-public Action TimerHealingField(Handle timer)
+Action TimerHealingField(Handle timer)
 {
 	if( !g_bCvarField )
 	{
@@ -721,7 +731,7 @@ void HealingField(int healer, float vPos[3])
 		if( !g_bCvarFieldHealSelf && i == healer )
 			continue;
 
-		if( IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i) )
+		if( IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i) && !IsPinned(i) )
 		{
 			float vEnd[3];
 			GetEntPropVector(i, Prop_Data, "m_vecAbsOrigin", vEnd);
@@ -752,6 +762,7 @@ void HealClientOnHealingField(int client)
 	else
 	{
 		int iHealth = GetClientHealth(client);
+		int iMaxHealth = GetEntProp(client, Prop_Send, "m_iMaxHealth");
 
 		float fGameTime = GetGameTime();
 		float fHealthTime = GetEntPropFloat(client, Prop_Send, "m_healthBufferTime");
@@ -776,13 +787,13 @@ void HealClientOnHealingField(int client)
 				SetEntPropFloat(client, Prop_Send, "m_healthBufferTime", fGameTime);
 			}
 			// Reached maximum health
-			else if( iHealth + fHealth >= MAX_MAIN_HEALTH )
+			else if( iHealth + fHealth >= iMaxHealth )
 			{
 				// Heal to max allowed temp, or to max main health
 				if( fHealth >= g_fCvarMaxT )
 					SetEntPropFloat(client, Prop_Send, "m_healthBuffer", g_fCvarMaxT);
 				else
-					SetEntPropFloat(client, Prop_Send, "m_healthBuffer", float(MAX_MAIN_HEALTH - iHealth));
+					SetEntPropFloat(client, Prop_Send, "m_healthBuffer", float(iMaxHealth - iHealth));
 				SetEntPropFloat(client, Prop_Send, "m_healthBufferTime", fGameTime);
 			}
 
@@ -796,7 +807,7 @@ void HealClientOnHealingField(int client)
 		else
 		{
 			// Heal main health
-			if( fGameTime - g_fHealTime[client] > 1.0 )
+			if( fGameTime - g_fHealTime[client] > g_fCvarFieldRefreshTime )
 			{
 				g_fHealTime[client] = fGameTime;
 
@@ -810,21 +821,21 @@ void HealClientOnHealingField(int client)
 					SetEntPropFloat(client, Prop_Send, "m_healthBufferTime", fGameTime);
 				}
 
-				else if( iHealth >= MAX_MAIN_HEALTH )
+				else if( iHealth >= iMaxHealth )
 				{
-					iHealth = MAX_MAIN_HEALTH;
+					iHealth = iMaxHealth;
 
 					SetEntPropFloat(client, Prop_Send, "m_healthBuffer", 0.0);
 					SetEntPropFloat(client, Prop_Send, "m_healthBufferTime", fGameTime);
 				}
 
-				else if( iHealth + fHealth >= MAX_MAIN_HEALTH )
+				else if( iHealth + fHealth >= iMaxHealth )
 				{
-					SetEntPropFloat(client, Prop_Send, "m_healthBuffer", float(MAX_MAIN_HEALTH - iHealth));
+					SetEntPropFloat(client, Prop_Send, "m_healthBuffer", float(iMaxHealth - iHealth));
 					SetEntPropFloat(client, Prop_Send, "m_healthBufferTime", fGameTime);
 				}
 
-				if( iHealth <= g_iCvarMaxM && iHealth <= MAX_MAIN_HEALTH )
+				if( iHealth <= g_iCvarMaxM && iHealth <= iMaxHealth )
 				{
 					SetEntityHealth(client, iHealth);
 				}
@@ -962,8 +973,8 @@ void CreateCola(const float vOrigin[3], const float vAngles[3], int index = 0)
 
 	g_iColas[iColaIndex][0] = EntIndexToEntRef(entity);
 	g_iColas[iColaIndex][1] = index;
-	SetEntityModel(entity, MODEL_COLA);
 
+	SetEntityModel(entity, MODEL_COLA);
 	DispatchSpawn(entity);
 	TeleportEntity(entity, vOrigin, vAngles, NULL_VECTOR);
 
@@ -985,7 +996,7 @@ void CreateCola(const float vOrigin[3], const float vAngles[3], int index = 0)
 // ====================================================================================================
 //					sm_cola
 // ====================================================================================================
-public Action CmdColaTemp(int client, int args)
+Action CmdColaTemp(int client, int args)
 {
 	if( !client )
 	{
@@ -1012,7 +1023,7 @@ public Action CmdColaTemp(int client, int args)
 // ====================================================================================================
 //					sm_colasave
 // ====================================================================================================
-public Action CmdColaSave(int client, int args)
+Action CmdColaSave(int client, int args)
 {
 	if( !client )
 	{
@@ -1100,7 +1111,7 @@ public Action CmdColaSave(int client, int args)
 // ====================================================================================================
 //					sm_coladel
 // ====================================================================================================
-public Action CmdColaDelete(int client, int args)
+Action CmdColaDelete(int client, int args)
 {
 	if( !g_bCvarAllow )
 	{
@@ -1230,7 +1241,7 @@ public Action CmdColaDelete(int client, int args)
 // ====================================================================================================
 //					sm_colawipe
 // ====================================================================================================
-public Action CmdColaWipe(int client, int args)
+Action CmdColaWipe(int client, int args)
 {
 	if( !client )
 	{
@@ -1281,17 +1292,17 @@ public Action CmdColaWipe(int client, int args)
 // ====================================================================================================
 //					sm_colaglow
 // ====================================================================================================
-public Action CmdColaGlow(int client, int args)
+Action CmdColaGlow(int client, int args)
 {
 	static bool glow;
 	glow = !glow;
 	PrintToChat(client, "%sGlow has been turned %s", CHAT_TAG, glow ? "on" : "off");
 
-	VendorGlow(glow);
+	ColaGlow(glow);
 	return Plugin_Handled;
 }
 
-void VendorGlow(int glow)
+void ColaGlow(int glow)
 {
 	int ent;
 
@@ -1311,7 +1322,7 @@ void VendorGlow(int glow)
 // ====================================================================================================
 //					sm_colalist
 // ====================================================================================================
-public Action CmdColaList(int client, int args)
+Action CmdColaList(int client, int args)
 {
 	float vPos[3];
 	int count;
@@ -1334,7 +1345,7 @@ public Action CmdColaList(int client, int args)
 // ====================================================================================================
 //					sm_colatele
 // ====================================================================================================
-public Action CmdColaTele(int client, int args)
+Action CmdColaTele(int client, int args)
 {
 	if( args == 1 )
 	{
@@ -1361,7 +1372,7 @@ public Action CmdColaTele(int client, int args)
 // ====================================================================================================
 //					MENU ANGLE
 // ====================================================================================================
-public Action CmdColaAng(int client, int args)
+Action CmdColaAng(int client, int args)
 {
 	ShowMenuAng(client);
 	return Plugin_Handled;
@@ -1373,7 +1384,7 @@ void ShowMenuAng(int client)
 	g_hMenuAng.Display(client, MENU_TIME_FOREVER);
 }
 
-public int AngMenuHandler(Menu menu, MenuAction action, int client, int index)
+int AngMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_Select )
 	{
@@ -1383,6 +1394,8 @@ public int AngMenuHandler(Menu menu, MenuAction action, int client, int index)
 			SetAngle(client, index);
 		ShowMenuAng(client);
 	}
+
+	return 0;
 }
 
 void SetAngle(int client, int index)
@@ -1424,7 +1437,7 @@ void SetAngle(int client, int index)
 // ====================================================================================================
 //					MENU ORIGIN
 // ====================================================================================================
-public Action CmdColaPos(int client, int args)
+Action CmdColaPos(int client, int args)
 {
 	ShowMenuPos(client);
 	return Plugin_Handled;
@@ -1436,7 +1449,7 @@ void ShowMenuPos(int client)
 	g_hMenuPos.Display(client, MENU_TIME_FOREVER);
 }
 
-public int PosMenuHandler(Menu menu, MenuAction action, int client, int index)
+int PosMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_Select )
 	{
@@ -1446,6 +1459,8 @@ public int PosMenuHandler(Menu menu, MenuAction action, int client, int index)
 			SetOrigin(client, index);
 		ShowMenuPos(client);
 	}
+
+	return 0;
 }
 
 void SetOrigin(int client, int index)
@@ -1682,7 +1697,18 @@ bool SetTeleportEndPoint(int client, float vPos[3], float vAng[3])
 	return true;
 }
 
-public bool _TraceFilter(int entity, int contentsMask)
+bool _TraceFilter(int entity, int contentsMask)
 {
 	return entity > MaxClients || !entity;
+}
+
+bool IsPinned(int client)
+{
+	if( GetEntPropEnt(client, Prop_Send, "m_pummelAttacker") > 0 ||
+		GetEntPropEnt(client, Prop_Send, "m_carryAttacker") > 0  ||
+		GetEntPropEnt(client, Prop_Send, "m_pounceAttacker") > 0 ||
+		GetEntPropEnt(client, Prop_Send, "m_jockeyAttacker") > 0 ||
+		GetEntPropEnt(client, Prop_Send, "m_tongueOwner") > 0 )
+		return true;
+	return false;
 }
