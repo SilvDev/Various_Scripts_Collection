@@ -1,6 +1,6 @@
 /*
 *	Healing Cola
-*	Copyright (C) 2021 Silvers
+*	Copyright (C) 2022 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -32,7 +32,7 @@
 ========================================================================================
 	Change Log:
 
-1.17 (03-Sep-2022)
+1.17 (03-Oct-2022)
 	- Added cvar "l4d2_cola_time" to control how often to heal someone holding a gnome.
 	- Now uses the "m_iMaxHealth" value instead of the "MAX_MAIN_HEALTH" define. Thanks to "Haigen" for changing.
 	- Now checks if a Survivor is pinned to allow or disallow healing. Thanks to "Haigen" for fixing.
