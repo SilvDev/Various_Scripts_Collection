@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.45"
+#define PLUGIN_VERSION 		"1.46"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,11 @@
 
 ========================================================================================
 	Change Log:
+
+1.46 (28-Oct-2022)
+	- Added command "sm_vertex" to display the vecMins and vecMaxs of an entity.
+	- Fixed command "sm_listens" to displaying full details.
+	- L4D1/2: Fixed "sm_zspawnv" not pre-caching Special Infected models, also validates model paths and attempts to cache unknown ones. Thanks to "Tonblader" for reporting.
 
 1.45 (10-Aug-2022)
 	- Changed command "sm_del" to no longer delete clients.
@@ -300,6 +305,23 @@ int g_iHaloIndex, g_iLaserIndex, g_iOutputs[MAX_OUTPUTS][2];
 char g_sOutputs[MAX_OUTPUTS][64];
 StringMap g_hEntityKeys;
 
+// Precache models for spawning (L4D1/2)
+static const char g_sModels1[][] =
+{
+	"models/infected/witch.mdl",
+	"models/infected/hulk.mdl",
+	"models/infected/smoker.mdl",
+	"models/infected/boomer.mdl",
+	"models/infected/hunter.mdl"
+};
+
+static const char g_sModels2[][] =
+{
+	"models/infected/witch_bride.mdl",
+	"models/infected/spitter.mdl",
+	"models/infected/jockey.mdl",
+	"models/infected/charger.mdl"
+};
 enum
 {
 	GAME_ANY = 1,
@@ -392,7 +414,8 @@ public void OnPluginStart()
 	RegAdminCmd("sm_dele",			CmdDelE,		ADMFLAG_ROOT, "<entity>. Deletes the entity you specify.");
 	RegAdminCmd("sm_ent",			CmdEnt,			ADMFLAG_ROOT, "Displays info about the entity your crosshair is over.");
 	RegAdminCmd("sm_ente",			CmdEntE,		ADMFLAG_ROOT, "<entity>. Displays info about the entity you specify.");
-	RegAdminCmd("sm_box",			CmdBox,			ADMFLAG_ROOT, "<entity> Displays a beam box around the specified entity for 10 seconds.");
+	RegAdminCmd("sm_vertex",		CmdVertex,		ADMFLAG_ROOT, "[entity]. Displays vMaxs and vMins bounding box about the specified entity or aimed at entity.");
+	RegAdminCmd("sm_box",			CmdBox,			ADMFLAG_ROOT, "[entity]. Displays a beam box around the specified entity or aimed at entity for 10 seconds.");
 	RegAdminCmd("sm_find",			CmdFind,		ADMFLAG_ROOT, "<classname> List entity indexes from the given classname.");
 	RegAdminCmd("sm_findname",		CmdFindName,	ADMFLAG_ROOT, "<targetname> List entity indexes from a partial targetname.");
 	RegAdminCmd("sm_count",			CmdCount,		ADMFLAG_ROOT, "Displays a list of all spawned entity classnames and count. Optional sm_count <classname>");
@@ -583,8 +606,16 @@ public void OnMapStart()
 		g_bDirector = true;
 		g_bAll = false;
 
+		for( int i = 0; i < sizeof(g_sModels1); i++ )
+			PrecacheModel(g_sModels1[i]);
+
 		if( g_iGAMETYPE == GAME_L4D2 )
+		{
 			PrecacheParticle("spitter_slime_trail");
+
+			for( int i = 0; i < sizeof(g_sModels2); i++ )
+				PrecacheModel(g_sModels2[i]);
+		}
 	}
 
 	g_iLaserIndex = PrecacheModel("materials/sprites/laserbeam.vmt");
@@ -1771,6 +1802,7 @@ Action CmdDel(int client, int args)
 	int entity = GetClientAimTarget(client, false);
 	if( entity > MaxClients )
 		RemoveEntity(entity);
+
 	return Plugin_Handled;
 }
 
@@ -1825,6 +1857,7 @@ Action CmdEnt(int client, int args)
 
 		PrintToChat(client, "\x05%d \x01Class: \x05%s \x01Targetname: \x05%s \x01Model: \x05%s \x01HammerID: \x05%d \x01Position: \x05%.2f %.2f %.2f \x01Angles: \x05%.2f %.2f %.2f", entity, sClass, sName, sModel, iHammerID, vPos[0], vPos[1], vPos[2], vAng[0], vAng[1], vAng[2]);
 	}
+
 	return Plugin_Handled;
 }
 
@@ -1877,6 +1910,48 @@ Action CmdEntE(int client, int args)
 	} else {
 		ReplyToCommand(client, "[SM] Invalid Entity %d", entity);
 	}
+
+	return Plugin_Handled;
+}
+
+Action CmdVertex(int client, int args)
+{
+	if( !client )
+	{
+		ReplyToCommand(client, "Command can only be used %s", IsDedicatedServer() ? "in game on a dedicated server." : "in chat on a Listen server.");
+		return Plugin_Handled;
+	}
+
+	char sTemp[32];
+	int entity;
+
+	if( args == 1 )
+	{
+		GetCmdArg(1, sTemp, sizeof(sTemp));
+		entity = StringToInt(sTemp);
+
+		if( entity == 0 || (entity < -1 && EntRefToEntIndex(entity) == INVALID_ENT_REFERENCE) || (entity >= 0 && IsValidEntity(entity) == false) )
+			return Plugin_Handled;
+	}
+	else
+	{
+		entity = GetClientAimTarget(client, false);
+		if( entity == -1 )
+			return Plugin_Handled;
+	}
+
+	float vMins[3]; float vMaxs[3];
+	char sClass[64];
+
+	GetEntPropString(entity, Prop_Data, "m_iClassname", sClass, sizeof(sClass));
+	GetEntPropVector(entity, Prop_Send, "m_vecMaxs", vMaxs);
+	GetEntPropVector(entity, Prop_Send, "m_vecMins", vMins);
+
+	if( client )
+		PrintToChat(client, "\x05%d \x01Class: \x05%s \x01vecMins: \x05%.2f %.2f %.2f \x01vecMaxs: \x05%.2f %.2f %.2f", entity, sClass, vMins[0], vMins[1], vMins[2], vMaxs[0], vMaxs[1], vMaxs[2]);
+	else
+		ReplyToCommand(client, "%d Class: %s vecMins: %.2f %.2f %.2f vecMaxs: %.2f %.2f %.2f", entity, sClass, vMins[0], vMins[1], vMins[2], vMaxs[0], vMaxs[1], vMaxs[2]);
+
 	return Plugin_Handled;
 }
 
@@ -3871,7 +3946,7 @@ Action CmdListen(int client, int args)
 Action SoundHookA(char sample[PLATFORM_MAX_PATH], int &entity, float &volume, int &level, int &pitch, float pos[3], int &flags, float &delay)
 {
 	PrintToChatAll("\x05A_Sample: \x01%s", sample);
-	PrintToChatAll("\x0A_Sent: \x01%d \x05vol: \x01%.2f \x05lvl: \x01%d \x05pch: \x01%d \x05flg: \x01%d", entity, volume, level, pitch, flags);
+	PrintToChatAll("\x01A_Sent: \x01%d \x05vol: \x01%.2f \x05lvl: \x01%d \x05pch: \x01%d \x05flg: \x01%d", entity, volume, level, pitch, flags);
 
 	return Plugin_Continue;
 }
@@ -3891,7 +3966,7 @@ Action SoundHookN(int clients[64], int &numClients, char sample[PLATFORM_MAX_PAT
 	if( channel == 135 ) strchannel = "USER_BASE";
 
 	PrintToChatAll("\x05N_Sample: \x01%s", sample);
-	PrintToChatAll("\x0N_Sent: \x01%d \x05num: \x01%d \x05cnl: \x01%d %s \x05vol: \x01%.2f \x05lvl: \x01%d \x05pch: \x01%d \x05flg: \x01%d", entity, numClients, channel, strchannel, volume, level, pitch, flags);
+	PrintToChatAll("\x01N_Sent: \x01%d \x05num: \x01%d \x05cnl: \x01%d %s \x05vol: \x01%.2f \x05lvl: \x01%d \x05pch: \x01%d \x05flg: \x01%d", entity, numClients, channel, strchannel, volume, level, pitch, flags);
 
 	return Plugin_Continue;
 }
@@ -4373,13 +4448,32 @@ Action CmdZSpawnV(int client, int args)
 	{
 		char modelname[256];
 		GetCmdArg(args == 5 ? 5 : 8, modelname, sizeof(modelname));
-		SetEntityModel(g_iSpawned, modelname);
+
+		if( FileExists(modelname, true) )
+		{
+			if( !IsModelPrecached(modelname) )
+			{
+				PrecacheModel(modelname);
+			}
+
+			SetEntityModel(g_iSpawned, modelname);
+		}
+
 	}
 	else if( args == 6 || args == 9 )
 	{
 		char modelname[256];
 		GetCmdArg(args == 6 ? 5 : 8, modelname, sizeof(modelname));
-		SetEntityModel(g_iSpawned, modelname);
+
+		if( FileExists(modelname, true) )
+		{
+			if( !IsModelPrecached(modelname) )
+			{
+				PrecacheModel(modelname);
+			}
+
+			SetEntityModel(g_iSpawned, modelname);
+		}
 
 		GetCmdArg(args == 6 ? 6 : 9, modelname, sizeof(modelname));
 		SetEntProp(g_iSpawned, Prop_Send, "m_nSkin", StringToInt(modelname));
@@ -4851,15 +4945,13 @@ void LogModels(const char[] format, any ...)
 
 void LogCustom(const char[] format, any ...)
 {
-	char buffer[512];
+	static char sFile[PLATFORM_MAX_PATH], sTime[256], buffer[512];
+
+	BuildPath(Path_SM, sFile, sizeof(sFile), "logs/sm_logit.txt");
+	FormatTime(sTime, sizeof(sTime), "%d-%b-%Y %H:%M:%S");
 	VFormat(buffer, sizeof(buffer), format, 2);
 
-	File file;
-	char sFile[PLATFORM_MAX_PATH], sTime[256];
-	FormatTime(sTime, sizeof(sTime), "%Y%m%d");
-	BuildPath(Path_SM, sFile, sizeof(sFile), "logs/sm_logit.txt");
-	file = OpenFile(sFile, "a+");
-	FormatTime(sTime, sizeof(sTime), "%d-%b-%Y %H:%M:%S");
+	File file = OpenFile(sFile, "a+");
 	file.WriteLine("%s  %s", sTime, buffer);
 	FlushFile(file);
 	delete file;
