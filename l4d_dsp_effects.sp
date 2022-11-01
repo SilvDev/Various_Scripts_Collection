@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.5"
+#define PLUGIN_VERSION 		"1.6"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.6 (01-Nov-2022)
+	- Fixed the effect playing after being revived and not black and white, due to conflict with other plugins.
 
 1.5 (01-Jun-2022)
 	- Fixed random rare server crash.
@@ -372,23 +375,28 @@ void Event_Revived(Event event, const char[] name, bool dontBroadcast)
 {
 	if( g_iCvarIncap || g_iCvarStrike )
 	{
-		int client = GetClientOfUserId(event.GetInt("subject"));
-		if( client )
+		RequestFrame(OnFrameRevive, event.GetInt("subject"));
+	}
+}
+
+void OnFrameRevive(int client)
+{
+	client = GetClientOfUserId(client);
+	if( client && IsClientInGame(client) )
+	{
+		if( g_iCvarStrike && GetEntProp(client, Prop_Send, "m_isGoingToDie") && GetEntProp(client, Prop_Send, "m_isHangingFromLedge", 1) == 0 )
 		{
-			if( g_iCvarStrike && GetEntProp(client, Prop_Send, "m_isGoingToDie") && GetEntProp(client, Prop_Send, "m_isHangingFromLedge", 1) == 0 )
-			{
-				g_bSetDSP[client] = true;
-				SetEffects(client, 2); // Some muffle
+			g_bSetDSP[client] = true;
+			SetEffects(client, 2); // Some muffle
 
-				//PrintToChatAll("B&W DSP %N", client);
-			}
-			else if( g_bSetDSP[client] )
-			{
-				g_bSetDSP[client] = false;
-				SetEffects(client, 1);
+			//PrintToChatAll("B&W DSP %N", client);
+		}
+		else if( g_bSetDSP[client] )
+		{
+			g_bSetDSP[client] = false;
+			SetEffects(client, 1);
 
-				//PrintToChatAll("REVIVE DSP %N", client);
-			}
+			//PrintToChatAll("REVIVE DSP %N", client);
 		}
 	}
 }
