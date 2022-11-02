@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.8"
+#define PLUGIN_VERSION 		"1.9"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,10 @@
 
 ========================================================================================
 	Change Log:
+
+1.9 (02-Nov-2022)
+	- Fixed screen turning black and white when they're not read to die. Thanks to "Iciaria" for reporting and lots of help testing.
+	- Various changes to simplify the code.
 
 1.8 (25-Aug-2022)
 	- Changes to fix warnings when compiling on SM 1.11.
@@ -81,8 +85,7 @@ bool g_bCvarAllow, g_bMapStarted, g_bLeft4Dead2;
 float g_fDecayDecay;
 int g_iCvarRevives, g_iCvarScreen, g_iCvarSound, g_iCvarVocal;
 int g_iReviveCount[MAXPLAYERS+1];
-bool g_bHookedDamageMain[MAXPLAYERS+1];
-bool g_bHookedDamagePost[MAXPLAYERS+1];
+bool g_bHookedDamage[MAXPLAYERS+1];
 
 
 /**
@@ -267,7 +270,7 @@ Action CmdHeatbeat(int client, int args)
 					// SetEntPropFloat(target_list[i], Prop_Send, "m_healthBufferTime", GetGameTime());
 
 					ResetCount(target_list[i]);
-					ReviveLogic(target_list[i], GetClientUserId(target_list[i]));
+					ReviveLogic(target_list[i]);
 				}
 				else if( state != 1 && g_iReviveCount[target_list[i]] < g_iCvarScreen )
 				{
@@ -277,7 +280,7 @@ Action CmdHeatbeat(int client, int args)
 					// SetEntityHealth(target_list[i], 1);
 
 					g_iReviveCount[target_list[i]] = g_iCvarScreen;
-					ReviveLogic(target_list[i], GetClientUserId(target_list[i]));
+					ReviveLogic(target_list[i]);
 				}
 			}
 		}
@@ -291,7 +294,7 @@ Action CmdHeatbeat(int client, int args)
 			// SetEntPropFloat(client, Prop_Send, "m_healthBufferTime", GetGameTime());
 
 			ResetCount(client);
-			ReviveLogic(client, GetClientUserId(client));
+			ReviveLogic(client);
 		}
 		else
 		{
@@ -301,7 +304,7 @@ Action CmdHeatbeat(int client, int args)
 			// SetEntityHealth(client, 1);
 
 			g_iReviveCount[client] = g_iCvarScreen;
-			ReviveLogic(client, GetClientUserId(client));
+			ReviveLogic(client);
 		}
 	}
 
@@ -336,7 +339,7 @@ int Native_SetRevives(Handle plugin, int numParams)
 
 	if( numParams != 3 || GetNativeCell(3) )
 	{
-		ReviveLogic(client, GetClientUserId(client));
+		ReviveLogic(client);
 	}
 
 	return 0;
@@ -489,11 +492,9 @@ void ResetCount(int client)
 	g_iReviveCount[client] = 0;
 	ResetSound(client);
 
-	if( g_bHookedDamageMain[client] )	SDKUnhook(client, SDKHook_OnTakeDamage, OnTakeDamageMain);
-	if( g_bHookedDamagePost[client] )	SDKUnhook(client, SDKHook_OnTakeDamageAlivePost, OnTakeDamagePost);
+	if( g_bHookedDamage[client] )	SDKUnhook(client, g_bLeft4Dead2 ? SDKHook_OnTakeDamageAlive : SDKHook_OnTakeDamage, OnTakeDamage);
 
-	g_bHookedDamageMain[client] = false;
-	g_bHookedDamagePost[client] = false;
+	g_bHookedDamage[client] = false;
 }
 
 float GetTempHealth(int client)
@@ -503,26 +504,21 @@ float GetTempHealth(int client)
 	return fHealth < 0.0 ? 0.0 : fHealth;
 }
 
-Action OnTakeDamagePost(int client, int &attacker, int &inflictor, float &damage, int &damagetype)
+// void OnTakeDamage(int client, int attacker, int inflictor, float damage, int damagetype)
+Action OnTakeDamage(int client, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
+	// Prevent yelling
 	if( g_iReviveCount[client] < g_iCvarVocal )
 	{
 		SetEntProp(client, Prop_Send, "m_isGoingToDie", 0);
-	} else {
-		SDKUnhook(client, SDKHook_OnTakeDamageAlivePost, OnTakeDamagePost);
-		g_bHookedDamagePost[client] = false;
 	}
 
-	return Plugin_Continue;
-}
-
-Action OnTakeDamageMain(int client, int &attacker, int &inflictor, float &damage, int &damagetype)
-{
-	int health = GetClientHealth(client) + RoundToFloor(GetTempHealth(client));
-
-	if( damage >= health )
+	// Allow to die
+	if( g_iReviveCount[client] >= g_iCvarRevives )
 	{
-		if( g_iReviveCount[client] >= g_iCvarRevives )
+		int health = GetClientHealth(client) + RoundToFloor(GetTempHealth(client));
+
+		if( health <= 0.0 || (!g_bLeft4Dead2 && health - damage < 0.0) )
 		{
 			// PrintToServer("Heartbeat: Allow die %N (%d/%d)", client, g_iReviveCount[client], g_iCvarRevives);
 			ResetSound(client);
@@ -534,13 +530,10 @@ Action OnTakeDamageMain(int client, int &attacker, int &inflictor, float &damage
 				SetEntProp(client, Prop_Send, "m_currentReviveCount", g_iCvarRevives);
 
 			// Unhook
-			SDKUnhook(client, SDKHook_OnTakeDamage, OnTakeDamageMain);
-			g_bHookedDamageMain[client] = false;
-
-			if( g_bHookedDamagePost[client] )
+			if( g_bHookedDamage[client] )
 			{
-				SDKUnhook(client, SDKHook_OnTakeDamageAlivePost, OnTakeDamagePost);
-				g_bHookedDamagePost[client] = false;
+				SDKUnhook(client, g_bLeft4Dead2 ? SDKHook_OnTakeDamageAlive : SDKHook_OnTakeDamage, OnTakeDamage);
+				g_bHookedDamage[client] = false;
 			}
 		}
 	}
@@ -591,22 +584,20 @@ void Event_Revive(Event event, const char[] name, bool dontBroadcast)
 		if( client )
 		{
 			g_iReviveCount[client]++;
-			// ReviveLogic(client, userid, true);
-			ReviveLogic(client, userid);
+			ReviveLogic(client);
 		}
 	}
 }
 
-// void ReviveLogic(int client, int userid, bool fromEvent = false)
-void ReviveLogic(int client, int userid)
+void ReviveLogic(int client)
 {
 	// PrintToServer("Revives: %N (%d)", client, g_iReviveCount[client]);
 
 	// Monitor for death
-	if( g_iReviveCount[client] == g_iCvarRevives && !g_bHookedDamageMain[client] )
+	if( g_iReviveCount[client] >= g_iCvarRevives && !g_bHookedDamage[client] )
 	{
-		g_bHookedDamageMain[client] = true;
-		SDKHook(client, SDKHook_OnTakeDamage, OnTakeDamageMain);
+		g_bHookedDamage[client] = true;
+		SDKHook(client, g_bLeft4Dead2 ? SDKHook_OnTakeDamageAlive : SDKHook_OnTakeDamage, OnTakeDamage);
 	}
 
 	// Set black and white or not
@@ -626,10 +617,10 @@ void ReviveLogic(int client, int userid)
 	// Vocalize death
 	if( g_iReviveCount[client] < g_iCvarVocal )
 	{
-		if( !g_bHookedDamagePost[client] )
+		if( !g_bHookedDamage[client] )
 		{
-			g_bHookedDamagePost[client] = true;
-			SDKHook(client, SDKHook_OnTakeDamageAlivePost, OnTakeDamagePost);
+			g_bHookedDamage[client] = true;
+			SDKHook(client, g_bLeft4Dead2 ? SDKHook_OnTakeDamageAlive : SDKHook_OnTakeDamage, OnTakeDamage);
 		}
 
 		SetEntProp(client, Prop_Send, "m_isGoingToDie", 0);
@@ -644,7 +635,7 @@ void ReviveLogic(int client, int userid)
 	if( g_iReviveCount[client] >= g_iCvarSound )
 	{
 		// if( g_bLeft4Dead2 && fromEvent && g_iReviveCount[client] == g_iCvarRevives ) return; // Game emits itself, would duplicate sound even with stop... Seems to work fine now with multiple resets..?
-		RequestFrame(OnFrameSound, userid);
+		RequestFrame(OnFrameSound, GetClientUserId(client));
 	}
 }
 
