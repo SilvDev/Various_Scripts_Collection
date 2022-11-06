@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.6"
+#define PLUGIN_VERSION 		"1.7"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.7 (06-Nov-2022)
+	- Fixed Oxygen Tanks not whistling before exploding. Thanks to "Iizuka07" for reporting.
 
 1.6 (14-Jul-2022)
 	- Changes to fix warnings when compiling on SourceMod 1.11.
@@ -101,7 +104,7 @@ int g_iScavenge[2048];
 
 
 // ====================================================================================================
-//					PLUGIN START / END
+//					PLUGIN START
 // ====================================================================================================
 public Plugin myinfo =
 {
@@ -708,6 +711,8 @@ void OnNextFrameSpawnFire(int entity)
 			float time;
 			GetEntPropString(attached, Prop_Data, "m_ModelName", sTemp, sizeof(sTemp));
 
+			bool oxygen;
+
 			if( strcmp(sTemp, MODEL_GASCAN) == 0 )
 			{
 				time = g_fCvarTimeG;
@@ -719,6 +724,8 @@ void OnNextFrameSpawnFire(int entity)
 				time = g_fCvarTimeO;
 				if( g_iCvarTypes & 2 )		SDKHook(attached, SDKHook_Use, OnUseGrab);
 				else						SDKHook(attached, SDKHook_Use, OnUseBlock);
+
+				oxygen = true;
 			}
 			else if( strcmp(sTemp, MODEL_PROPANE) == 0 )
 			{
@@ -746,7 +753,10 @@ void OnNextFrameSpawnFire(int entity)
 				g_fFireTime[attached] = GetGameTime() + time;
 			}
 
-			SDKHook(attached, SDKHook_OnTakeDamage, OnPropTakeDamage);
+			if( oxygen )
+				SDKHook(attached, SDKHook_OnTakeDamage, OxygenTakeDamage);
+			else
+				SDKHook(attached, SDKHook_OnTakeDamage, OnPropTakeDamage);
 
 			CreateTimer(0.1, TimerTest, EntIndexToEntRef(attached), TIMER_REPEAT|TIMER_FLAG_NO_MAPCHANGE);
 		}
@@ -931,6 +941,30 @@ void OnGrabFrame(DataPack dPack)
 // ====================
 // Block prop damage to allow flames
 // ====================
+Action OxygenTakeDamage(int entity, int &attacker, int &inflictor, float &damage, int &damagetype)
+{
+	if( attacker > MaxClients )
+	{
+		static char classname[12];
+		GetEdictClassname(attacker, classname, sizeof(classname));
+		if( strcmp(classname, "entityflame") == 0 )
+		{
+			// Allow whistle effect for last 2 seconds by setting health to 1 and removing damage block
+			int flame = GetEntPropEnt(entity, Prop_Send, "m_hEffectEntity");
+			if( GetEntPropFloat(flame, Prop_Data, "m_flLifetime") - GetGameTime() > 2.0 )
+			{
+				return Plugin_Handled;
+			}
+			else
+			{
+				SetEntProp(entity, Prop_Data, "m_iHealth", 2);
+				SDKUnhook(entity, SDKHook_OnTakeDamage, OxygenTakeDamage);
+			}
+		}
+	}
+	return Plugin_Continue;
+}
+
 Action OnPropTakeDamage(int entity, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
 	if( attacker > MaxClients )
