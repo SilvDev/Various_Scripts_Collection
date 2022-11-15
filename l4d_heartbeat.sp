@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.9"
+#define PLUGIN_VERSION 		"1.10"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.10 (15-Nov-2022)
+	- Fixed the revive count not carrying over when switching to/from idle state. Thanks to "NoroHime" for reporting.
 
 1.9 (02-Nov-2022)
 	- Fixed screen turning black and white when they're not read to die. Thanks to "Iciaria" for reporting and lots of help testing.
@@ -221,6 +224,14 @@ public void OnPluginStart()
 	AddCommandListener(CommandListener, "give");
 
 	RegAdminCmd("sm_heartbeat", CmdHeatbeat, ADMFLAG_ROOT, "Set someone as black and white health status or toggle their state. Usage: sm_heartbeat [#userid|name] [state: 0=Healed. 1=Black and white.]");
+
+	for( int i = 1; i <= MaxClients; i++ )
+	{
+		if( IsClientInGame(i) && GetClientTeam(i) == 2 && IsPlayerAlive(i) )
+		{
+			g_iReviveCount[i] = GetEntProp(i, Prop_Send, "m_currentReviveCount");
+		}
+	}
 }
 
 Action CmdHeatbeat(int client, int args)
@@ -387,6 +398,7 @@ void IsAllowed()
 	{
 		g_bCvarAllow = true;
 		HookEvent("bot_player_replace",		Event_BotReplace);
+		HookEvent("player_bot_replace",		Event_ReplaceBot);
 		HookEvent("player_death",			Event_Spawned);
 		HookEvent("player_spawn",			Event_Spawned);
 		HookEvent("heal_success",			Event_Healed);
@@ -397,6 +409,7 @@ void IsAllowed()
 	{
 		g_bCvarAllow = false;
 		UnhookEvent("bot_player_replace",	Event_BotReplace);
+		UnhookEvent("player_bot_replace",	Event_ReplaceBot);
 		UnhookEvent("player_death",			Event_Spawned);
 		UnhookEvent("player_spawn",			Event_Spawned);
 		UnhookEvent("heal_success",			Event_Healed);
@@ -548,13 +561,24 @@ Action OnTakeDamage(int client, int &attacker, int &inflictor, float &damage, in
 // ====================================================================================================
 void Event_BotReplace(Event event, const char[] name, bool dontBroadcast)
 {
-	int client = GetClientOfUserId(event.GetInt("userid"));
+	int client = GetClientOfUserId(event.GetInt("player"));
+	int bot = GetClientOfUserId(event.GetInt("bot"));
 	if( client )
 	{
 		ResetSound(client);
 		ResetSound(client);
 		ResetSound(client);
 	}
+
+	g_iReviveCount[client] = g_iReviveCount[bot];
+}
+
+void Event_ReplaceBot(Event event, const char[] name, bool dontBroadcast)
+{
+	int client = GetClientOfUserId(event.GetInt("player"));
+	int bot = GetClientOfUserId(event.GetInt("bot"));
+
+	g_iReviveCount[bot] = g_iReviveCount[client];
 }
 
 void Event_Spawned(Event event, const char[] name, bool dontBroadcast)
