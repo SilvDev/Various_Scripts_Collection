@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.9"
+#define PLUGIN_VERSION 		"1.10"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.10 (22-Nov-2022)
+	- Fixed the "l4d_infected_movement_bots" and "l4d_infected_movement_type" cvars being flipped. Thanks to "Fraggor" for reporting.
 
 1.9 (02-Feb-2022)
 	- Added cvar "l4d_infected_movement_bots" to control which bots this plugin enables for. Requested by "Alexmy".
@@ -180,12 +183,12 @@ public void OnConfigsExecuted()
 	IsAllowed();
 }
 
-public void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	IsAllowed();
 }
 
-public void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	GetCvars();
 }
@@ -202,8 +205,8 @@ void GetCvars()
 	g_fSpeedTank = g_hSpeedTank.FloatValue;
 	g_fSpeedTankDef = g_hSpeedTankDef.FloatValue;
 	g_iCvarSmoker = g_hCvarSmoker.IntValue;
-	g_iCvarType = g_hCvarBots.IntValue;
-	g_iCvarBots = g_hCvarType.IntValue;
+	g_iCvarType = g_hCvarType.IntValue;
+	g_iCvarBots = g_hCvarBots.IntValue;
 }
 
 void IsAllowed()
@@ -290,7 +293,7 @@ bool IsAllowedGameMode()
 	return true;
 }
 
-public void OnGamemode(const char[] output, int caller, int activator, float delay)
+void OnGamemode(const char[] output, int caller, int activator, float delay)
 {
 	if( strcmp(output, "OnCoop") == 0 )
 		g_iCurrentMode = 1;
@@ -307,7 +310,7 @@ public void OnGamemode(const char[] output, int caller, int activator, float del
 // ====================================================================================================
 //					EVENTS
 // ====================================================================================================
-public void Event_Reset(Event event, const char[] name, bool dontBroadcast)
+void Event_Reset(Event event, const char[] name, bool dontBroadcast)
 {
 	ResetPlugin();
 }
@@ -320,7 +323,7 @@ void ResetPlugin()
 	}
 }
 
-public void Event_Death(Event event, const char[] name, bool dontBroadcast)
+void Event_Death(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
 	if( !client || !IsClientInGame(client) || GetClientTeam(client) != 3 ) return;
@@ -336,7 +339,7 @@ public void Event_Death(Event event, const char[] name, bool dontBroadcast)
 	}
 }
 
-public void Event_Use(Event event, const char[] name, bool dontBroadcast)
+void Event_Use(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
 	if( !client || !IsClientInGame(client) ) return;
@@ -393,7 +396,7 @@ public void Event_Use(Event event, const char[] name, bool dontBroadcast)
 	}
 }
 
-public void OnThinkFunk(int client) //Dance
+void OnThinkFunk(int client) //Dance
 {
 	if( IsClientInGame(client) )
 	{
