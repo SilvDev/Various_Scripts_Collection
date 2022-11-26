@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.10"
+#define PLUGIN_VERSION 		"1.11"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.11 (26-Nov-2022)
+	- Fixed breaking under certain conditions until swapping weapon. Thanks to "TBK Duy" for reporting.
 
 1.10 (15-Jan-2022)
 	- Fixed L4D1 not reading reserve ammo correctly. Thanks to "ZBzibing" for reporting.
@@ -276,12 +279,12 @@ public void OnConfigsExecuted()
 	IsAllowed();
 }
 
-public void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	IsAllowed();
 }
 
-public void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	GetCvars();
 }
@@ -402,7 +405,7 @@ bool IsAllowedGameMode()
 	return true;
 }
 
-public void OnGamemode(const char[] output, int caller, int activator, float delay)
+void OnGamemode(const char[] output, int caller, int activator, float delay)
 {
 	if( strcmp(output, "OnCoop") == 0 )
 		g_iCurrentMode = 1;
@@ -458,7 +461,7 @@ void UnhookEvents()
 }
 
 // Auto reload after shooting
-public void Event_WeaponFire(Event event, const char[] name, bool dontBroadcast)
+void Event_WeaponFire(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
 	if( (g_iAutoReload[client] || !g_bLeft4Dead2) && !IsFakeClient(client) )
@@ -475,7 +478,7 @@ public void Event_WeaponFire(Event event, const char[] name, bool dontBroadcast)
 	}
 }
 
-public void Event_WeaponReload(Event event, const char[] name, bool dontBroadcast)
+void Event_WeaponReload(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
 	if( client && !IsFakeClient(client) )
@@ -490,7 +493,7 @@ public void Event_WeaponReload(Event event, const char[] name, bool dontBroadcas
 }
 
 // Correct stored ammo values when picking up ammo during reload
-public void Event_AmmoPickup(Event event, const char[] name, bool dontBroadcast)
+void Event_AmmoPickup(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
 	if( client && !IsFakeClient(client) )
@@ -503,7 +506,7 @@ public void Event_AmmoPickup(Event event, const char[] name, bool dontBroadcast)
 	}
 }
 
-public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
+void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
 	if( client && GetClientTeam(client) == 2 && !IsFakeClient(client) )
@@ -514,7 +517,7 @@ public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast
 	}
 }
 
-public void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
+void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
 	if( client )
@@ -525,7 +528,7 @@ public void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast
 	}
 }
 
-public void Event_PlayerTeam(Event event, const char[] name, bool dontBroadcast)
+void Event_PlayerTeam(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
 	if( client )
@@ -536,7 +539,7 @@ public void Event_PlayerTeam(Event event, const char[] name, bool dontBroadcast)
 	}
 }
 
-public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
+void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
 	ResetPlugin();
 }
@@ -617,6 +620,8 @@ void OnSwitchWeapon(int client, int weapon)
 	g_iWasShoot[client] = 0;
 	g_iAutoReload[client] = 0;
 
+	weapon = GetEntPropEnt(client, Prop_Data, "m_hActiveWeapon");
+
 	if( !IsValidEntity(weapon) || IsFakeClient(client) )
 		return;
 
@@ -687,7 +692,7 @@ void OnReload(int weapon)
 	}
 }
 
-public void OnFrame(int weapon)
+void OnFrame(int weapon)
 {
 	weapon = EntRefToEntIndex(weapon);
 	if( IsValidEntity(weapon) && GetEntProp(weapon, Prop_Send, "m_bInReload") )
