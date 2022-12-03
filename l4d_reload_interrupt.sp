@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.11"
+#define PLUGIN_VERSION 		"1.12"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.12 (03-Dec-2022)
+	- Fixed unknown sound errors in console. Thanks to "TBK Duy" for reporting.
 
 1.11 (26-Nov-2022)
 	- Fixed breaking under certain conditions until swapping weapon. Thanks to "TBK Duy" for reporting.
@@ -730,7 +733,7 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 				if( index != -1 )
 				{
 					// Play incendiary ammo sound if required
-					int type = g_bLeft4Dead2 && GetEntProp(weapon, Prop_Send, "m_upgradeBitVec") & 1;
+					int type = (g_bLeft4Dead2 && GetEntProp(weapon, Prop_Send, "m_upgradeBitVec") & 1);
 					EmitSoundToClient(client, g_sWeaponSounds[index][type], client, SNDCHAN_WEAPON, SNDLEVEL_MINIBIKE, SND_NOFLAGS, index ? 1.0 : 0.649902); // Pistol has reduced volume
 				}
 
