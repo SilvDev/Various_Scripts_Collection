@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.10"
+#define PLUGIN_VERSION 		"1.11"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.11 (03-Dec-2022)
+	- Plugin now resets the heartbeat sound for spectators.
 
 1.10 (15-Nov-2022)
 	- Fixed the revive count not carrying over when switching to/from idle state. Thanks to "NoroHime" for reporting.
@@ -503,6 +506,7 @@ public void OnMapEnd()
 void ResetCount(int client)
 {
 	g_iReviveCount[client] = 0;
+	ResetSoundObs(client);
 	ResetSound(client);
 
 	if( g_bHookedDamage[client] )	SDKUnhook(client, g_bLeft4Dead2 ? SDKHook_OnTakeDamageAlive : SDKHook_OnTakeDamage, OnTakeDamage);
@@ -534,6 +538,7 @@ Action OnTakeDamage(int client, int &attacker, int &inflictor, float &damage, in
 		if( health <= 0.0 || (!g_bLeft4Dead2 && health - damage < 0.0) )
 		{
 			// PrintToServer("Heartbeat: Allow die %N (%d/%d)", client, g_iReviveCount[client], g_iCvarRevives);
+			ResetSoundObs(client);
 			ResetSound(client);
 
 			// Allow to die
@@ -568,6 +573,7 @@ void Event_BotReplace(Event event, const char[] name, bool dontBroadcast)
 		ResetSound(client);
 		ResetSound(client);
 		ResetSound(client);
+		ResetSoundObs(client);
 	}
 
 	g_iReviveCount[client] = g_iReviveCount[bot];
@@ -590,6 +596,7 @@ void Event_Spawned(Event event, const char[] name, bool dontBroadcast)
 		ResetSound(client);
 		ResetSound(client);
 		ResetSound(client);
+		ResetSoundObs(client);
 	}
 }
 
@@ -655,11 +662,26 @@ void ReviveLogic(int client)
 	ResetSound(client);
 	ResetSound(client);
 	ResetSound(client);
+	ResetSoundObs(client);
 
 	if( g_iReviveCount[client] >= g_iCvarSound )
 	{
 		// if( g_bLeft4Dead2 && fromEvent && g_iReviveCount[client] == g_iCvarRevives ) return; // Game emits itself, would duplicate sound even with stop... Seems to work fine now with multiple resets..?
 		RequestFrame(OnFrameSound, GetClientUserId(client));
+	}
+}
+
+void ResetSoundObs(int client)
+{
+	for( int i = 1; i <= MaxClients; i++ )
+	{
+		if( IsClientInGame(i) && GetEntPropEnt(i, Prop_Send, "m_hObserverTarget") == client )
+		{
+			ResetSound(i);
+			ResetSound(i);
+			ResetSound(i);
+			ResetSound(i);
+		}
 	}
 }
 
