@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.10"
+#define PLUGIN_VERSION 		"1.11"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.11 (03-Dec-2022)
+	- Added cvars "l4d_infected_movement_delay_smoker", "l4d_infected_movement_delay_spitter" and "l4d_infected_movement_delay_tank" to delay unlocking movement. Requested by "Mika Misori".
 
 1.10 (22-Nov-2022)
 	- Fixed the "l4d_infected_movement_bots" and "l4d_infected_movement_type" cvars being flipped. Thanks to "Fraggor" for reporting.
@@ -79,10 +82,10 @@
 #define CVAR_FLAGS			FCVAR_NOTIFY
 
 
-ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarBots, g_hCvarSmoker, g_hCvarType, g_hSpeedSmoke, g_hSpeedSpit, g_hSpeedTank, g_hSpeedSmokeDef, g_hSpeedSpitDef, g_hSpeedTankDef;
+ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarBots, g_hCvarDelaySmoker, g_hCvarDelaySpitter, g_hCvarDelayTank, g_hCvarSmoker, g_hCvarType, g_hSpeedSmoke, g_hSpeedSpit, g_hSpeedTank, g_hSpeedSmokeDef, g_hSpeedSpitDef, g_hSpeedTankDef;
 int g_iCvarAllow, g_iCvarBots, g_iCvarSmoker, g_iCvarType, g_iClassTank;
 bool g_bCvarAllow, g_bMapStarted, g_bLeft4Dead2;
-float g_fSpeedSmoke, g_fSpeedSmokeDef, g_fSpeedSpit, g_fSpeedSpitDef, g_fSpeedTank, g_fSpeedTankDef;
+float g_fCvarDelaySmoker, g_fCvarDelaySpitter, g_fCvarDelayTank, g_fSpeedSmoke, g_fSpeedSmokeDef, g_fSpeedSpit, g_fSpeedSpitDef, g_fSpeedTank, g_fSpeedTankDef;
 float g_fTime[MAXPLAYERS+1];
 
 enum
@@ -121,17 +124,20 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 
 public void OnPluginStart()
 {
-	g_hCvarAllow =		CreateConVar(	"l4d_infected_movement_allow",			"3",			"0=Plugin off, 1=Allow players only, 2=Allow bots only, 3=Both.", CVAR_FLAGS );
-	g_hCvarModes =		CreateConVar(	"l4d_infected_movement_modes",			"",				"Turn on the plugin in these game modes, separate by commas (no spaces). (Empty = all).", CVAR_FLAGS );
-	g_hCvarModesOff =	CreateConVar(	"l4d_infected_movement_modes_off",		"",				"Turn off the plugin in these game modes, separate by commas (no spaces). (Empty = none).", CVAR_FLAGS );
-	g_hCvarModesTog =	CreateConVar(	"l4d_infected_movement_modes_tog",		"0",			"Turn on the plugin in these game modes. 0=All, 1=Coop, 2=Survival, 4=Versus, 8=Scavenge. Add numbers together.", CVAR_FLAGS );
-	g_hCvarBots =		CreateConVar(	"l4d_infected_movement_bots",			"7",			"These Special Infected bots can use: 1=Smoker, 2=Spitter, 4=Tank, 7=All. Add numbers together.", CVAR_FLAGS );
-	g_hCvarSmoker =		CreateConVar(	"l4d_infected_movement_smoker",			"2",			"0=Only on shooting. 1=Smokers can move while pulling someone. 2=Smokers can also move when someone is hanging from the tongue.", CVAR_FLAGS );
-	g_hSpeedSmoke =		CreateConVar(	"l4d_infected_movement_speed_smoker",	"250",			"How fast can Smokers move while using their ability.", CVAR_FLAGS );
-	g_hSpeedTank =		CreateConVar(	"l4d_infected_movement_speed_tank",		"250",			"How fast can Tanks move while using their ability.", CVAR_FLAGS );
+	g_hCvarAllow =			CreateConVar(	"l4d_infected_movement_allow",			"3",			"0=Plugin off, 1=Allow players only, 2=Allow bots only, 3=Both.", CVAR_FLAGS );
+	g_hCvarModes =			CreateConVar(	"l4d_infected_movement_modes",			"",				"Turn on the plugin in these game modes, separate by commas (no spaces). (Empty = all).", CVAR_FLAGS );
+	g_hCvarModesOff =		CreateConVar(	"l4d_infected_movement_modes_off",		"",				"Turn off the plugin in these game modes, separate by commas (no spaces). (Empty = none).", CVAR_FLAGS );
+	g_hCvarModesTog =		CreateConVar(	"l4d_infected_movement_modes_tog",		"0",			"Turn on the plugin in these game modes. 0=All, 1=Coop, 2=Survival, 4=Versus, 8=Scavenge. Add numbers together.", CVAR_FLAGS );
+	g_hCvarBots =			CreateConVar(	"l4d_infected_movement_bots",			"7",			"These Special Infected bots can use: 1=Smoker, 2=Spitter, 4=Tank, 7=All. Add numbers together.", CVAR_FLAGS );
+	g_hCvarDelaySmoker =	CreateConVar(	"l4d_infected_movement_delay_smoker",	"0.0",			"0.0=Instantly. How many seconds after using their ability can the Smoker move.", CVAR_FLAGS );
+	g_hCvarDelaySpitter =	CreateConVar(	"l4d_infected_movement_delay_spitter",	"0.0",			"0.0=Instantly. How many seconds after using their ability can the Spitter move.", CVAR_FLAGS );
+	g_hCvarDelayTank =		CreateConVar(	"l4d_infected_movement_delay_tank",		"0.0",			"0.0=Instantly. How many seconds after using their ability can the Tank move.", CVAR_FLAGS );
+	g_hCvarSmoker =			CreateConVar(	"l4d_infected_movement_smoker",			"2",			"0=Only on shooting. 1=Smokers can move while pulling someone. 2=Smokers can also move when someone is hanging from the tongue.", CVAR_FLAGS );
+	g_hSpeedSmoke =			CreateConVar(	"l4d_infected_movement_speed_smoker",	"250",			"How fast can Smokers move while using their ability.", CVAR_FLAGS );
+	g_hSpeedTank =			CreateConVar(	"l4d_infected_movement_speed_tank",		"250",			"How fast can Tanks move while using their ability.", CVAR_FLAGS );
 	if( g_bLeft4Dead2 )
-		g_hSpeedSpit =	CreateConVar(	"l4d_infected_movement_speed_spitter",	"250",			"How fast can Spitters move while using their ability.", CVAR_FLAGS );
-	g_hCvarType =		CreateConVar(	"l4d_infected_movement_type",			"7",			"These Special Infected players can use: 1=Smoker, 2=Spitter, 4=Tank, 7=All. Add numbers together.", CVAR_FLAGS );
+		g_hSpeedSpit =		CreateConVar(	"l4d_infected_movement_speed_spitter",	"250",			"How fast can Spitters move while using their ability.", CVAR_FLAGS );
+	g_hCvarType =			CreateConVar(	"l4d_infected_movement_type",			"7",			"These Special Infected players can use: 1=Smoker, 2=Spitter, 4=Tank, 7=All. Add numbers together.", CVAR_FLAGS );
 	CreateConVar(						"l4d_infected_movement_version",		PLUGIN_VERSION, "Ability Movement plugin version.", FCVAR_NOTIFY|FCVAR_DONTRECORD);
 	AutoExecConfig(true,				"l4d_infected_movement");
 
@@ -142,6 +148,9 @@ public void OnPluginStart()
 	g_hCvarModesOff.AddChangeHook(ConVarChanged_Allow);
 	g_hCvarModesTog.AddChangeHook(ConVarChanged_Allow);
 	g_hCvarBots.AddChangeHook(ConVarChanged_Cvars);
+	g_hCvarDelaySmoker.AddChangeHook(ConVarChanged_Cvars);
+	g_hCvarDelaySpitter.AddChangeHook(ConVarChanged_Cvars);
+	g_hCvarDelayTank.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarType.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarSmoker.AddChangeHook(ConVarChanged_Cvars);
 	g_hSpeedSmoke.AddChangeHook(ConVarChanged_Cvars);
@@ -207,6 +216,9 @@ void GetCvars()
 	g_iCvarSmoker = g_hCvarSmoker.IntValue;
 	g_iCvarType = g_hCvarType.IntValue;
 	g_iCvarBots = g_hCvarBots.IntValue;
+	g_fCvarDelaySmoker = g_hCvarDelaySmoker.FloatValue;
+	g_fCvarDelaySpitter = g_hCvarDelaySpitter.FloatValue;
+	g_fCvarDelayTank = g_hCvarDelayTank.FloatValue;
 }
 
 void IsAllowed()
@@ -377,23 +389,55 @@ void Event_Use(Event event, const char[] name, bool dontBroadcast)
 
 
 	// Event check
+	int type;
 	char sUse[16];
 	event.GetString("ability", sUse, sizeof(sUse));
-	if(
-		(g_bLeft4Dead2 && strcmp(sUse, "ability_spit") == 0)
-		|| strcmp(sUse, "ability_throw") == 0
-		|| strcmp(sUse, "ability_tongue") == 0
-	)
+	if( (g_bLeft4Dead2 && strcmp(sUse, "ability_spit") == 0) )		type = ENUM_SPITS;
+	else if( strcmp(sUse, "ability_throw") == 0 )					type = ENUM_TANKS;
+	else if( strcmp(sUse, "ability_tongue") == 0 )					type = ENUM_SMOKE;
+
+	if( type )
 	{
 		if( g_fTime[client] - GetGameTime() < 0.0 )
 		{
 			g_fTime[client] = GetGameTime() + 3.0;
-			// Hooked 3 times, because each alone is not enough, this creates the smoothest play with minimal movement stutter
-			SDKHook(client, SDKHook_PostThinkPost, OnThinkFunk);
-			SDKHook(client, SDKHook_PreThink, OnThinkFunk);
-			SDKHook(client, SDKHook_PreThinkPost, OnThinkFunk);
+
+			float delay;
+
+			switch( type )
+			{
+				case ENUM_SMOKE: delay = g_fCvarDelaySmoker;
+				case ENUM_SPITS: delay = g_fCvarDelaySpitter;
+				case ENUM_TANKS: delay = g_fCvarDelayTank;
+			}
+
+			if( delay )
+			{
+				CreateTimer(delay, TimerDelay, GetClientUserId(client));
+			}
+			else
+			{
+				// Hooked 3 times, because each alone is not enough, this creates the smoothest play with minimal movement stutter
+				SDKHook(client, SDKHook_PostThinkPost, OnThinkFunk);
+				SDKHook(client, SDKHook_PreThink, OnThinkFunk);
+				SDKHook(client, SDKHook_PreThinkPost, OnThinkFunk);
+			}
 		}
 	}
+}
+
+Action TimerDelay(Handle timer, int client)
+{
+	client = GetClientOfUserId(client);
+	if( client && IsClientInGame(client) )
+	{
+		g_fTime[client] = GetGameTime() + 3.0;
+		SDKHook(client, SDKHook_PostThinkPost, OnThinkFunk);
+		SDKHook(client, SDKHook_PreThink, OnThinkFunk);
+		SDKHook(client, SDKHook_PreThinkPost, OnThinkFunk);
+	}
+
+	return Plugin_Continue;
 }
 
 void OnThinkFunk(int client) //Dance
