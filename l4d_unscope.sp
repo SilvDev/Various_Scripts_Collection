@@ -1,6 +1,6 @@
 /*
 *	Unscope Sniper On Shoot
-*	Copyright (C) 2021 Silvers
+*	Copyright (C) 2022 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.9"
+#define PLUGIN_VERSION 		"1.10"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.10 (11-Dec-2022)
+	- Changes to fix compile warnings on SourceMod 1.11.
 
 1.9 (11-Oct-2021)
 	- Fixed Zoom and Unzoom logic being inverted.
@@ -167,12 +170,12 @@ public void OnConfigsExecuted()
 	IsAllowed();
 }
 
-public void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	IsAllowed();
 }
 
-public void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	GetCvars();
 }
@@ -274,7 +277,7 @@ bool IsAllowedGameMode()
 	return true;
 }
 
-public void OnGamemode(const char[] output, int caller, int activator, float delay)
+void OnGamemode(const char[] output, int caller, int activator, float delay)
 {
 	if( strcmp(output, "OnCoop") == 0 )
 		g_iCurrentMode = 1;
@@ -291,7 +294,7 @@ public void OnGamemode(const char[] output, int caller, int activator, float del
 // ====================================================================================================
 //					EVENTS
 // ====================================================================================================
-public Action Event_WeaponFire(Event event, const char[] name, bool dontBroadcast)
+void Event_WeaponFire(Event event, const char[] name, bool dontBroadcast)
 {
 	int weaponID = event.GetInt("weaponid");
 
@@ -322,7 +325,7 @@ public Action Event_WeaponFire(Event event, const char[] name, bool dontBroadcas
 }
 
 // Prevent scoping while reloading
-public Action Event_WeaponZoom(Event event, const char[] name, bool dontBroadcast)
+void Event_WeaponZoom(Event event, const char[] name, bool dontBroadcast)
 {
 	if( g_iCvarRescope )
 	{
@@ -335,11 +338,10 @@ public Action Event_WeaponZoom(Event event, const char[] name, bool dontBroadcas
 				if( weapon != -1 )
 				{
 					// Verify sniper?
-					int val;
 					static char classname[24];
 					GetEdictClassname(weapon, classname, sizeof(classname));
 
-					if( g_aWeaponIDs.GetValue(classname, val) )
+					if( g_aWeaponIDs.ContainsKey(classname) )
 					{
 						UnzoomWeapon(client);
 					}
@@ -354,7 +356,7 @@ public void OnClientDisconnect(int client)
 	g_hTimerRescope[client] = null;
 }
 
-public Action TimerRescope(Handle timer, any client)
+Action TimerRescope(Handle timer, any client)
 {
 	client = GetClientOfUserId(client);
 	if( client && IsClientInGame(client) )
@@ -368,6 +370,8 @@ public Action TimerRescope(Handle timer, any client)
 			ZoomWeapon(client);
 		}
 	}
+
+	return Plugin_Continue;
 }
 
 void UnzoomWeapon(int client)
