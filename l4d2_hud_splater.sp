@@ -1,6 +1,6 @@
 /*
 *	Hud Splatter
-*	Copyright (C) 2021 Silvers
+*	Copyright (C) 2022 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION		"1.4"
+#define PLUGIN_VERSION		"1.5"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.5 (11-Dec-2022)
+	- Changes to fix compile warnings on SourceMod 1.11.
 
 1.4 (21-Sep-2021)
 	- Fixed targeting single or multiple people being flipped.
@@ -144,7 +147,7 @@ public void OnPluginStart()
 	RegAdminCmd("sm_splat",			Command_Splatter,	ADMFLAG_KICK,	"Usage: sm_splat <#userid|name> <1-19>");
 }
 
-public void ConVarChanged_Enable(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Enable(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	g_bCvarAllow = g_hAllow.BoolValue;
 }
@@ -193,7 +196,7 @@ void SplatPlayer(int client, int type, bool bAffectAll)
 	}
 }
 
-public Action TimerStop(Handle timer, any client)
+Action TimerStop(Handle timer, any client)
 {
 	if( client )
 	{
@@ -216,6 +219,8 @@ public Action TimerStop(Handle timer, any client)
 
 		g_hTimerStop[client] = null;
 	}
+
+	return Plugin_Continue;
 }
 
 public void OnClientDisconnect(int client)
@@ -228,13 +233,13 @@ public void OnClientDisconnect(int client)
 // ====================================================================================================
 //					COMMANDs
 // ====================================================================================================
-public Action Command_SplatMenu(int client, int args)
+Action Command_SplatMenu(int client, int args)
 {
 	if( g_bCvarAllow ) Menu_Select(client);
 	return Plugin_Handled;
 }
 
-public Action Command_Splatter(int client, int args)
+Action Command_Splatter(int client, int args)
 {
 	if( !g_bCvarAllow ) return Plugin_Handled;
 
@@ -309,9 +314,9 @@ void Menu_Select(int client)
 	menu.Display(client, 60);
 }
 
-public int MenuHandler_Select(Menu menu, MenuAction action, int param1, int param2)
+int MenuHandler_Select(Menu menu, MenuAction action, int param1, int param2)
 {
-	if( action == MenuAction_End ) return;
+	if( action == MenuAction_End ) return 0;
 
 	if( action == MenuAction_Select )
 	{
@@ -323,6 +328,8 @@ public int MenuHandler_Select(Menu menu, MenuAction action, int param1, int para
 			case 3: Menu_Misc(param1);
 		}
 	}
+
+	return 0;
 }
 
 
@@ -345,7 +352,7 @@ void Menu_Adren(int client)
 	menu.Display(client, 60);
 }
 
-public int MenuHandler_Adren(Menu menu, MenuAction action, int param1, int param2)
+int MenuHandler_Adren(Menu menu, MenuAction action, int param1, int param2)
 {
 	if( action == MenuAction_End )
 	{
@@ -360,6 +367,8 @@ public int MenuHandler_Adren(Menu menu, MenuAction action, int param1, int param
 		Menu_Adren(param1);
 		SplatPlayer(param1, param2, true);
 	}
+
+	return 0;
 }
 
 // Blood
@@ -379,7 +388,7 @@ void Menu_Blood(int client)
 	menu.Display(client, 60);
 }
 
-public int MenuHandler_Blood(Menu menu, MenuAction action, int param1, int param2)
+int MenuHandler_Blood(Menu menu, MenuAction action, int param1, int param2)
 {
 	if( action == MenuAction_End )
 	{
@@ -394,6 +403,8 @@ public int MenuHandler_Blood(Menu menu, MenuAction action, int param1, int param
 		Menu_Blood(param1);
 		SplatPlayer(param1, param2 + 4, true);
 	}
+
+	return 0;
 }
 
 // Infected
@@ -411,7 +422,7 @@ void Menu_Infected(int client)
 	menu.Display(client, 60);
 }
 
-public int MenuHandler_Infected(Menu menu, MenuAction action, int param1, int param2)
+int MenuHandler_Infected(Menu menu, MenuAction action, int param1, int param2)
 {
 	if( action == MenuAction_End )
 	{
@@ -426,6 +437,8 @@ public int MenuHandler_Infected(Menu menu, MenuAction action, int param1, int pa
 		Menu_Infected(param1);
 		SplatPlayer(param1, param2 + 10, true);
 	}
+
+	return 0;
 }
 
 // Misc
@@ -444,7 +457,7 @@ void Menu_Misc(int client)
 	menu.Display(client, 60);
 }
 
-public int MenuHandler_Misc(Menu menu, MenuAction action, int param1, int param2)
+int MenuHandler_Misc(Menu menu, MenuAction action, int param1, int param2)
 {
 	if( action == MenuAction_End )
 	{
@@ -459,6 +472,8 @@ public int MenuHandler_Misc(Menu menu, MenuAction action, int param1, int param2
 		Menu_Misc(param1);
 		SplatPlayer(param1, param2 + 14, true);
 	}
+
+	return 0;
 }
 
 
@@ -549,7 +564,7 @@ stock void TE_SetupParticleAttachment(int iParticleIndex, int iAttachmentIndex, 
  *
  * @error			Invalid effect index.
  **/
-stock bool TE_SetupStopAllParticles(int iEntIndex)
+void TE_SetupStopAllParticles(int iEntIndex)
 {
 	static float vecDummy[3]={0.0, 0.0, 0.0};
 	static EngineVersion IsEngine;
@@ -595,7 +610,7 @@ stock bool TE_SetupStopAllParticles(int iEntIndex)
  * @return			The particle system index or INVALID_STRING_INDEX on error.
  * @error			Invalid particle stringtable index.
  **/
-stock int GetParticleIndex(char[] sParticleName)
+int GetParticleIndex(char[] sParticleName)
 {
 	static int iParticleTableid = INVALID_STRING_TABLE;
 	if(iParticleTableid == INVALID_STRING_TABLE)
@@ -622,7 +637,7 @@ stock int GetParticleIndex(char[] sParticleName)
  * @param str			String to find.
  * @return			The string index or INVALID_STRING_INDEX on error.
  **/
-static stock int __FindStringIndex2(int tableidx, const char[] str)
+int __FindStringIndex2(int tableidx, const char[] str)
 {
 	static char buf[1024];
 
