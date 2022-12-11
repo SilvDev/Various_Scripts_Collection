@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.20"
+#define PLUGIN_VERSION 		"1.21"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.21 (11-Dec-2022)
+	- Fixed an invalid handle error.
 
 1.20 (09-Jul-2022)
 	- Fixed sometimes ignoring blocked door models when using random doors. Thanks to "gongo" for reporting.
@@ -1141,6 +1144,9 @@ Action TimerRandom(Handle timer)
 		return Plugin_Stop;
 	}
 
+	if( g_hTimerRandom == timer )
+		g_hTimerRandom = null;
+
 	return Plugin_Continue;
 }
 
@@ -1809,14 +1815,14 @@ void PlayVocalize(int client)
 
 	switch( model[29] )
 	{
-		case 'c': { Format(model, sizeof(model), "coach");		surv = 1; }
-		case 'b': { Format(model, sizeof(model), "gambler");	surv = 2; }
-		case 'h': { Format(model, sizeof(model), "mechanic");	surv = 3; }
-		case 'd': { Format(model, sizeof(model), "producer");	surv = 4; }
-		case 'v': { Format(model, sizeof(model), "NamVet");		surv = 5; }
-		case 'e': { Format(model, sizeof(model), "Biker");		surv = 6; }
-		case 'a': { Format(model, sizeof(model), "Manager");	surv = 7; }
-		case 'n': { Format(model, sizeof(model), "TeenGirl");	surv = 8; }
+		case 'c': { model = "coach";		surv = 1; }
+		case 'b': { model = "gambler";	surv = 2; }
+		case 'h': { model = "mechanic";	surv = 3; }
+		case 'd': { model = "producer";	surv = 4; }
+		case 'v': { model = "NamVet";		surv = 5; }
+		case 'e': { model = "Biker";		surv = 6; }
+		case 'a': { model = "Manager";	surv = 7; }
+		case 'n': { model = "TeenGirl";	surv = 8; }
 		default:
 		{
 			int character = GetEntProp(client, Prop_Send, "m_survivorCharacter");
@@ -1825,22 +1831,22 @@ void PlayVocalize(int client)
 			{
 				switch( character )
 				{
-					case 0:	{ Format(model, sizeof(model), "gambler");		surv = 2; } // Nick
-					case 1:	{ Format(model, sizeof(model), "producer");		surv = 4; } // Rochelle
-					case 2:	{ Format(model, sizeof(model), "coach");		surv = 1; } // Coach
-					case 3:	{ Format(model, sizeof(model), "mechanic");		surv = 3; } // Ellis
-					case 4:	{ Format(model, sizeof(model), "NamVet");		surv = 5; } // Bill
-					case 5:	{ Format(model, sizeof(model), "TeenGirl");		surv = 8; } // Zoey
-					case 6:	{ Format(model, sizeof(model), "Biker");		surv = 6; } // Francis
-					case 7:	{ Format(model, sizeof(model), "Manager");		surv = 7; } // Louis
+					case 0:	{ model = "gambler";		surv = 2; } // Nick
+					case 1:	{ model = "producer";		surv = 4; } // Rochelle
+					case 2:	{ model = "coach";			surv = 1; } // Coach
+					case 3:	{ model = "mechanic";		surv = 3; } // Ellis
+					case 4:	{ model = "NamVet";			surv = 5; } // Bill
+					case 5:	{ model = "TeenGirl";		surv = 8; } // Zoey
+					case 6:	{ model = "Biker";			surv = 6; } // Francis
+					case 7:	{ model = "Manager";		surv = 7; } // Louis
 				}
 			} else {
 				switch( character )
 				{
-					case 0:	 { Format(model, sizeof(model) ,"TeenGirl");	surv = 8; } // Zoey
-					case 1:	 { Format(model, sizeof(model) ,"NamVet");		surv = 5; } // Bill
-					case 2:	 { Format(model, sizeof(model) ,"Biker");		surv = 6; } // Francis
-					case 3:	 { Format(model, sizeof(model) ,"Manager");		surv = 7; } // Louis
+					case 0:	 { model = "TeenGirl";		surv = 8; } // Zoey
+					case 1:	 { model = "NamVet";		surv = 5; } // Bill
+					case 2:	 { model = "Biker";			surv = 6; } // Francis
+					case 3:	 { model = "Manager";		surv = 7; } // Louis
 				}
 			}
 		}
