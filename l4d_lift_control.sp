@@ -1,6 +1,6 @@
 /*
 *	Elevator Control
-*	Copyright (C) 2021 Silvers
+*	Copyright (C) 2022 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION		"1.6"
+#define PLUGIN_VERSION		"1.7"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.7 (11-Dec-2022)
+	- Changes to fix compile warnings on SourceMod 1.11.
 
 1.6 (07-Oct-2021)
 	- Added commands: "sm_lift_up", "sm_lift_down", "sm_lift_open", "sm_lift_close", "sm_lift_stop" to control the lift.
@@ -135,28 +138,29 @@ public void OnMapEnd()
 	ResetPlugin();
 }
 
-public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
+void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
 	ResetPlugin();
 }
 
-public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
+void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
 	if( g_iPlayerSpawn == 1 && g_iRoundStart == 0 )
 		CreateTimer(1.0, TimerStart, _, TIMER_FLAG_NO_MAPCHANGE);
 	g_iRoundStart = 1;
 }
 
-public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
+void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 {
 	if( g_iPlayerSpawn == 0 && g_iRoundStart == 1 )
 		CreateTimer(1.0, TimerStart, _, TIMER_FLAG_NO_MAPCHANGE);
 	g_iPlayerSpawn = 1;
 }
 
-public Action TimerStart(Handle timer)
+Action TimerStart(Handle timer)
 {
 	LoadStuff();
+	return Plugin_Continue;
 }
 
 void ResetPlugin()
@@ -208,37 +212,37 @@ void CreateFloor(float vPos[3], const char[] sFloor)
 // ====================================================================================================
 // COMMANDS
 // ====================================================================================================
-public Action CmdLiftUp(int client, int args)
+Action CmdLiftUp(int client, int args)
 {
 	LiftFunction(client, 2);
 	return Plugin_Handled;
 }
 
-public Action CmdLiftDown(int client, int args)
+Action CmdLiftDown(int client, int args)
 {
 	LiftFunction(client, 3);
 	return Plugin_Handled;
 }
 
-public Action CmdLiftOpen(int client, int args)
+Action CmdLiftOpen(int client, int args)
 {
 	LiftFunction(client, 0);
 	return Plugin_Handled;
 }
 
-public Action CmdLiftClose(int client, int args)
+Action CmdLiftClose(int client, int args)
 {
 	LiftFunction(client, 1);
 	return Plugin_Handled;
 }
 
-public Action CmdLiftStop(int client, int args)
+Action CmdLiftStop(int client, int args)
 {
 	LiftFunction(client, 4);
 	return Plugin_Handled;
 }
 
-public Action CmdLift(int client, int args)
+Action CmdLift(int client, int args)
 {
 	ShowLifts(client);
 	return Plugin_Handled;
@@ -267,7 +271,7 @@ void ShowLifts(int client)
 	}
 }
 
-public int LiftMenuHandler(Menu menu, MenuAction action, int client, int index)
+int LiftMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_End )
 		delete menu;
@@ -277,6 +281,8 @@ public int LiftMenuHandler(Menu menu, MenuAction action, int client, int index)
 
 		ShowLifts(client);
 	}
+
+	return 0;
 }
 
 
