@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.11"
+#define PLUGIN_VERSION 		"1.12"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.12 (11-Dec-2022)
+	- Changes to fix compile warnings on SourceMod 1.11.
 
 1.11 (05-Jun-2022)
 	- Fixed glow duration not following the burn duration. Thanks to "gongo" for reporting.
@@ -510,6 +513,8 @@ Action TimerDestroy(Handle timer, any index)
 		g_iTick[index] = 0;
 		RequestFrame(OnFrameFadeOut, index);
 	}
+
+	return Plugin_Continue;
 }
 
 void OnFrameFadeOut(int index)
