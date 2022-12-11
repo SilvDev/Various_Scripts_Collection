@@ -1,6 +1,6 @@
 /*
 *	Lamps
-*	Copyright (C) 2020 Silvers
+*	Copyright (C) 2022 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.8"
+#define PLUGIN_VERSION 		"1.9"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.9 (11-Dec-2022)
+	- Changes to fix compile warnings on SourceMod 1.11.
 
 1.8 (30-Sep-2020)
 	- Changed "l4d_lamp_precache" cvar default value to blank.
@@ -310,12 +313,12 @@ public void OnConfigsExecuted()
 	IsAllowed();
 }
 
-public void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	IsAllowed();
 }
 
-public void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	GetCvars();
 }
@@ -409,7 +412,7 @@ bool IsAllowedGameMode()
 	return true;
 }
 
-public void OnGamemode(const char[] output, int caller, int activator, float delay)
+void OnGamemode(const char[] output, int caller, int activator, float delay)
 {
 	if( strcmp(output, "OnCoop") == 0 )
 		g_iCurrentMode = 1;
@@ -440,12 +443,12 @@ void UnhookEvents()
 	UnhookEvent("player_spawn",			Event_PlayerSpawn,	EventHookMode_PostNoCopy);
 }
 
-public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
+void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
 	ResetPlugin();
 }
 
-public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
+void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
 	if( g_iPlayerSpawn == 1 && g_iRoundStart == 0 )
 		CreateTimer(1.0, TimerStart, _, TIMER_FLAG_NO_MAPCHANGE);
@@ -453,7 +456,7 @@ public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 	g_iRoundStart = 1;
 }
 
-public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
+void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 {
 	if( g_iPlayerSpawn == 0 && g_iRoundStart == 1 )
 		CreateTimer(1.0, TimerStart, _, TIMER_FLAG_NO_MAPCHANGE);
@@ -466,10 +469,11 @@ public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast
 // ====================================================================================================
 //					LOAD LIGHTS
 // ====================================================================================================
-public Action TimerStart(Handle timer)
+Action TimerStart(Handle timer)
 {
 	ResetPlugin();
 	LoadLamps();
+	return Plugin_Continue;
 }
 
 void LoadLamps()
@@ -984,7 +988,7 @@ void ParentEntities(int target, int entity)
 // ====================================================================================================
 //					BREAK
 // ====================================================================================================
-public void OnBreak(const char[] output, int caller, int activator, float delay)
+void OnBreak(const char[] output, int caller, int activator, float delay)
 {
 	int entity = EntIndexToEntRef(caller);
 	for( int i = 0; i < MAX_ALLOWED; i++ )
@@ -1248,7 +1252,7 @@ void ShowMenuMain(int client)
 	g_hMenuMain.Display(client, MENU_TIME_FOREVER);
 }
 
-public int MainMenuHandler(Menu menu, MenuAction action, int client, int index)
+int MainMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_Select )
 	{
@@ -1280,6 +1284,8 @@ public int MainMenuHandler(Menu menu, MenuAction action, int client, int index)
 			case 10:		ConfirmWipe(client);
 		}
 	}
+
+	return 0;
 }
 
 void ConfirmDelete(int client)
@@ -1292,7 +1298,7 @@ void ConfirmDelete(int client)
 	hMenu.Display(client, MENU_TIME_FOREVER);
 }
 
-public int DeleteMenuHandler(Menu menu, MenuAction action, int client, int index)
+int DeleteMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_Cancel )
 	{
@@ -1315,6 +1321,8 @@ public int DeleteMenuHandler(Menu menu, MenuAction action, int client, int index
 			ShowMenuMain(client);
 		}
 	}
+
+	return 0;
 }
 
 void ConfirmWipe(int client)
@@ -1327,7 +1335,7 @@ void ConfirmWipe(int client)
 	hMenu.Display(client, MENU_TIME_FOREVER);
 }
 
-public int WipeMenuHandler(Menu menu, MenuAction action, int client, int index)
+int WipeMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_Cancel )
 	{
@@ -1350,6 +1358,8 @@ public int WipeMenuHandler(Menu menu, MenuAction action, int client, int index)
 			ShowMenuMain(client);
 		}
 	}
+
+	return 0;
 }
 
 void ListLamps(int client)
@@ -1431,7 +1441,7 @@ void ShowMenuTemp(int client)
 	g_hMenuTemp.Display(client, MENU_TIME_FOREVER);
 }
 
-public int TempMenuHandler(Menu menu, MenuAction action, int client, int index)
+int TempMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_Cancel )
 	{
@@ -1459,6 +1469,8 @@ public int TempMenuHandler(Menu menu, MenuAction action, int client, int index)
 		int menupos = menu.Selection;
 		menu.DisplayAt(client, menupos, MENU_TIME_FOREVER);
 	}
+
+	return 0;
 }
 
 
@@ -1471,7 +1483,7 @@ void ShowMenuSave(int client)
 	g_hMenuSave.Display(client, MENU_TIME_FOREVER);
 }
 
-public int SaveMenuHandler(Menu menu, MenuAction action, int client, int index)
+int SaveMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_Cancel )
 	{
@@ -1499,6 +1511,8 @@ public int SaveMenuHandler(Menu menu, MenuAction action, int client, int index)
 		int menupos = menu.Selection;
 		menu.DisplayAt(client, menupos, MENU_TIME_FOREVER);
 	}
+
+	return 0;
 }
 
 void SaveLampSpawn(int client, int type, int color, char sColor[12])
@@ -1814,7 +1828,7 @@ int SetupLamp(int client, float vPos[3] = NULL_VECTOR, float vAng[3] = NULL_VECT
 	return index;
 }
 
-public bool TraceFilter(int entity, int contentsMask, any client)
+bool TraceFilter(int entity, int contentsMask, any client)
 {
 	if( entity == client )
 		return false;
@@ -1831,7 +1845,7 @@ void ShowMenuBrightness(int client)
 	g_hMenuBrightness.Display(client, MENU_TIME_FOREVER);
 }
 
-public int BrightnessMenuHandler(Menu menu, MenuAction action, int client, int index)
+int BrightnessMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_Cancel )
 	{
@@ -1852,6 +1866,8 @@ public int BrightnessMenuHandler(Menu menu, MenuAction action, int client, int i
 		}
 		ShowMenuBrightness(client);
 	}
+
+	return 0;
 }
 
 void SetBrightness(int client, int brightness)
@@ -1893,7 +1909,7 @@ void ShowMenuColor(int client)
 	g_hMenuColor.Display(client, MENU_TIME_FOREVER);
 }
 
-public int ColorMenuHandler(Menu menu, MenuAction action, int client, int index)
+int ColorMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_Cancel )
 	{
@@ -1914,6 +1930,8 @@ public int ColorMenuHandler(Menu menu, MenuAction action, int client, int index)
 		}
 		ShowMenuColor(client);
 	}
+
+	return 0;
 }
 
 // ====================================================================================================
@@ -1924,7 +1942,7 @@ void ShowMenuAng(int client)
 	g_hMenuAng.Display(client, MENU_TIME_FOREVER);
 }
 
-public int AngMenuHandler(Menu menu, MenuAction action, int client, int index)
+int AngMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_Cancel )
 	{
@@ -1939,6 +1957,8 @@ public int AngMenuHandler(Menu menu, MenuAction action, int client, int index)
 			SetAngle(client, index);
 		ShowMenuAng(client);
 	}
+
+	return 0;
 }
 
 void SetAngle(int client, int index)
@@ -1988,7 +2008,7 @@ void ShowMenuPos(int client)
 	g_hMenuPos.Display(client, MENU_TIME_FOREVER);
 }
 
-public int PosMenuHandler(Menu menu, MenuAction action, int client, int index)
+int PosMenuHandler(Menu menu, MenuAction action, int client, int index)
 {
 	if( action == MenuAction_Cancel )
 	{
@@ -2003,6 +2023,8 @@ public int PosMenuHandler(Menu menu, MenuAction action, int client, int index)
 			SetOrigin(client, index);
 		ShowMenuPos(client);
 	}
+
+	return 0;
 }
 
 void SetOrigin(int client, int index)
@@ -2051,7 +2073,7 @@ void SetOrigin(int client, int index)
 // ====================================================================================================
 //					sm_lamp
 // ====================================================================================================
-public Action CmdLamp(int client, int args)
+Action CmdLamp(int client, int args)
 {
 	if( !g_bCvarAllow )
 	{
@@ -2072,7 +2094,7 @@ public Action CmdLamp(int client, int args)
 // ====================================================================================================
 //					sm_lampdel
 // ====================================================================================================
-public Action CmdLampDelete(int client, int args)
+Action CmdLampDelete(int client, int args)
 {
 	if( !g_bCvarAllow )
 	{
@@ -2194,7 +2216,7 @@ public Action CmdLampDelete(int client, int args)
 // ====================================================================================================
 //					sm_lamprefresh
 // ====================================================================================================
-public Action CmdLampRefresh(int client, int args)
+Action CmdLampRefresh(int client, int args)
 {
 	ResetPlugin();
 	LoadLamps();
@@ -2204,7 +2226,7 @@ public Action CmdLampRefresh(int client, int args)
 // ====================================================================================================
 //					sm_lampclear
 // ====================================================================================================
-public Action CmdLampClear(int client, int args)
+Action CmdLampClear(int client, int args)
 {
 	ResetPlugin();
 	PrintToChat(client, "%sAll Lamps cleared from the map.", CHAT_TAG);
@@ -2214,7 +2236,7 @@ public Action CmdLampClear(int client, int args)
 // ====================================================================================================
 //					sm_lampwipe
 // ====================================================================================================
-public Action CmdLampWipe(int client, int args)
+Action CmdLampWipe(int client, int args)
 {
 	WipeLamps(client);
 	return Plugin_Handled;
@@ -2223,7 +2245,7 @@ public Action CmdLampWipe(int client, int args)
 // ====================================================================================================
 //					sm_lampset
 // ====================================================================================================
-public Action CmdLampSet(int client, int args)
+Action CmdLampSet(int client, int args)
 {
 	if( !g_bCvarAllow )
 	{
@@ -2587,7 +2609,7 @@ void DeleteLamp(int index, bool all = true)
 			g_iEntities[index][0] = 0;
 			UnhookSingleEntityOutput(entity, "OnTakeDamage", OnBreak);
 			UnhookSingleEntityOutput(entity, "OnHealthChanged", OnBreak);
-			AcceptEntityInput(entity, "Kill");
+			RemoveEntity(entity);
 		}
 	}
 }
