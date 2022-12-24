@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.9"
+#define PLUGIN_VERSION 		"1.10"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,11 @@
 
 ========================================================================================
 	Change Log:
+
+1.10 (24-Dec-2022)
+	- Fixed the rescue models becoming non-solid when simply opening the door and not rescuing someone. Thanks to "replay_84" for reporting.
+	- Using a backup event to set the respawn count, if the "survivor_rescued" event does not trigger.
+	- Increased how far players must be from the rescue model to make it solid again.
 
 1.9 (21-Dec-2022)
 	- Closets will become non-solid when someone is rescued, until players are no longer nearby.
@@ -101,9 +106,12 @@
 #define CVAR_FLAGS			FCVAR_NOTIFY
 #define CHAT_TAG			"\x04[\x05Rescue Closet\x04] \x01"
 #define CONFIG_SPAWNS		"data/l4d_closet.cfg"
-#define MAX_SPAWNS			32
-#define DOOR_MINS			-35.0
-#define DOOR_MAXS			35.0
+
+#define MAX_SPAWNS			32			// Maximum rescue closets allowed on the map
+#define RANGE_SOLID			200.0		// Furthest range players must be for the model to become solid again
+
+#define DOOR_MINS			-35.0		// m_vecMins (suggest not changing)
+#define DOOR_MAXS			35.0		// m_vecMaxs (suggest not changing)
 
 #define	MODEL_PROP			"models/props_urban/outhouse002.mdl"
 #define	MODEL_DOOR			"models/props_urban/outhouse_door001.mdl"
@@ -114,6 +122,8 @@
 
 ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarForce, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarRandom, g_hCvarRespawn;
 int g_iCvarRandom, g_iCvarRespawn, g_iPlayerSpawn, g_iRoundStart, g_iSpawnCount, g_iSpawns[MAX_SPAWNS][7];
+float g_fLastRescue[MAX_SPAWNS];
+Handle g_hTimerReset[MAX_SPAWNS];
 bool g_bCvarAllow, g_bMapStarted, g_bLeft4Dead2, g_bLoaded, g_bBlockOpen, g_bForceOpen, g_bCvarForce;
 Menu g_hMenuPos;
 
@@ -275,6 +285,7 @@ void IsAllowed()
 		HookEvent("round_start",		Event_RoundStart,	EventHookMode_PostNoCopy);
 		HookEvent("player_spawn",		Event_PlayerSpawn,	EventHookMode_PostNoCopy);
 		HookEvent("survivor_rescued",	Event_PlayerRescue);
+		HookEvent("award_earned",		Event_AwardEarned);
 	}
 
 	else if( g_bCvarAllow == true && (bCvarAllow == false || bAllowMode == false) )
@@ -285,6 +296,7 @@ void IsAllowed()
 		UnhookEvent("round_start",		Event_RoundStart,	EventHookMode_PostNoCopy);
 		UnhookEvent("player_spawn",		Event_PlayerSpawn,	EventHookMode_PostNoCopy);
 		UnhookEvent("survivor_rescued",	Event_PlayerRescue);
+		UnhookEvent("award_earned",		Event_AwardEarned);
 	}
 }
 
@@ -656,9 +668,46 @@ Action TimerDelete(Handle timer, int entity)
 // ====================================================================================================
 //					EVENTS - SPAWN (non-guncabinet, for respawn count)
 // ====================================================================================================
-public void Event_PlayerRescue(Event event, const char[] name, bool dontBroadcast)
+void Event_AwardEarned(Event event, const char[] name, bool dontBroadcast)
+{
+	// Detect rescue in case the "survivor_rescued" event does not fire
+	if( event.GetInt("award") == 80 )
+	{
+		int client = event.GetInt("subjectentid"); // Match respawn closet to player being rescued
+
+		if( client > 0 )
+		{
+			int entity;
+
+			for( int index = 0; index < MAX_SPAWNS; index++ )
+			{
+				entity = g_iSpawns[index][INDEX_RESCUE];
+				if( IsValidEntRef(entity) )
+				{
+					if( GetEntPropEnt(entity, Prop_Send, "m_survivor") == client )
+					{
+						if( GetGameTime() - g_fLastRescue[index] > 2.0 )
+						{
+							// Set last rescue time, used to make models non-solid when someone is rescued
+							g_fLastRescue[index] = GetGameTime();
+							RequestFrame(OnFrameDoorState, index);
+
+							// Spawn count
+							g_iSpawns[index][INDEX_COUNT]++;
+						}
+
+						break;
+					}
+				}
+			}
+		}
+	}
+}
+
+void Event_PlayerRescue(Event event, const char[] name, bool dontBroadcast)
 {
 	// Strange this event is being returned as 0 sometimes... see post#40
+	// Using this to set spawn count
 	if( event && g_iCvarRespawn > 0 )
 	{
 		int client = GetClientOfUserId(GetEventInt(event, "victim"));
@@ -685,10 +734,15 @@ public void Event_PlayerRescue(Event event, const char[] name, bool dontBroadcas
 
 			if( index != -1 )
 			{
-				RequestFrame(OnFrameDoorState, index);
+				if( GetGameTime() - g_fLastRescue[index] > 2.0 )
+				{
+					// Set last rescue time, used to make models non-solid when someone is rescued
+					g_fLastRescue[index] = GetGameTime();
+					RequestFrame(OnFrameDoorState, index);
 
-				// Spawn count
-				g_iSpawns[index][INDEX_COUNT]++;
+					// Spawn count
+					g_iSpawns[index][INDEX_COUNT]++;
+				}
 			}
 		}
 	}
@@ -731,6 +785,7 @@ void OnOpen_Func(const char[] output, int caller, int activator, float delay)
 
 	caller = EntIndexToEntRef(caller);
 
+	// Find index from rescue door
 	int index = -1;
 	for( int i = 0; i < MAX_SPAWNS; i++ )
 	{
@@ -746,14 +801,24 @@ void OnOpen_Func(const char[] output, int caller, int activator, float delay)
 		int rescue = g_iSpawns[index][INDEX_RESCUE];
 		if( IsValidEntRef(rescue) )
 		{
+			if( GetEntPropEnt(rescue, Prop_Send, "m_survivor") != -1 )
+			{
+				g_fLastRescue[index] = GetGameTime();
+			}
+
 			AcceptEntityInput(rescue, "Rescue");
 		}
 
+		// Set non-solid state on rescue only which is when g_fLastRescue < 2.0
 		if( g_iSpawns[index][INDEX_DOOR1] == caller )
 		{
-			if( !g_bForceOpen )
-				SetEntProp(caller, Prop_Send, "m_eDoorState", DOOR_STATE_OPENING_IN_PROGRESS);
-			SetEntProp(caller, Prop_Send, "m_CollisionGroup", 1);
+			if( GetGameTime() - g_fLastRescue[index] < 2.0 )
+			{
+				if( !g_bForceOpen )
+					SetEntProp(caller, Prop_Send, "m_eDoorState", DOOR_STATE_OPENING_IN_PROGRESS);
+
+				SetEntProp(caller, Prop_Send, "m_CollisionGroup", 1);
+			}
 
 			HookSingleEntityOutput(caller, "OnFullyOpen", OnOpened_Func, true);
 		}
@@ -766,17 +831,25 @@ void OnOpen_Func(const char[] output, int caller, int activator, float delay)
 				AcceptEntityInput(entity, "Open");
 				g_bBlockOpen = false;
 
-				if( !g_bForceOpen )
-					SetEntProp(entity, Prop_Send, "m_eDoorState", DOOR_STATE_OPENING_IN_PROGRESS);
-				SetEntProp(entity, Prop_Send, "m_CollisionGroup", 1);
+				if( GetGameTime() - g_fLastRescue[index] < 2.0 )
+				{
+					if( !g_bForceOpen )
+						SetEntProp(entity, Prop_Send, "m_eDoorState", DOOR_STATE_OPENING_IN_PROGRESS);
+
+					SetEntProp(entity, Prop_Send, "m_CollisionGroup", 1);
+				}
 			}
 		}
 
 		if( g_iSpawns[index][INDEX_DOOR2] == caller )
 		{
-			if( !g_bForceOpen )
-				SetEntProp(caller, Prop_Send, "m_eDoorState", DOOR_STATE_OPENING_IN_PROGRESS);
-			SetEntProp(caller, Prop_Send, "m_CollisionGroup", 1);
+			if( GetGameTime() - g_fLastRescue[index] < 2.0 )
+			{
+				if( !g_bForceOpen )
+					SetEntProp(caller, Prop_Send, "m_eDoorState", DOOR_STATE_OPENING_IN_PROGRESS);
+
+				SetEntProp(caller, Prop_Send, "m_CollisionGroup", 1);
+			}
 
 			HookSingleEntityOutput(caller, "OnFullyOpen", OnOpened_Func, true);
 		}
@@ -789,8 +862,21 @@ void OnOpen_Func(const char[] output, int caller, int activator, float delay)
 				AcceptEntityInput(entity, "Open");
 				g_bBlockOpen = false;
 
-				if( !g_bForceOpen )
-					SetEntProp(entity, Prop_Send, "m_eDoorState", DOOR_STATE_OPENING_IN_PROGRESS);
+				if( GetGameTime() - g_fLastRescue[index] < 2.0 )
+				{
+					if( !g_bForceOpen )
+						SetEntProp(entity, Prop_Send, "m_eDoorState", DOOR_STATE_OPENING_IN_PROGRESS);
+
+					SetEntProp(entity, Prop_Send, "m_CollisionGroup", 1);
+				}
+			}
+		}
+
+		if( GetGameTime() - g_fLastRescue[index] < 2.0 )
+		{
+			int entity = g_iSpawns[index][INDEX_MODEL];
+			if( IsValidEntRef(entity) )
+			{
 				SetEntProp(entity, Prop_Send, "m_CollisionGroup", 1);
 			}
 		}
@@ -823,8 +909,12 @@ void OnOpened_Func(const char[] output, int caller, int activator, float delay)
 			if( IsValidEntRef(entity) )
 			{
 				set = true;
-				SetEntProp(entity, Prop_Send, "m_eDoorState", DOOR_STATE_CLOSING_IN_PROGRESS);
-				SetEntProp(entity, Prop_Send, "m_CollisionGroup", 1);
+
+				if( GetGameTime() - g_fLastRescue[index] < 2.0 )
+				{
+					SetEntProp(entity, Prop_Send, "m_eDoorState", DOOR_STATE_CLOSING_IN_PROGRESS);
+					SetEntProp(entity, Prop_Send, "m_CollisionGroup", 1);
+				}
 
 				if( caller != entity )
 				{
@@ -836,8 +926,12 @@ void OnOpened_Func(const char[] output, int caller, int activator, float delay)
 			if( IsValidEntRef(entity) )
 			{
 				set = true;
-				SetEntProp(entity, Prop_Send, "m_eDoorState", DOOR_STATE_CLOSING_IN_PROGRESS);
-				SetEntProp(entity, Prop_Send, "m_CollisionGroup", 1);
+
+				if( GetGameTime() - g_fLastRescue[index] < 2.0 )
+				{
+					SetEntProp(entity, Prop_Send, "m_eDoorState", DOOR_STATE_CLOSING_IN_PROGRESS);
+					SetEntProp(entity, Prop_Send, "m_CollisionGroup", 1);
+				}
 
 				if( caller != entity )
 				{
@@ -848,13 +942,17 @@ void OnOpened_Func(const char[] output, int caller, int activator, float delay)
 			entity = g_iSpawns[index][INDEX_MODEL];
 			if( IsValidEntRef(entity) )
 			{
-				set = true;
-				SetEntProp(entity, Prop_Send, "m_CollisionGroup", 1);
+				if( GetGameTime() - g_fLastRescue[index] < 2.0 )
+				{
+					set = true;
+					SetEntProp(entity, Prop_Send, "m_CollisionGroup", 1);
+				}
 			}
 
 			if( set )
 			{
-				CreateTimer(1.0, TimerSolidAdd, index, TIMER_REPEAT|TIMER_FLAG_NO_MAPCHANGE);
+				delete g_hTimerReset[index];
+				g_hTimerReset[index] = CreateTimer(1.0, TimerSolidAdd, index, TIMER_REPEAT|TIMER_FLAG_NO_MAPCHANGE);
 			}
 		}
 		else
@@ -879,7 +977,7 @@ Action TimerSolidAdd(Handle timer, int index)
 			if( IsClientInGame(i) && IsPlayerAlive(i) )
 			{
 				GetClientAbsOrigin(i, vClient);
-				if( GetVectorDistance(vPos, vClient) < 50.0 )
+				if( GetVectorDistance(vPos, vClient) < RANGE_SOLID )
 				{
 					return Plugin_Continue;
 				}
@@ -1805,9 +1903,14 @@ void ResetPlugin(bool all = true)
 	g_iRoundStart = 0;
 	g_iPlayerSpawn = 0;
 
-	if( all )
-		for( int i = 0; i < MAX_SPAWNS; i++ )
+	for( int i = 0; i < MAX_SPAWNS; i++ )
+	{
+		g_fLastRescue[i] = 0.0;
+		delete g_hTimerReset[i];
+
+		if( all )
 			RemoveSpawn(i);
+	}
 }
 
 void RemoveSpawn(int index)
