@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.10"
+#define PLUGIN_VERSION 		"1.11"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.11 (24-Dec-2022)
+	- Fixed any potential invalid timer errors that were bound to happen with the previous version.
 
 1.10 (24-Dec-2022)
 	- Fixed the rescue models becoming non-solid when simply opening the door and not rescuing someone. Thanks to "replay_84" for reporting.
@@ -964,6 +967,8 @@ void OnOpened_Func(const char[] output, int caller, int activator, float delay)
 
 Action TimerSolidAdd(Handle timer, int index)
 {
+	g_hTimerReset[index] = null;
+
 	// Find index
 	int entity = g_iSpawns[index][INDEX_MODEL];
 	if( IsValidEntRef(entity) )
