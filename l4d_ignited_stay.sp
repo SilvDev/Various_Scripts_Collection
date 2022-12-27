@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.7"
+#define PLUGIN_VERSION 		"1.8"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,10 @@
 
 ========================================================================================
 	Change Log:
+
+1.8 (27-Dec-2022)
+	- Fixed not respawning Scavenge gascans on the first map from server start. Thanks to "HarryPotter" for reporting.
+	- Fixed not respawning Scavenge gascans when "Scavenge Score Fix - Gascan Pouring" plugin is installed.
 
 1.7 (06-Nov-2022)
 	- Fixed Oxygen Tanks not whistling before exploding. Thanks to "Iizuka07" for reporting.
@@ -87,7 +91,6 @@
 
 
 ConVar g_hCvarAllow, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarMPGameMode, g_hCvarOxygen, g_hCvarRespawn, g_hCvarTimeF, g_hCvarTimeG, g_hCvarTimeP, g_hCvarTimeO, g_hCvarTypes;
-ConVar g_hScoreFixRespawn; // Don't know if this is required
 bool g_bCvarAllow, g_bMapStarted, g_bLeft4Dead2, g_bRemovingItem, g_bBlockGrab, g_bWatchSpawn;
 int g_iCvarOxygen, g_iCvarTypes, g_iDroppingItem;
 float g_fCvarRespawn, g_fCvarTimeF, g_fCvarTimeG, g_fCvarTimeP, g_fCvarTimeO;
@@ -100,6 +103,7 @@ int g_iFlamed;		// Last entity on fire when dropped/grabbed - tracking entity ch
 int g_iSpawned;		// Last oxygen tank damaged when dropped - tracking entity changes
 Handle g_hTimerReflame[MAXPLAYERS+1];
 int g_iScavenge[2048];
+int g_iPlayerSpawn, g_iRoundStart;
 
 
 
@@ -168,18 +172,14 @@ public void OnPluginStart()
 	g_hCvarTimeO.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarTypes.AddChangeHook(ConVarChanged_Cvars);
 
+	g_iRoundStart = 1;
+
 	// ====================
 	// Test commands
 	// ====================
 	// RegAdminCmd("sm_flame",		CmdFlame,	ADMFLAG_ROOT, "Ignites the currently held gascan.");
 	// RegAdminCmd("sm_flameme",	CmdFlameMe,	ADMFLAG_ROOT, "Ignites the player for testing.");
 	// RegAdminCmd("sm_ignites",	CmdIgnite,	ADMFLAG_ROOT, "Ignites the entity aimed at.");
-}
-
-public void OnAllPluginsLoaded()
-{
-	// Don't know if this is required
-	g_hScoreFixRespawn = FindConVar("l4d2_scavenge_score_respawn");
 }
 
 
@@ -251,6 +251,8 @@ public void OnMapStart()
 public void OnMapEnd()
 {
 	g_iFlamed = 0;
+	g_iRoundStart = 0;
+	g_iPlayerSpawn = 0;
 	g_bMapStarted = false;
 }
 
@@ -320,7 +322,9 @@ void IsAllowed()
 		// Events
 		if( g_bLeft4Dead2 )
 			HookEvent("weapon_drop_to_prop",	Event_DropToProp);
-		HookEvent("round_start",				Event_RoundStart, EventHookMode_PostNoCopy);
+		HookEvent("round_end",					Event_RoundEnd,		EventHookMode_PostNoCopy);
+		HookEvent("round_start",				Event_RoundStart,	EventHookMode_PostNoCopy);
+		HookEvent("player_spawn",				Event_PlayerSpawn,	EventHookMode_PostNoCopy);
 
 		// Find Scavenge gascans and their spawner
 		if( g_bLeft4Dead2 )
@@ -362,7 +366,9 @@ void IsAllowed()
 		// Events
 		if( g_bLeft4Dead2 )
 			UnhookEvent("weapon_drop_to_prop",	Event_DropToProp);
+		UnhookEvent("round_end",				Event_RoundEnd,		EventHookMode_PostNoCopy);
 		UnhookEvent("round_start",				Event_RoundStart, EventHookMode_PostNoCopy);
+		UnhookEvent("player_spawn",				Event_PlayerSpawn,	EventHookMode_PostNoCopy);
 
 		g_bCvarAllow = false;
 	}
@@ -494,7 +500,7 @@ Action OnPlayerDamage(int client, int &attacker, int &inflictor, float &damage, 
 	return Plugin_Continue;
 }
 
-Action TimerReflame(Handle timer, any client)
+Action TimerReflame(Handle timer, int client)
 {
 	if( (client = GetClientOfUserId(client)) && IsClientInGame(client) )
 	{
@@ -920,18 +926,6 @@ void OnGrabFrame(DataPack dPack)
 
 		if( g_bLeft4Dead2 && classname[7] == 'g' )
 		{
-			// Ignore respawning when Scavenge Score Fix is doing this
-			// /* Don't know if this is required
-			if( skin && g_hScoreFixRespawn != null && g_hScoreFixRespawn.FloatValue )
-			{
-				#if DEBUGGING
-				PrintToChatAll("IS: Ignore Spawn A");
-				#endif
-
-				return;
-			}
-			// */
-
 			g_iScavenge[weapon] = g_iScavenge[entity];
 			g_iScavenge[entity] = 0;
 		}
@@ -982,7 +976,7 @@ Action OnPropTakeDamage(int entity, int &attacker, int &inflictor, float &damage
 // ====================
 // Watch time until detonate
 // ====================
-Action TimerTest(Handle timer, any entity)
+Action TimerTest(Handle timer, int entity)
 {
 	entity = EntRefToEntIndex(entity);
 	if( entity != INVALID_ENT_REFERENCE )
@@ -1061,9 +1055,6 @@ void DetonateExplosive(int client, int entity)
 		doExplode = 1;
 	}
 
-	// Copy skin
-	int skin = GetEntProp(entity, Prop_Send, "m_nSkin");
-
 	RemoveEntity(entity);
 
 	// Create explosion
@@ -1114,16 +1105,16 @@ void DetonateExplosive(int client, int entity)
 			AcceptEntityInput(explosive, "Break");
 
 			// Fix Scavenge Gascans not respawning
-			if( skin && modelname[18] == 'g' )
+			if( modelname[18] == 'g' && GetEntProp(entity, Prop_Send, "m_nSkin") )
 			{
 				#if DEBUGGING
-				PrintToChatAll("IS: SCAV CAN");
+				PrintToServer("IS: SCAV CAN");
 				#endif
 
 				if( g_iScavenge[entity] && EntRefToEntIndex(g_iScavenge[entity]) != INVALID_ENT_REFERENCE )
 				{
 					#if DEBUGGING
-					PrintToChatAll("IS: SCAV VALID");
+					PrintToServer("IS: SCAV VALID");
 					#endif
 
 					CreateTimer(g_fCvarRespawn, TimerRespawn, g_iScavenge[entity]);
@@ -1141,12 +1132,12 @@ Action OnTransmitExplosive(int entity, int client)
 // ====================
 // Fix Scavenge Gascans not respawning
 // ====================
-Action TimerRespawn(Handle timer, any entity)
+Action TimerRespawn(Handle timer, int entity)
 {
 	entity = EntRefToEntIndex(entity);
 
 	#if DEBUGGING
-	PrintToChatAll("IS: SCAV TimerRespawn");
+	PrintToServer("IS: SCAV TimerRespawn");
 	#endif
 
 	if( entity != INVALID_ENT_REFERENCE )
@@ -1156,7 +1147,7 @@ Action TimerRespawn(Handle timer, any entity)
 		g_bWatchSpawn = false;
 
 		#if DEBUGGING
-		PrintToChatAll("IS: SCAV SpawnItem");
+		PrintToServer("IS: SCAV SpawnItem");
 		#endif
 	}
 
@@ -1166,7 +1157,27 @@ Action TimerRespawn(Handle timer, any entity)
 // ====================
 // Events
 // ====================
+void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
+{
+	g_iRoundStart = 0;
+	g_iPlayerSpawn = 0;
+}
+
 void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
+{
+	if( g_iPlayerSpawn == 1 && g_iRoundStart == 0 )
+		CreateTimer(1.0, TimerStart, _, TIMER_FLAG_NO_MAPCHANGE);
+	g_iRoundStart = 1;
+}
+
+void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
+{
+	if( g_iPlayerSpawn == 0 && g_iRoundStart == 1 )
+		CreateTimer(1.0, TimerStart, _, TIMER_FLAG_NO_MAPCHANGE);
+	g_iPlayerSpawn = 1;
+}
+
+Action TimerStart(Handle timer)
 {
 	g_iFlamed = 0;
 
@@ -1178,20 +1189,10 @@ void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 	// Find Scavenge gascans and their spawner
 	if( g_bLeft4Dead2 )
 	{
-		// Ignore respawning when Scavenge Score Fix is doing this
-		// /* Don't know if this is required
-		if( g_hScoreFixRespawn != null && g_hScoreFixRespawn.FloatValue )
-		{
-			#if DEBUGGING
-			PrintToChatAll("IS: Ignore Spawn B");
-			#endif
-
-			return; // Ignore respawning when Scavenge Score Fix is doing this
-		}
-		// */
-
 		CreateTimer(5.0, TimerDelayedFind, _, TIMER_FLAG_NO_MAPCHANGE);
 	}
+
+	return Plugin_Continue;
 }
 
 // Dropped: L4D2 prop_physics is thrown, ignite if required
@@ -1215,7 +1216,7 @@ void FindScavengeGas(int target = 0)
 {
 	#if DEBUGGING
 	int counter;
-	PrintToChatAll("IS: FindScavengeGas %d", target);
+	PrintToServer("IS: FindScavengeGas %d", target);
 	#endif
 
 	float vPos[3], vVec[3];
@@ -1270,7 +1271,7 @@ void FindScavengeGas(int target = 0)
 			{
 				#if DEBUGGING
 				counter++;
-				PrintToChatAll("IS: MATCHED %d == %d", matched, entity);
+				PrintToServer("IS: MATCHED %d == %d", matched, entity);
 				#endif
 
 				g_iScavenge[matched] = EntIndexToEntRef(entity);
@@ -1280,14 +1281,14 @@ void FindScavengeGas(int target = 0)
 	}
 
 	#if DEBUGGING
-	PrintToChatAll("IS: MATCHED %d", counter);
+	PrintToServer("IS: MATCHED TOTAL %d", counter);
 	#endif
 
 	// Specific
 	if( target && matched && dist <= RANGE_MAX )
 	{
 		#if DEBUGGING
-		PrintToChatAll("IS: MATCHED TARGET %d == %d", target, matched);
+		PrintToServer("IS: MATCHED TARGET %d == %d", target, matched);
 		#endif
 
 		g_iScavenge[target] = EntIndexToEntRef(matched);
