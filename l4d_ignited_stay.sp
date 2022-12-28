@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.8"
+#define PLUGIN_VERSION 		"1.9"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.9 (28-Dec-2022)
+	- Fixed not respawning Scavenge gascans under certain conditions. Thanks to "thewintersoldier97" for reporting.
 
 1.8 (27-Dec-2022)
 	- Fixed not respawning Scavenge gascans on the first map from server start. Thanks to "HarryPotter" for reporting.
@@ -91,7 +94,7 @@
 
 
 ConVar g_hCvarAllow, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarMPGameMode, g_hCvarOxygen, g_hCvarRespawn, g_hCvarTimeF, g_hCvarTimeG, g_hCvarTimeP, g_hCvarTimeO, g_hCvarTypes;
-bool g_bCvarAllow, g_bMapStarted, g_bLeft4Dead2, g_bRemovingItem, g_bBlockGrab, g_bWatchSpawn;
+bool g_bCvarAllow, g_bMapStarted, g_bLeft4Dead2, g_bRemovingItem, g_bBlockGrab;
 int g_iCvarOxygen, g_iCvarTypes, g_iDroppingItem;
 float g_fCvarRespawn, g_fCvarTimeF, g_fCvarTimeG, g_fCvarTimeP, g_fCvarTimeO;
 float g_fFireTime[2048];
@@ -562,14 +565,13 @@ public void OnEntityCreated(int entity, const char[] classname)
 
 		SDKHook(entity, SDKHook_SpawnPost, OnSpawnAir);
 	}
-	else if( g_bLeft4Dead2 && g_bWatchSpawn && strcmp(classname, "weapon_gascan") == 0 )
+	else if( g_bLeft4Dead2 && strcmp(classname, "weapon_gascan") == 0 )
 	{
+		#if DEBUGGING
+		PrintToChatAll("IS: weapon_gascan SPAWNED %d", entity);
+		#endif
+
 		CreateTimer(0.1, TimerDelayedSpawn, EntIndexToEntRef(entity));
-		g_bWatchSpawn = false;
-	}
-	else if( g_bLeft4Dead2 && strcmp(classname, "weapon_scavenge_item_spawn") == 0 )
-	{
-		g_bWatchSpawn = true;
 	}
 }
 
@@ -580,6 +582,10 @@ Action TimerDelayedSpawn(Handle timer, int entity)
 
 	if( entity != INVALID_ENT_REFERENCE )
 	{
+		#if DEBUGGING
+		PrintToChatAll("IS: TimerDelayedSpawn FIND %d", entity);
+		#endif
+
 		FindScavengeGas(entity);
 	}
 
@@ -706,6 +712,10 @@ void OnNextFrameSpawnFire(int entity)
 			}
 
 			SDKHook(attached, SDKHook_OnTakeDamage, OnPropTakeDamage);
+
+			#if DEBUGGING
+			PrintToChatAll("TAKING DMG %d", attached);
+			#endif
 
 			CreateTimer(0.1, TimerTest, EntIndexToEntRef(attached), TIMER_REPEAT|TIMER_FLAG_NO_MAPCHANGE);
 
@@ -1108,13 +1118,13 @@ void DetonateExplosive(int client, int entity)
 			if( modelname[18] == 'g' && GetEntProp(entity, Prop_Send, "m_nSkin") )
 			{
 				#if DEBUGGING
-				PrintToServer("IS: SCAV CAN");
+				PrintToChatAll("IS: SCAV CAN %d", entity);
 				#endif
 
 				if( g_iScavenge[entity] && EntRefToEntIndex(g_iScavenge[entity]) != INVALID_ENT_REFERENCE )
 				{
 					#if DEBUGGING
-					PrintToServer("IS: SCAV VALID");
+					PrintToChatAll("IS: SCAV VALID, RESPAWNING %d", entity);
 					#endif
 
 					CreateTimer(g_fCvarRespawn, TimerRespawn, g_iScavenge[entity]);
@@ -1137,17 +1147,15 @@ Action TimerRespawn(Handle timer, int entity)
 	entity = EntRefToEntIndex(entity);
 
 	#if DEBUGGING
-	PrintToServer("IS: SCAV TimerRespawn");
+	PrintToChatAll("IS: SCAV TimerRespawn");
 	#endif
 
 	if( entity != INVALID_ENT_REFERENCE )
 	{
-		g_bWatchSpawn = true;
 		AcceptEntityInput(entity, "SpawnItem");
-		g_bWatchSpawn = false;
 
 		#if DEBUGGING
-		PrintToServer("IS: SCAV SpawnItem");
+		PrintToChatAll("IS: SCAV SpawnItem");
 		#endif
 	}
 
@@ -1216,7 +1224,7 @@ void FindScavengeGas(int target = 0)
 {
 	#if DEBUGGING
 	int counter;
-	PrintToServer("IS: FindScavengeGas %d", target);
+	PrintToChatAll("IS: FindScavengeGas %d", target);
 	#endif
 
 	float vPos[3], vVec[3];
@@ -1271,7 +1279,7 @@ void FindScavengeGas(int target = 0)
 			{
 				#if DEBUGGING
 				counter++;
-				PrintToServer("IS: MATCHED %d == %d", matched, entity);
+				PrintToChatAll("IS: MATCHED %d == %d", matched, entity);
 				#endif
 
 				g_iScavenge[matched] = EntIndexToEntRef(entity);
@@ -1281,14 +1289,14 @@ void FindScavengeGas(int target = 0)
 	}
 
 	#if DEBUGGING
-	PrintToServer("IS: MATCHED TOTAL %d", counter);
+	PrintToChatAll("IS: MATCHED TOTAL %d", counter);
 	#endif
 
 	// Specific
 	if( target && matched && dist <= RANGE_MAX )
 	{
 		#if DEBUGGING
-		PrintToServer("IS: MATCHED TARGET %d == %d", target, matched);
+		PrintToChatAll("IS: MATCHED TARGET %d == %d", target, matched);
 		#endif
 
 		g_iScavenge[target] = EntIndexToEntRef(matched);
