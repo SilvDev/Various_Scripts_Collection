@@ -1,6 +1,6 @@
 /*
 *	Dev Cmds
-*	Copyright (C) 2022 Silvers
+*	Copyright (C) 2023 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.46"
+#define PLUGIN_VERSION 		"1.47"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,11 @@
 
 ========================================================================================
 	Change Log:
+
+1.47 (10-Jan-2023)
+	- Added command "sm_gamerules" to read/write to the gamerules proxy.
+	- Added support for reading/writing to GameRules. Thanks to "Marttt" for the initial code. Requested by "caxanga334".
+	- Plugin now requires SourceMod 1.11 or newer. Using some natives that only appear in SM 1.11.
 
 1.46 (28-Oct-2022)
 	- Added command "sm_vertex" to display the vecMins and vecMaxs of an entity.
@@ -305,6 +310,9 @@ int g_iHaloIndex, g_iLaserIndex, g_iOutputs[MAX_OUTPUTS][2];
 char g_sOutputs[MAX_OUTPUTS][64];
 StringMap g_hEntityKeys;
 
+EngineVersion g_iEngine;
+char g_sGameRulesNet[32], g_sGameRulesClass[32];
+
 // Precache models for spawning (L4D1/2)
 static const char g_sModels1[][] =
 {
@@ -359,6 +367,7 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 	}
 
 	g_bLateLoad = late;
+	g_iEngine = test;
 
 	return APLRes_Success;
 }
@@ -440,10 +449,11 @@ public void OnPluginStart()
 	RegAdminCmd("sm_bit",			CmdBit,			ADMFLAG_ROOT, "<bit value>. E.g: sm_bit 1048577. Returns: (1<<0); (1<<20)");
 	RegAdminCmd("sm_adm",			CmdAdm,			0, "Toggles between ROOT and BAN admin flags, for testing stuff without ROOT access. Or specified flags e.g. Usage: sm_adm BAN KICK");
 
-	RegAdminCmd("sm_prop",			CmdProp,		ADMFLAG_ROOT, "<prop> [value] Affects the entity you aim at.");
-	RegAdminCmd("sm_propent",		CmdPropEnt,		ADMFLAG_ROOT, "<entity> or <#userid|name> <prop> [val] Affects the specified entity.");
-	RegAdminCmd("sm_propself",		CmdPropMe,		ADMFLAG_ROOT, "<prop> [value] Affects yourself.");
-	RegAdminCmd("sm_propi",			CmdPropMe,		ADMFLAG_ROOT, "<prop> [value] Affects yourself.");
+	RegAdminCmd("sm_gamerules",		CmdGameRules,	ADMFLAG_ROOT, "<prop> [value] Affects the gamerules proxy. Can read or write to table members, prop.member: e.g. m_iChapterDamage.001");
+	RegAdminCmd("sm_prop",			CmdProp,		ADMFLAG_ROOT, "<prop> [value] Affects the entity you aim at. Can read or write to table members, prop.member: e.g. m_iChapterDamage.001");
+	RegAdminCmd("sm_propent",		CmdPropEnt,		ADMFLAG_ROOT, "<entity> or <#userid|name> <prop> [val] Affects the specified entity. Can read or write to table members, prop.member: e.g. m_iChapterDamage.001");
+	RegAdminCmd("sm_propself",		CmdPropMe,		ADMFLAG_ROOT, "<prop> [value] Affects yourself. Can read or write to table members, prop.member: e.g. m_iChapterDamage.001");
+	RegAdminCmd("sm_propi",			CmdPropMe,		ADMFLAG_ROOT, "<prop> [value] Affects yourself. Can read or write to table members, prop.member: e.g. m_iChapterDamage.001");
 
 	RegAdminCmd("sm_input",			CmdInput,		ADMFLAG_ROOT, "<input> [param] [activator] [caller] Makes the entity you're aiming at accept an Input. Optionally give a param, e.g. sm_input color '255 0 0'.");
 	RegAdminCmd("sm_inputent",		CmdInputEnt,	ADMFLAG_ROOT, "<entity|targetname> <input> [param] [activator] [caller] Makes the specified entity accept an Input. Optionally give a param, e.g. sm_inputent 5 color '255 0 0'.");
@@ -582,6 +592,45 @@ public void OnPluginStart()
 	g_hEntityKeys.SetValue("m_hViewPosition", true);
 	g_hEntityKeys.SetValue("m_hWeapon", true);
 	g_hEntityKeys.SetValue("m_hZoomOwner", true);
+
+	// GameRules net class name
+	switch( g_iEngine )
+	{
+		case Engine_AlienSwarm:			g_sGameRulesNet = "CAlienSwarmProxy";
+		case Engine_BlackMesa:			g_sGameRulesNet = "CBM_MP_GameRulesProxy";
+		case Engine_BloodyGoodTime:		g_sGameRulesNet = "CPMGameRulesProxy";
+		case Engine_Contagion:			g_sGameRulesNet = "CTerrorGameRulesProxy";
+		case Engine_CSGO:				g_sGameRulesNet = "CCSGameRulesProxy";
+		case Engine_CSS:				g_sGameRulesNet = "CCSGameRulesProxy";
+		case Engine_DarkMessiah:		g_sGameRulesNet = "CHL2MPGameRulesProxy";
+		case Engine_DODS:				g_sGameRulesNet = "CDODGameRulesProxy";
+		case Engine_EYE:				g_sGameRulesNet = "CHL2MPGameRulesProxy";
+		case Engine_HL2DM:				g_sGameRulesNet = "CHL2MPGameRulesProxy";
+		case Engine_Insurgency:			g_sGameRulesNet = "CINSRulesProxy";
+		case Engine_Left4Dead:			g_sGameRulesNet = "CTerrorGameRulesProxy";
+		case Engine_Left4Dead2:			g_sGameRulesNet = "CTerrorGameRulesProxy";
+		case Engine_NuclearDawn:		g_sGameRulesNet = "CNuclearDawnRulesProxy";
+		case Engine_TF2:				g_sGameRulesNet = "CTFGameRulesProxy";
+	}
+
+	switch( g_iEngine )
+	{
+		case Engine_AlienSwarm:			g_sGameRulesClass = "asw_gamerules";
+		case Engine_BlackMesa:			g_sGameRulesClass = "blackmesa_mp_gamerules";
+		case Engine_BloodyGoodTime:		g_sGameRulesClass = "pm_gamerules";
+		case Engine_Contagion:			g_sGameRulesClass = "contagion_gamerules";
+		case Engine_CSGO:				g_sGameRulesClass = "cs_gamerules";
+		case Engine_CSS:				g_sGameRulesClass = "cs_gamerules";
+		case Engine_DarkMessiah:		g_sGameRulesClass = "hl2mp_gamerules";
+		case Engine_DODS:				g_sGameRulesClass = "dod_gamerules";
+		case Engine_EYE:				g_sGameRulesClass = "hl2mp_gamerules";
+		case Engine_HL2DM:				g_sGameRulesClass = "hl2mp_gamerules";
+		case Engine_Insurgency:			g_sGameRulesClass = "ins_gamerules";
+		case Engine_Left4Dead:			g_sGameRulesClass = "terror_gamerules";
+		case Engine_Left4Dead2:			g_sGameRulesClass = "terror_gamerules";
+		case Engine_NuclearDawn:		g_sGameRulesClass = "nd_gamerules";
+		case Engine_TF2:				g_sGameRulesClass = "tf_gamerules";
+	}
 }
 
 public void OnPluginEnd()
@@ -1717,7 +1766,7 @@ float GetDistanceToRoof(int client, float maxheight = 3000.0)
 	return fDistance;
 }
 
-bool TraceRayNoPlayers(int entity, int mask, any data)
+bool TraceRayNoPlayers(int entity, int mask, int data)
 {
 	if( entity == data || (entity >= 1 && entity <= MaxClients) )
 	{
@@ -1728,7 +1777,7 @@ bool TraceRayNoPlayers(int entity, int mask, any data)
 
 // Unused
 /*
-bool TraceRay_DontHitSelf(int iEntity, int iMask, any data)
+bool TraceRay_DontHitSelf(int iEntity, int iMask, int data)
 {
 	return (iEntity != data);
 }
@@ -3141,8 +3190,44 @@ Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, in
 
 
 // ====================================================================================================
-//					COMMANDS - ENTITY PROPERTIES - sm_prop, sm_propent, sm_propi
+//					COMMANDS - ENTITY PROPERTIES - sm_gamerules, sm_prop, sm_propent, sm_propi
 // ====================================================================================================
+Action CmdGameRules(int client, int args)
+{
+	if( g_sGameRulesClass[0] )
+	{
+		static int entity;
+
+		if( !IsValidEntRef(entity) )
+		{
+			entity = FindEntityByClassname(-1, g_sGameRulesClass);
+
+			if( entity != INVALID_ENT_REFERENCE )
+				entity = EntIndexToEntRef(entity);
+		}
+
+		if( entity != INVALID_ENT_REFERENCE )
+		{
+			char sProp[64], sValue[64];
+			GetCmdArg(1, sProp, sizeof(sProp));
+			if( args == 2 )
+				GetCmdArg(2, sValue, sizeof(sValue));
+
+			PropertyValue(client, EntRefToEntIndex(entity), args, sProp, sValue);
+		}
+		else
+		{
+			ReplyToCommand(client, "[SM] Error: Cannot find the GameRules \"%s\" entity.", g_sGameRulesClass);
+		}
+	}
+	else
+	{
+		ReplyToCommand(client, "[SM] Error: Missing GameRules classname.");
+	}
+	
+	return Plugin_Handled;
+}
+
 Action CmdProp(int client, int args)
 {
 	if( !client )
@@ -3166,6 +3251,7 @@ Action CmdProp(int client, int args)
 
 		PropertyValue(client, entity, args, sProp, sValue);
 	}
+
 	return Plugin_Handled;
 }
 
@@ -3205,6 +3291,7 @@ Action CmdPropEnt(int client, int args)
 			}
 		}
 	}
+
 	return Plugin_Handled;
 }
 
@@ -3237,6 +3324,11 @@ void PropertyValue(int client, int entity, int args, char sProp[64], const char 
 	float vVec[3];
 	PropFieldType proptype;
 	GetEntityNetClass(entity, sClass, sizeof(sClass));
+
+	// Match gamerules net class
+	bool gamerules;
+	if( g_sGameRulesNet[0] && strcmp(sClass, g_sGameRulesNet) == 0 )
+		gamerules = true;
 
 	// Member offset
 	int member;
@@ -3271,11 +3363,11 @@ void PropertyValue(int client, int entity, int args, char sProp[64], const char 
 			if( member && GetEntPropArraySize(entity, Prop_Send, sProp) <= member )
 			{
 				ReplyToCommand(client, "Member size %00d is too large for this entity Prop_Send. Maximum %d member elements (starting from index 0).", member, GetEntPropArraySize(entity, Prop_Send, sProp));
+				sMember[0] = 0;
 				member = 0;
 			}
 
-			bool na;
-			if( g_hEntityKeys.GetValue(sProp, na) )
+			if( g_hEntityKeys.ContainsKey(sProp) )
 			{
 				proptype = PropField_Entity;
 			}
@@ -3349,8 +3441,7 @@ void PropertyValue(int client, int entity, int args, char sProp[64], const char 
 				member = 0;
 			}
 
-			bool na;
-			if( g_hEntityKeys.GetValue(sProp, na) )
+			if( g_hEntityKeys.ContainsKey(sProp) )
 			{
 				proptype = PropField_Entity;
 			}
@@ -3428,8 +3519,7 @@ void PropertyValue(int client, int entity, int args, char sProp[64], const char 
 				member = 0;
 			}
 
-			bool na;
-			if( g_hEntityKeys.GetValue(sProp, na) )
+			if( g_hEntityKeys.ContainsKey(sProp) )
 			{
 				proptype = PropField_Entity;
 			}
@@ -3438,7 +3528,10 @@ void PropertyValue(int client, int entity, int args, char sProp[64], const char 
 			{
 				int value = StringToInt(sValue);
 
-				SetEntProp(entity, Prop_Send, sProp, value, _, member);
+				if( gamerules )
+					GameRules_SetProp(sProp, value, _, member);
+				else
+					SetEntProp(entity, Prop_Send, sProp, value, _, member);
 
 				if( client )
 					PrintToChat(client, "\x05%d\x01) Set \x03Prop_Send\x01 integer \"%s\" \"%s%s\" to \x05%d", entity, sClass, sProp, sMember, value);
@@ -3448,7 +3541,11 @@ void PropertyValue(int client, int entity, int args, char sProp[64], const char 
 			else if( proptype == PropField_Entity )
 			{
 				int value = StringToInt(sValue);
-				SetEntPropEnt(entity, Prop_Send, sProp, value, member);
+
+				if( gamerules )
+					GameRules_SetPropEnt(sProp, value, member);
+				else
+					SetEntPropEnt(entity, Prop_Send, sProp, value, member);
 
 				if( client )
 					PrintToChat(client, "\x05%d\x01) Set \x03Prop_Send\x01 entity \"%s\" \"%s%s\" to \x05%d", entity, sClass, sProp, sMember, value);
@@ -3458,7 +3555,11 @@ void PropertyValue(int client, int entity, int args, char sProp[64], const char 
 			else if( proptype == PropField_Float )
 			{
 				float value = StringToFloat(sValue);
-				SetEntPropFloat(entity, Prop_Send, sProp, value, member);
+
+				if( gamerules )
+					GameRules_SetPropFloat(sProp, value, member);
+				else
+					SetEntPropFloat(entity, Prop_Send, sProp, value, member);
 
 				if( client )
 					PrintToChat(client, "\x05%d\x01) Set \x03Prop_Send\x01 float \"%s\" \"%s%s\" to \x05%f", entity, sClass, sProp, sMember, value);
@@ -3467,7 +3568,10 @@ void PropertyValue(int client, int entity, int args, char sProp[64], const char 
 			}
 			else if( proptype == PropField_String || proptype == PropField_String_T )
 			{
-				SetEntPropString(entity, Prop_Send, sProp, sValue, member);
+				if( gamerules )
+					GameRules_SetPropString(sProp, sValue, _, member);
+				else
+					SetEntPropString(entity, Prop_Send, sProp, sValue, member);
 
 				if( client )
 					PrintToChat(client, "\x05%d\x01) Set \x03Prop_Send\x01 string \"%s\" \"%s%s\" to \x05%s", entity, sClass, sProp, sMember, sValue);
@@ -3481,7 +3585,10 @@ void PropertyValue(int client, int entity, int args, char sProp[64], const char 
 				vVec[1] = StringToFloat(sTemp[1]);
 				vVec[2] = StringToFloat(sTemp[2]);
 
-				SetEntPropVector(entity, Prop_Send, sProp, vVec, member);
+				if( gamerules )
+					GameRules_SetPropVector(sProp, vVec, member);
+				else
+					SetEntPropVector(entity, Prop_Send, sProp, vVec, member);
 
 				if( client )
 					PrintToChat(client, "\x05%d\x01) Set \x03Prop_Send\x01 vector \"%s\" \"%s%s\" to \x05%f %f %f", entity, sClass, sProp, sMember, vVec[0], vVec[1], vVec[2]);
@@ -3518,8 +3625,7 @@ void PropertyValue(int client, int entity, int args, char sProp[64], const char 
 				member = 0;
 			}
 
-			bool na;
-			if( g_hEntityKeys.GetValue(sProp, na) )
+			if( g_hEntityKeys.ContainsKey(sProp) )
 			{
 				proptype = PropField_Entity;
 			}
@@ -4882,9 +4988,9 @@ int DisplayParticle(char[] sParticle, float vPos[3], float fAng[3], int client =
 	return 0;
 }
 
-bool IsValidEntRef(int iEnt)
+bool IsValidEntRef(int entity)
 {
-	if( iEnt && EntRefToEntIndex(iEnt) != INVALID_ENT_REFERENCE )
+	if( entity && EntRefToEntIndex(entity) != INVALID_ENT_REFERENCE )
 		return true;
 	return false;
 }
@@ -4902,7 +5008,7 @@ bool SetTeleportEndPoint(int client, float vPos[3])
 	GetClientEyePosition(client, vPos);
 	GetClientEyeAngles(client, vAng);
 
-	Handle hTrace = TR_TraceRayFilterEx(vPos, vAng, MASK_SHOT, RayType_Infinite, _TraceFilter);
+	Handle hTrace = TR_TraceRayFilterEx(vPos, vAng, MASK_SHOT, RayType_Infinite, TraceFilter);
 
 	if( TR_DidHit(hTrace) )
 	{
@@ -4921,7 +5027,7 @@ bool SetTeleportEndPoint(int client, float vPos[3])
 	return true;
 }
 
-bool _TraceFilter(int entity, int contentsMask)
+bool TraceFilter(int entity, int contentsMask)
 {
 	return entity > MaxClients || !entity;
 }
