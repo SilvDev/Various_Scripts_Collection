@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.11"
+#define PLUGIN_VERSION 		"1.12"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.12 (10-Feb-2023)
+	- Fixed affecting Survivors under certain circumstances. Thanks to "Voevoda" for reporting.
 
 1.11 (03-Dec-2022)
 	- Added cvars "l4d_infected_movement_delay_smoker", "l4d_infected_movement_delay_spitter" and "l4d_infected_movement_delay_tank" to delay unlocking movement. Requested by "Mika Misori".
@@ -119,6 +122,9 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 		strcopy(error, err_max, "Plugin only supports Left 4 Dead 1 & 2.");
 		return APLRes_SilentFailure;
 	}
+
+	RegPluginLibrary("l4d_infected_movement");
+
 	return APLRes_Success;
 }
 
@@ -138,8 +144,8 @@ public void OnPluginStart()
 	if( g_bLeft4Dead2 )
 		g_hSpeedSpit =		CreateConVar(	"l4d_infected_movement_speed_spitter",	"250",			"How fast can Spitters move while using their ability.", CVAR_FLAGS );
 	g_hCvarType =			CreateConVar(	"l4d_infected_movement_type",			"7",			"These Special Infected players can use: 1=Smoker, 2=Spitter, 4=Tank, 7=All. Add numbers together.", CVAR_FLAGS );
-	CreateConVar(						"l4d_infected_movement_version",		PLUGIN_VERSION, "Ability Movement plugin version.", FCVAR_NOTIFY|FCVAR_DONTRECORD);
-	AutoExecConfig(true,				"l4d_infected_movement");
+	CreateConVar(							"l4d_infected_movement_version",		PLUGIN_VERSION, "Ability Movement plugin version.", FCVAR_NOTIFY|FCVAR_DONTRECORD);
+	AutoExecConfig(true,					"l4d_infected_movement");
 
 	g_hCvarMPGameMode = FindConVar("mp_gamemode");
 	g_hCvarMPGameMode.AddChangeHook(ConVarChanged_Allow);
@@ -233,6 +239,7 @@ void IsAllowed()
 		HookEvent("round_end",			Event_Reset);
 		HookEvent("round_start",		Event_Reset);
 		HookEvent("ability_use",		Event_Use);
+		HookEvent("player_team",		Event_Death);
 		HookEvent("player_death",		Event_Death);
 		HookEvent("tongue_release",		Event_Death);
 	}
@@ -242,6 +249,7 @@ void IsAllowed()
 		UnhookEvent("round_end",		Event_Reset);
 		UnhookEvent("round_start",		Event_Reset);
 		UnhookEvent("ability_use",		Event_Use);
+		UnhookEvent("player_team",		Event_Death);
 		UnhookEvent("player_death",		Event_Death);
 		UnhookEvent("tongue_release",	Event_Death);
 	}
@@ -338,16 +346,19 @@ void ResetPlugin()
 void Event_Death(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
-	if( !client || !IsClientInGame(client) || GetClientTeam(client) != 3 ) return;
+	if( !client || !IsClientInGame(client) ) return;
 
-	int class = GetEntProp(client, Prop_Send, "m_zombieClass");
-	if( class == 1 || class == 4 || class == g_iClassTank )
+	SDKUnhook(client, SDKHook_PostThinkPost, OnThinkFunk);
+	SDKUnhook(client, SDKHook_PreThink, OnThinkFunk);
+	SDKUnhook(client, SDKHook_PreThinkPost, OnThinkFunk);
+
+	if( GetClientTeam(client) == 3 )
 	{
-		SDKUnhook(client, SDKHook_PostThinkPost, OnThinkFunk);
-		SDKUnhook(client, SDKHook_PreThink, OnThinkFunk);
-		SDKUnhook(client, SDKHook_PreThinkPost, OnThinkFunk);
-
-		SetEntPropFloat(client, Prop_Send, "m_flMaxspeed", class == 1 ? g_fSpeedSmokeDef : class == 4 ? g_fSpeedSpitDef : g_fSpeedTankDef);
+		int class = GetEntProp(client, Prop_Send, "m_zombieClass");
+		if( class == 1 || class == 4 || class == g_iClassTank )
+		{
+			SetEntPropFloat(client, Prop_Send, "m_flMaxspeed", class == 1 ? g_fSpeedSmokeDef : class == 4 ? g_fSpeedSpitDef : g_fSpeedTankDef);
+		}
 	}
 }
 
