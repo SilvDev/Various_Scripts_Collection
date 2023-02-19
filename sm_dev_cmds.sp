@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.47"
+#define PLUGIN_VERSION 		"1.48"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.48 (19-Feb-2023)
+	- Added command "sm_hexcols" to print a list of hex colors to chat. Requested by "Marttt".
 
 1.47 (10-Jan-2023)
 	- Added command "sm_gamerules" to read/write to the gamerules proxy.
@@ -430,6 +433,7 @@ public void OnPluginStart()
 	RegAdminCmd("sm_count",			CmdCount,		ADMFLAG_ROOT, "Displays a list of all spawned entity classnames and count. Optional sm_count <classname>");
 	RegAdminCmd("sm_modlist",		CmdModList,		ADMFLAG_ROOT, "Saves a list of all the models used on the current map to 'sourcemod/logs/models_<MAPNAME>.txt'.");
 	RegAdminCmd("sm_collision",		CmdColli,		ADMFLAG_ROOT, "[entity] Toggles collision on the aimed entity or specified entity index.");
+	RegAdminCmd("sm_movetype",		CmdMoveType,	ADMFLAG_ROOT, "[entity] Set the MoveType of an entity.");
 	RegAdminCmd("sm_anim",			CmdAnim,		ADMFLAG_ROOT, "[sequence]. Show aimed entities animation sequence number until toggled again or your own if not aimed at entity. Optionally, it can set sequence. Checks every frame and reports changes.");
 	RegAdminCmd("sm_weapons",		CmdWeapons,		ADMFLAG_ROOT, "[client index]. Lists players weapons and indexes. Either yourself, or aim target or optional index via cmd args.");
 	if( g_iGAMETYPE == GAME_TF2 )
@@ -448,6 +452,7 @@ public void OnPluginStart()
 	RegAdminCmd("sm_val",			CmdVal,			ADMFLAG_ROOT, "<bit value>. E.g: sm_val 1<<20. Returns: 1048576");
 	RegAdminCmd("sm_bit",			CmdBit,			ADMFLAG_ROOT, "<bit value>. E.g: sm_bit 1048577. Returns: (1<<0); (1<<20)");
 	RegAdminCmd("sm_adm",			CmdAdm,			0, "Toggles between ROOT and BAN admin flags, for testing stuff without ROOT access. Or specified flags e.g. Usage: sm_adm BAN KICK");
+	RegAdminCmd("sm_hexcols",		CmdHexCol,		ADMFLAG_ROOT, "Print a list of hex colors to chat.");
 
 	RegAdminCmd("sm_gamerules",		CmdGameRules,	ADMFLAG_ROOT, "<prop> [value] Affects the gamerules proxy. Can read or write to table members, prop.member: e.g. m_iChapterDamage.001");
 	RegAdminCmd("sm_prop",			CmdProp,		ADMFLAG_ROOT, "<prop> [value] Affects the entity you aim at. Can read or write to table members, prop.member: e.g. m_iChapterDamage.001");
@@ -2369,6 +2374,56 @@ Action CmdColli(int client, int args)
 	return Plugin_Handled;
 }
 
+Action CmdMoveType(int client, int args)
+{
+	if( !client )
+	{
+		ReplyToCommand(client, "Command can only be used %s", IsDedicatedServer() ? "in game on a dedicated server." : "in chat on a Listen server.");
+		return Plugin_Handled;
+	}
+
+	if( args == 0 )
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_movetype <type> [entity]");
+		return Plugin_Handled;
+	}
+
+	char sArg[8];
+	int entity;
+
+	if( args == 1 )
+	{
+		entity = GetClientAimTarget(client, false);
+		if( entity == -1 )
+		{
+			entity = client;
+		}
+	}
+	else if( args == 2 )
+	{
+		GetCmdArg(2 ,sArg, sizeof(sArg));
+
+		entity = StringToInt(sArg);
+		if( entity <= 0 || entity >= 2048 || !IsValidEntity(entity) )
+		{
+			ReplyToCommand(client, "[SM] sm_collision: Invalid entity specified.");
+			return Plugin_Handled;
+		}
+	}
+
+	GetCmdArg(1 ,sArg, sizeof(sArg));
+	int type = StringToInt(sArg);
+
+	SetEntityMoveType(entity, view_as<MoveType>(type));
+
+	if( entity > 0 && entity <= MaxClients )
+		ReplyToCommand(client, "[SM] Set MoveType %d on %N.", type, entity);
+	else
+		ReplyToCommand(client, "[SM] Set MoveType %d on %d.", type, entity);
+
+	return Plugin_Handled;
+}
+
 bool g_bAnimWatch;
 int g_iAnimIndex;
 int g_iAnimTarget;
@@ -3106,6 +3161,58 @@ Action CmdAdm(int client, int args)
 			PrintToChat(client, "[SM] sm_adm: Restored flag: ROOT");
 		}
 	}
+
+	return Plugin_Handled;
+}
+
+Action CmdHexCol(int client, int args)
+{
+	if( !client )
+	{
+		ReplyToCommand(client, "Command can only be used %s", IsDedicatedServer() ? "in game on a dedicated server." : "in chat on a Listen server.");
+		return Plugin_Handled;
+	}
+
+	PrintToChat(client, "\x01 \x01\\01");
+	PrintToChat(client, "\x01 \x02\\02");
+	PrintToChat(client, "\x01 \x03\\03");
+	PrintToChat(client, "\x01 \x04\\04");
+	PrintToChat(client, "\x01 \x05\\05");
+	PrintToChat(client, "\x01 \x06\\06");
+	PrintToChat(client, "\x01 \x07\\07");
+	PrintToChat(client, "\x01 \x08\\08");
+	PrintToChat(client, "\x01 \x09\\09");
+	PrintToChat(client, "\x01 \x10\\10");
+	PrintToChat(client, "\x01 \x11\\11");
+	PrintToChat(client, "\x01 \x12\\12");
+	PrintToChat(client, "\x01 \x13\\13");
+	PrintToChat(client, "\x01 \x14\\14");
+	PrintToChat(client, "\x01 \x15\\15");
+	PrintToChat(client, "\x01 \x16\\16");
+	PrintToChat(client, "\x01 \x17\\17");
+	PrintToChat(client, "\x01 \x18\\18");
+	PrintToChat(client, "\x01 \x19\\19");
+	PrintToChat(client, "\x01 \x20\\20");
+	PrintToChat(client, "\x01 \x21\\21");
+	PrintToChat(client, "\x01 \x22\\22");
+	PrintToChat(client, "\x01 \x23\\23");
+	PrintToChat(client, "\x01 \x24\\24");
+	PrintToChat(client, "\x01 \x25\\25");
+	PrintToChat(client, "\x01 \x26\\26");
+	PrintToChat(client, "\x01 \x27\\27");
+	PrintToChat(client, "\x01 \x28\\28");
+	PrintToChat(client, "\x01 \x29\\29");
+	PrintToChat(client, "\x01 \x30\\30");
+	PrintToChat(client, "\x01 \x31\\31");
+
+	// Why doesn't this work:
+	/*
+	for( int i = 1; i <= 31; i++ )
+	{
+		PrintToChat(client, " \x01\x%02X\\x%02X", i, i);
+	}
+	// */
+
 	return Plugin_Handled;
 }
 
