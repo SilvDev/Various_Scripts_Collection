@@ -1,6 +1,6 @@
 /*
 *	Regenerative Healing
-*	Copyright (C) 2022 Silvers
+*	Copyright (C) 2023 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.11"
+#define PLUGIN_VERSION 		"1.12"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.12 (19-Feb-2023)
+	- Fixed healing not continuing when a bot or player takeover each other. Thanks to "Iciaria" for reporting.
 
 1.11 (29-May-2022)
 	- Added cvars "l4d_healing_health_defib" and "l4d_healing_regen_defib" to give regenerative healing after being defibrillated.
@@ -95,10 +98,12 @@ float g_fCvarDamage, g_fCvarMoving, g_fCvarRegenA, g_fCvarRegenD, g_fCvarRegenF,
 int g_iCvarHealth, g_iCvarHealthA, g_iCvarHealthD, g_iCvarHealthF, g_iCvarHealthP, g_iCvarMax, g_iCvarRegenT, g_iCvarAlways, g_iCvarTemp, g_iCvarType;
 
 bool g_bCvarAllow, g_bMapStarted, g_bActive, g_bLeft4Dead2;
-Handle gTimerTempHealth, gTimerRegenHealth;
+Handle g_hTimerTempHealth, g_hTimerRegenHealth;
 float g_fLastDamage[MAXPLAYERS+1];
 float g_fLastHealth[MAXPLAYERS+1];
 int g_iLastHealth[MAXPLAYERS+1];
+ArrayList g_alDataPacks;
+ArrayList g_alTimerHands;
 
 enum
 {
@@ -109,6 +114,8 @@ enum
 	TYPE_TEMP,
 	TYPE_DEFIB
 }
+
+
 
 // ====================================================================================================
 //					PLUGIN INFO / START
@@ -199,6 +206,9 @@ public void OnPluginStart()
 	g_hCvarRegenT.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarTime.AddChangeHook(ConVarChanged_Cvars);
 
+	g_alDataPacks = new ArrayList();
+	g_alTimerHands = new ArrayList();
+
 	IsAllowed();
 }
 
@@ -257,24 +267,28 @@ void HookUnhookEvents(bool hook)
 	{
 		hooked = true;
 
-		HookEvent("pills_used",					Event_PainPills, EventHookMode_Pre);
-		HookEvent("heal_success",				Event_FirstAid, EventHookMode_Pre);
+		HookEvent("player_bot_replace",			Event_Swap_Bot);
+		HookEvent("bot_player_replace",			Event_Swap_User);
+		HookEvent("pills_used",					Event_PainPills);
+		HookEvent("heal_success",				Event_FirstAid);
 		if( g_bLeft4Dead2 )
 		{
-			HookEvent("adrenaline_used",		Event_Adrenaline, EventHookMode_Pre);
-			HookEvent("defibrillator_used",		Event_Defibrillator, EventHookMode_Pre);
+			HookEvent("adrenaline_used",		Event_Adrenaline);
+			HookEvent("defibrillator_used",		Event_Defibrillator);
 		}
 	}
 	else if( hook == false && hooked == true )
 	{
 		hooked = false;
 
-		UnhookEvent("pills_used",				Event_PainPills, EventHookMode_Pre);
-		UnhookEvent("heal_success",				Event_FirstAid, EventHookMode_Pre);
+		UnhookEvent("player_bot_replace",		Event_Swap_Bot);
+		UnhookEvent("bot_player_replace",		Event_Swap_User);
+		UnhookEvent("pills_used",				Event_PainPills);
+		UnhookEvent("heal_success",				Event_FirstAid);
 		if( g_bLeft4Dead2 )
 		{
-			UnhookEvent("adrenaline_used",		Event_Adrenaline, EventHookMode_Pre);
-			UnhookEvent("defibrillator_used",	Event_Defibrillator, EventHookMode_Pre);
+			UnhookEvent("adrenaline_used",		Event_Adrenaline);
+			UnhookEvent("defibrillator_used",	Event_Defibrillator);
 		}
 	}
 }
@@ -457,6 +471,8 @@ public void OnMapEnd()
 {
 	g_bMapStarted = false;
 	g_bActive = false;
+
+	ResetPacks();
 }
 
 void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
@@ -471,6 +487,28 @@ void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
 	g_bActive = false;
+
+	ResetPacks();
+}
+
+void ResetPacks()
+{
+	DataPack dPack;
+	int length = g_alDataPacks.Length;
+
+	for( int i = 0; i < length; i++ )
+	{
+		dPack = g_alDataPacks.Get(i);
+		if( dPack )
+		{
+			KillTimer(g_alTimerHands.Get(i));
+		}
+
+		delete dPack;
+	}
+
+	g_alDataPacks.Clear();
+	g_alTimerHands.Clear();
 }
 
 void Event_Defibrillator(Event event, const char[] name, bool dontBroadcast)
@@ -525,6 +563,62 @@ void Event_FirstAid(Event event, const char[] name, bool dontBroadcast)
 	}
 }
 
+void Event_Swap_Bot(Event event, const char[] name, bool dontBroadcast)
+{
+	int client = GetClientOfUserId(event.GetInt("player"));
+	int bot = GetClientOfUserId(event.GetInt("bot"));
+
+	g_fLastDamage[bot] = g_fLastDamage[client];
+	g_fLastHealth[bot] = g_fLastHealth[client];
+	g_iLastHealth[bot] = g_iLastHealth[client];
+
+	SwapPacks(client, bot);
+}
+
+void Event_Swap_User(Event event, const char[] name, bool dontBroadcast)
+{
+	int client = GetClientOfUserId(event.GetInt("player"));
+	int bot = GetClientOfUserId(event.GetInt("bot"));
+
+	g_fLastDamage[client] = g_fLastDamage[bot];
+	g_fLastHealth[client] = g_fLastHealth[bot];
+	g_iLastHealth[client] = g_iLastHealth[bot];
+
+	SwapPacks(bot, client);
+}
+
+void SwapPacks(int client, int target)
+{
+	float healed;
+	int user;
+	int type;
+	int userid = GetClientUserId(client);
+	target = GetClientUserId(target);
+
+	// Loop datapacks, swap userids
+	DataPack dPack;
+	int length = g_alDataPacks.Length;
+
+	for( int i = 0; i < length; i++ )
+	{
+		dPack = g_alDataPacks.Get(i);
+
+		dPack.Reset();
+		type = dPack.ReadCell();
+		user = dPack.ReadCell();
+
+		if( user == userid )
+		{
+			healed = dPack.ReadFloat();
+
+			dPack.Reset();
+			dPack.WriteCell(type);
+			dPack.WriteCell(target);
+			dPack.WriteFloat(healed);
+		}
+	}
+}
+
 
 
 // ====================================================================================================
@@ -535,18 +629,18 @@ void Event_FirstAid(Event event, const char[] name, bool dontBroadcast)
 void TempTimerToggle(bool enable)
 {
 	// Kill always regen timer
-	delete gTimerRegenHealth;
+	delete g_hTimerRegenHealth;
 
 	// Kill health store timer
-	delete gTimerTempHealth;
+	delete g_hTimerTempHealth;
 
 	// Create timer if remove temp health option
 	if( enable && g_iCvarTemp & (1<<0) )
-		gTimerTempHealth = CreateTimer(0.1, TimerTempHealth, _, TIMER_REPEAT); // Auto stops if not enabled.
+		g_hTimerTempHealth = CreateTimer(0.1, TimerTempHealth, _, TIMER_REPEAT); // Auto stops if not enabled.
 
 	// Create timer if always regen
 	if( enable && g_iCvarAlways != 0 )
-		gTimerRegenHealth = CreateTimer(g_fCvarTime, TimerRegenAlways, _, TIMER_REPEAT);
+		g_hTimerRegenHealth = CreateTimer(g_fCvarTime, TimerRegenAlways, _, TIMER_REPEAT);
 }
 
 Action TimerTempHealth(Handle timer)
@@ -564,7 +658,7 @@ Action TimerTempHealth(Handle timer)
 		return Plugin_Continue;
 	}
 
-	gTimerTempHealth = null;
+	g_hTimerTempHealth = null;
 	return Plugin_Stop;
 }
 
@@ -582,7 +676,7 @@ Action TimerRegenAlways(Handle timer)
 		return Plugin_Continue;
 	}
 
-	gTimerRegenHealth = null;
+	g_hTimerRegenHealth = null;
 	return Plugin_Stop;
 }
 
@@ -597,6 +691,7 @@ void SetupHealTimer(int client, int userid, int type)
 	if( g_iCvarTemp & (1<<0) )
 	{
 		SetTempHealth(client, g_fLastHealth[client]);
+
 		if( type == TYPE_FIRST )
 		{
 			SetEntityHealth(client, g_iLastHealth[client]);
@@ -604,11 +699,14 @@ void SetupHealTimer(int client, int userid, int type)
 	}
 
 	// Repeat healing
-	DataPack dPack;
-	CreateDataTimer(g_fCvarTime, TimerRegenTemp, dPack, TIMER_FLAG_NO_MAPCHANGE|TIMER_REPEAT);
+	DataPack dPack = new DataPack();
 	dPack.WriteCell(type);
 	dPack.WriteCell(userid);
 	dPack.WriteFloat(0.0);
+
+	g_alDataPacks.Push(dPack);
+	Handle timer = CreateTimer(g_fCvarTime, TimerRegenTemp, dPack, TIMER_REPEAT);
+	g_alTimerHands.Push(timer);
 }
 
 Action TimerRegenTemp(Handle timer, DataPack dPack)
@@ -619,11 +717,12 @@ Action TimerRegenTemp(Handle timer, DataPack dPack)
 	dPack.Reset();
 	int type = dPack.ReadCell();
 	int userid = dPack.ReadCell();
-	float healed = dPack.ReadFloat();
 
-	int client;
-	if( (client = GetClientOfUserId(userid)) && IsClientInGame(client) && IsPlayerAlive(client) )
+	int client = GetClientOfUserId(userid);
+	if( client && IsClientInGame(client) && IsPlayerAlive(client) && GetClientTeam(client) == 2 )
 	{
+		float healed = dPack.ReadFloat();
+
 		// Healed less than regen limiter
 		float max;
 		switch( type )
@@ -652,6 +751,13 @@ Action TimerRegenTemp(Handle timer, DataPack dPack)
 			RegenPlayer(client, type);
 			return Plugin_Continue;
 		}
+	}
+
+	int index = g_alDataPacks.FindValue(dPack);
+	if( index != -1 )
+	{
+		g_alDataPacks.Erase(index);
+		g_alTimerHands.Erase(index);
 	}
 
 	return Plugin_Stop;
@@ -722,6 +828,7 @@ void RegenPlayer(int client, int type) // 1=Adrenaline. 2=Pills. 3=First aid. 4=
 		if( health + give > g_iCvarMax )
 		{
 			// Max health
+			// HealPlayer(client);
 			SetEntityHealth(client, g_iCvarMax);
 		}
 		else
@@ -743,6 +850,17 @@ void RegenPlayer(int client, int type) // 1=Adrenaline. 2=Pills. 3=First aid. 4=
 	{
 		SetTempHealth(client, float(g_iCvarMax - GetClientHealth(client)));
 	}
+}
+
+stock void HealPlayer(int client)
+{
+	int bits = GetUserFlagBits(client);
+	int flags = GetCommandFlags("give");
+	SetUserFlagBits(client, ADMFLAG_ROOT);
+	SetCommandFlags("give", flags & ~FCVAR_CHEAT);
+	FakeClientCommand(client, "give health");
+	SetUserFlagBits(client, bits);
+	SetCommandFlags("give", flags);
 }
 
 float GetTempHealth(int client)
