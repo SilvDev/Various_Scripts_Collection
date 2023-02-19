@@ -32,6 +32,10 @@
 ========================================================================================
 	Change Log:
 
+1.12 (19-Feb-2022)
+	- Added cvar "l4d_heartbeat_incap" to set black and white status when someone is incapped, not after revive. Requested by "Jestery".
+	- Fixed heartbeat sound being stopped when other players respawn.
+
 1.11 (03-Dec-2022)
 	- Plugin now resets the heartbeat sound for spectators.
 
@@ -86,8 +90,8 @@
 #define SOUND_HEART			"player/heartbeatloop.wav"
 
 
-ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarRevives, g_hCvarScreen, g_hCvarSound, g_hCvarVocal, g_hCvarMaxIncap, g_hCvarDecay;
-bool g_bCvarAllow, g_bMapStarted, g_bLeft4Dead2;
+ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarIncap, g_hCvarRevives, g_hCvarScreen, g_hCvarSound, g_hCvarVocal, g_hCvarMaxIncap, g_hCvarDecay;
+bool g_bCvarAllow, g_bCvarIncap, g_bMapStarted, g_bLeft4Dead2;
 float g_fDecayDecay;
 int g_iCvarRevives, g_iCvarScreen, g_iCvarSound, g_iCvarVocal;
 int g_iReviveCount[MAXPLAYERS+1];
@@ -178,10 +182,10 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
 		return APLRes_SilentFailure;
 	}
 
-	RegPluginLibrary("l4d_heartbeat");
-
 	CreateNative("Heartbeat_GetRevives", Native_GetRevives);
 	CreateNative("Heartbeat_SetRevives", Native_SetRevives);
+
+	RegPluginLibrary("l4d_heartbeat");
 
 	return APLRes_Success;
 }
@@ -197,6 +201,7 @@ public void OnPluginStart()
 	g_hCvarModes =			CreateConVar(	"l4d_heartbeat_modes",			"",					"Turn on the plugin in these game modes, separate by commas (no spaces). (Empty = all).", CVAR_FLAGS );
 	g_hCvarModesOff =		CreateConVar(	"l4d_heartbeat_modes_off",		"",					"Turn off the plugin in these game modes, separate by commas (no spaces). (Empty = none).", CVAR_FLAGS );
 	g_hCvarModesTog =		CreateConVar(	"l4d_heartbeat_modes_tog",		"0",				"Turn on the plugin in these game modes. 0=All, 1=Coop, 2=Survival, 4=Versus, 8=Scavenge. Add numbers together.", CVAR_FLAGS );
+	g_hCvarIncap =			CreateConVar(	"l4d_heartbeat_incap",			"0",				"0=Off. 1=Set black and white status when someone is incapped, not after revive.", CVAR_FLAGS );
 	g_hCvarRevives =		CreateConVar(	"l4d_heartbeat_revives",		"2",				"How many revives are allowed before a player is killed (wrapper to overwrite survivor_max_incapacitated_count cvar).", CVAR_FLAGS );
 	g_hCvarScreen =			CreateConVar(	"l4d_heartbeat_screen",			"2",				"How many revives until the black and white screen overlay starts.", CVAR_FLAGS );
 	g_hCvarSound =			CreateConVar(	"l4d_heartbeat_sound",			"2",				"How many revives until the heartbeat sound starts playing.", CVAR_FLAGS );
@@ -212,6 +217,7 @@ public void OnPluginStart()
 	g_hCvarModesOff.AddChangeHook(ConVarChanged_Allow);
 	g_hCvarModesTog.AddChangeHook(ConVarChanged_Allow);
 	g_hCvarAllow.AddChangeHook(ConVarChanged_Allow);
+	g_hCvarIncap.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarRevives.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarScreen.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarSound.AddChangeHook(ConVarChanged_Cvars);
@@ -299,6 +305,12 @@ Action CmdHeatbeat(int client, int args)
 			}
 		}
 	} else {
+		if( !client )
+		{
+			ReplyToCommand(client, "Command can only be used %s", IsDedicatedServer() ? "in game on a dedicated server." : "in chat on a Listen server.");
+			return Plugin_Handled;
+		}
+
 		// Heal
 		if( g_iReviveCount[client] >= g_iCvarScreen )
 		{
@@ -381,6 +393,7 @@ void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newV
 
 void GetCvars()
 {
+	g_bCvarIncap = g_hCvarIncap.BoolValue;
 	g_iCvarRevives = g_hCvarRevives.IntValue;
 	g_iCvarScreen = g_hCvarScreen.IntValue;
 	g_iCvarSound = g_hCvarSound.IntValue;
@@ -404,6 +417,7 @@ void IsAllowed()
 		HookEvent("player_bot_replace",		Event_ReplaceBot);
 		HookEvent("player_death",			Event_Spawned);
 		HookEvent("player_spawn",			Event_Spawned);
+		HookEvent("player_incapacitated",	Event_Incapped);
 		HookEvent("heal_success",			Event_Healed);
 		HookEvent("revive_success",			Event_Revive);
 	}
@@ -415,6 +429,7 @@ void IsAllowed()
 		UnhookEvent("player_bot_replace",	Event_ReplaceBot);
 		UnhookEvent("player_death",			Event_Spawned);
 		UnhookEvent("player_spawn",			Event_Spawned);
+		UnhookEvent("player_incapacitated",	Event_Incapped);
 		UnhookEvent("heal_success",			Event_Healed);
 		UnhookEvent("revive_success",		Event_Revive);
 	}
@@ -600,6 +615,18 @@ void Event_Spawned(Event event, const char[] name, bool dontBroadcast)
 	}
 }
 
+void Event_Incapped(Event event, const char[] name, bool dontBroadcast)
+{
+	if( g_bCvarIncap )
+	{
+		int client = GetClientOfUserId(event.GetInt("userid"));
+
+		g_iReviveCount[client]++;
+		ReviveLogic(client);
+		g_iReviveCount[client]--;
+	}
+}
+
 void Event_Healed(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("subject"));
@@ -667,7 +694,8 @@ void ReviveLogic(int client)
 	if( g_iReviveCount[client] >= g_iCvarSound )
 	{
 		// if( g_bLeft4Dead2 && fromEvent && g_iReviveCount[client] == g_iCvarRevives ) return; // Game emits itself, would duplicate sound even with stop... Seems to work fine now with multiple resets..?
-		RequestFrame(OnFrameSound, GetClientUserId(client));
+		// RequestFrame(OnFrameSound, GetClientUserId(client));
+		CreateTimer(0.1, TimerSound, GetClientUserId(client));
 	}
 }
 
@@ -675,7 +703,7 @@ void ResetSoundObs(int client)
 {
 	for( int i = 1; i <= MaxClients; i++ )
 	{
-		if( IsClientInGame(i) && GetEntPropEnt(i, Prop_Send, "m_hObserverTarget") == client )
+		if( IsClientInGame(i) && !IsPlayerAlive(i) && GetEntPropEnt(i, Prop_Send, "m_hObserverTarget") == client )
 		{
 			ResetSound(i);
 			ResetSound(i);
@@ -690,11 +718,14 @@ void ResetSound(int client)
 	StopSound(client, SNDCHAN_STATIC, SOUND_HEART);
 }
 
-void OnFrameSound(int client)
+// void OnFrameSound(int client)
+Action TimerSound(Handle timer, int client)
 {
 	client = GetClientOfUserId(client);
 	if( client )
 	{
 		EmitSoundToClient(client, SOUND_HEART, SOUND_FROM_PLAYER, SNDCHAN_STATIC);
 	}
+
+	return Plugin_Continue;
 }
