@@ -1,6 +1,6 @@
 /*
 *	Heartbeat (Revive Fix - Post Revive Options)
-*	Copyright (C) 2022 Silvers
+*	Copyright (C) 2023 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -32,7 +32,7 @@
 ========================================================================================
 	Change Log:
 
-1.12 (19-Feb-2022)
+1.12 (19-Feb-2023)
 	- Added cvar "l4d_heartbeat_incap" to set black and white status when someone is incapped, not after revive. Requested by "Jestery".
 	- Fixed heartbeat sound being stopped when other players respawn.
 
