@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.12"
+#define PLUGIN_VERSION 		"1.13"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.13 (10-Mar-2023)
+	- Delayed revive logic by 1 frame to fix settings sometimes not being applied due to self revive plugins. Thanks to "Shao" for reporting.
 
 1.12 (19-Feb-2023)
 	- Added cvar "l4d_heartbeat_incap" to set black and white status when someone is incapped, not after revive. Requested by "Jestery".
@@ -641,9 +644,18 @@ void Event_Revive(Event event, const char[] name, bool dontBroadcast)
 		int client = GetClientOfUserId(userid);
 		if( client )
 		{
-			g_iReviveCount[client]++;
-			ReviveLogic(client);
+			RequestFrame(OnFrameRevive, userid);
 		}
+	}
+}
+
+void OnFrameRevive(int client)
+{
+	client = GetClientOfUserId(client);
+	if( client && IsClientInGame(client) )
+	{
+		g_iReviveCount[client]++;
+		ReviveLogic(client);
 	}
 }
 
@@ -685,6 +697,7 @@ void ReviveLogic(int client)
 	}
 
 	// Heartbeat sound, stop dupe sound bug, only way.
+	RequestFrame(OnFrameSound, GetClientUserId(client));
 	ResetSound(client);
 	ResetSound(client);
 	ResetSound(client);
@@ -694,7 +707,6 @@ void ReviveLogic(int client)
 	if( g_iReviveCount[client] >= g_iCvarSound )
 	{
 		// if( g_bLeft4Dead2 && fromEvent && g_iReviveCount[client] == g_iCvarRevives ) return; // Game emits itself, would duplicate sound even with stop... Seems to work fine now with multiple resets..?
-		// RequestFrame(OnFrameSound, GetClientUserId(client));
 		CreateTimer(0.1, TimerSound, GetClientUserId(client));
 	}
 }
@@ -705,6 +717,7 @@ void ResetSoundObs(int client)
 	{
 		if( IsClientInGame(i) && !IsPlayerAlive(i) && GetEntPropEnt(i, Prop_Send, "m_hObserverTarget") == client )
 		{
+			RequestFrame(OnFrameSound, GetClientUserId(i));
 			ResetSound(i);
 			ResetSound(i);
 			ResetSound(i);
@@ -713,12 +726,21 @@ void ResetSoundObs(int client)
 	}
 }
 
+void OnFrameSound(int client)
+{
+	client = GetClientOfUserId(client);
+	if( client )
+	{
+		ResetSound(client);
+	}
+}
+
 void ResetSound(int client)
 {
+	StopSound(client, SNDCHAN_AUTO, SOUND_HEART);
 	StopSound(client, SNDCHAN_STATIC, SOUND_HEART);
 }
 
-// void OnFrameSound(int client)
 Action TimerSound(Handle timer, int client)
 {
 	client = GetClientOfUserId(client);
