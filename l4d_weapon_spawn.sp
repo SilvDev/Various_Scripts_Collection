@@ -1,6 +1,6 @@
 /*
 *	Weapon Spawn
-*	Copyright (C) 2022 Silvers
+*	Copyright (C) 2023 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.13"
+#define PLUGIN_VERSION 		"1.14"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.14 (25-May-2023)
+	- Fixed the M60, Grenade Launcher and Chainsaw not following the count cvar limit. Thanks to "gamer_kanelita" for reporting.
 
 1.13 (20-Sep-2022)
 	- Fixed incorrect model list. Thanks to "HarryPotter" for reporting.
@@ -120,7 +123,7 @@
 
 
 ConVar g_hCvarAllow, g_hCvarCount, g_hCvarGlow, g_hCvarGlowCol, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarRandom, g_hCvarRandomise;
-int g_iCvarCount, g_iCvarGlow, g_iCvarGlowCol, g_iCvarRandom, g_iCvarRandomise, g_iPlayerSpawn, g_iRoundStart, g_iSave[MAXPLAYERS+1], g_iSpawnCount, g_iSpawns[MAX_SPAWNS][2];
+int g_iCvarCount, g_iCvarGlow, g_iCvarGlowCol, g_iCvarRandom, g_iCvarRandomise, g_iPlayerSpawn, g_iRoundStart, g_iSave[MAXPLAYERS+1], g_iSpawnCount, g_iSpawns[MAX_SPAWNS][3];
 bool g_bCvarAllow, g_bMapStarted, g_bLeft4Dead2, g_bLoaded;
 Menu g_hMenuAng, g_hMenuList, g_hMenuPos;
 
@@ -560,6 +563,8 @@ void IsAllowed()
 	{
 		g_bCvarAllow = true;
 		LoadSpawns();
+		if( g_bLeft4Dead2 )
+			HookEvent("player_use",		Event_PlayerUse);
 		HookEvent("player_spawn",		Event_PlayerSpawn,	EventHookMode_PostNoCopy);
 		HookEvent("round_start",		Event_RoundStart,	EventHookMode_PostNoCopy);
 		HookEvent("round_end",			Event_RoundEnd,		EventHookMode_PostNoCopy);
@@ -569,6 +574,8 @@ void IsAllowed()
 	{
 		g_bCvarAllow = false;
 		ResetPlugin();
+		if( g_bLeft4Dead2 )
+			UnhookEvent("player_use",	Event_PlayerUse);
 		UnhookEvent("player_spawn",		Event_PlayerSpawn,	EventHookMode_PostNoCopy);
 		UnhookEvent("round_start",		Event_RoundStart,	EventHookMode_PostNoCopy);
 		UnhookEvent("round_end",		Event_RoundEnd,		EventHookMode_PostNoCopy);
@@ -650,6 +657,52 @@ void OnGamemode(const char[] output, int caller, int activator, float delay)
 // ====================================================================================================
 //					EVENTS
 // ====================================================================================================
+// Re-create M60, Grenade Launcher and Chainsaw on pickup when set to inifinite/increased spawn count
+void Event_PlayerUse(Event event, const char[] name, bool dontBroadcast)
+{
+	int entity = event.GetInt("targetid");
+	if( entity > MaxClients && IsValidEntity(entity) )
+	{
+		static char classname[32];
+		GetEntityClassname(entity, classname, sizeof(classname));
+
+		int type;
+
+		if( strncmp(classname, "weapon_rifle_m60", 16) == 0 )				type = 16;
+		else if( strncmp(classname, "weapon_grenade_launcher", 23) == 0 )	type = 18;
+		else if( strncmp(classname, "weapon_chainsaw", 15) == 0 )			type = 19;
+
+		if( type )
+		{
+			entity = EntIndexToEntRef(entity);
+
+			for( int i = 0; i < MAX_SPAWNS; i++ )
+			{
+				if( g_iSpawns[i][0] == entity )
+				{
+					g_iSpawns[i][2]--;
+
+					if( g_iSpawns[i][2] > 0 )
+					{
+						float vAng[3], vPos[3];
+						GetEntPropVector(entity, Prop_Data, "m_vecOrigin", vPos);
+						GetEntPropVector(entity, Prop_Data, "m_angRotation", vAng);
+
+						int count = g_iSpawnCount; // Lazy hack
+						g_iSpawnCount = 0;
+
+						CreateSpawn(vPos, vAng, g_iSpawns[i][1], type, false, g_iSpawns[i][2]);
+
+						g_iSpawnCount = count;
+					}
+
+					break;
+				}
+			}
+		}
+	}
+}
+
 void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
 	ResetPlugin(false);
@@ -771,7 +824,7 @@ void LoadSpawns()
 // ====================================================================================================
 //					CREATE SPAWN
 // ====================================================================================================
-void CreateSpawn(const float vOrigin[3], const float vAngles[3], int index = 0, int model = 0, int autospawn = false)
+void CreateSpawn(const float vOrigin[3], const float vAngles[3], int index = 0, int model = 0, int autospawn = false, int respawn_count = -1)
 {
 	if( g_iSpawnCount >= MAX_SPAWNS )
 		return;
@@ -779,7 +832,7 @@ void CreateSpawn(const float vOrigin[3], const float vAngles[3], int index = 0, 
 	int iSpawnIndex = -1;
 	for( int i = 0; i < MAX_SPAWNS; i++ )
 	{
-		if( g_iSpawns[i][0] == 0 )
+		if( !IsValidEntRef(g_iSpawns[i][0]) )
 		{
 			iSpawnIndex = i;
 			break;
@@ -894,6 +947,12 @@ void CreateSpawn(const float vOrigin[3], const float vAngles[3], int index = 0, 
 		SetEntProp(entity_weapon, Prop_Send, "m_iExtraPrimaryAmmo", ammo, 4);
 	}
 	SetEntityMoveType(entity_weapon, MOVETYPE_NONE);
+
+	// Save M60, Grenade Launcher and Chainsaw spawn counts
+	if( g_bLeft4Dead2 && iCount != 1 && (model == 17 || model == 18 || model == 19) )
+	{
+		g_iSpawns[iSpawnIndex][2] = respawn_count != -1 ? respawn_count : iCount;
+	}
 
 	g_iSpawns[iSpawnIndex][0] = EntIndexToEntRef(entity_weapon);
 	g_iSpawns[iSpawnIndex][1] = index;
@@ -1738,6 +1797,7 @@ void RemoveSpawn(int index)
 float GetGroundHeight(float vPos[3])
 {
 	float vAng[3];
+
 	Handle trace = TR_TraceRayFilterEx(vPos, view_as<float>({ 90.0, 0.0, 0.0 }), MASK_ALL, RayType_Infinite, _TraceFilter);
 	if( TR_DidHit(trace) )
 		TR_GetEndPosition(vAng, trace);
