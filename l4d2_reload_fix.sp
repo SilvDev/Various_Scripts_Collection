@@ -148,8 +148,9 @@ public void OnPluginStart()
 	g_iOffsetAmmo = FindSendPropInfo("CTerrorPlayer", "m_iAmmo");
 	g_iPrimaryAmmoType = FindSendPropInfo("CBaseCombatWeapon", "m_iPrimaryAmmoType");
 
-	g_hCvarGive = CreateConVar("l4d2_reload_fix_give", "0", "When using the give command and replacing the same weapon type, transfer ammo to the new weapon. 0=No. 1=Yes.", CVAR_FLAGS);
+	g_hCvarGive = CreateConVar("l4d2_reload_fix_give", "1", "When using the give command and replacing the same weapon type, transfer ammo to the new weapon. 0=No. 1=Yes.", CVAR_FLAGS);
 	CreateConVar("l4d2_reload_fix_version", PLUGIN_VERSION, "No Reload Animation Fix plugin version.", FCVAR_NOTIFY|FCVAR_DONTRECORD);
+	AutoExecConfig(true, "l4d2_reload_fix");
 
 	g_hCvarGive.AddChangeHook(ConVarChanged_Cvars);
 
