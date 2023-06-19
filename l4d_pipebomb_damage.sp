@@ -1,6 +1,6 @@
 /*
 *	PipeBomb Damage Modifier
-*	Copyright (C) 2022 Silvers
+*	Copyright (C) 2023 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.7"
+#define PLUGIN_VERSION 		"1.8"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.8 (19-Jun-2023)
+	- Compatibility update for the "Detonation Force" plugin by "OIRV" to scale the additional damage created. Thanks to "Fsky" for reporting.
 
 1.7 (23-Apr-2022)
 	- Compatibility update for the "Damaged Grenades Explode" plugin. Thanks to "Shao" for reporting.
@@ -73,9 +76,9 @@
 
 
 ConVar g_hCvarAllow, g_hDecayDecay, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarSpecial, g_hCvarSelf, g_hCvarSurvivor, g_hCvarTank;
-float g_fCvarSpecial, g_fCvarSelf, g_fCvarSurvivor, g_fCvarTank, g_fGameTime;
-bool g_bCvarAllow, g_bMapStarted, g_bLeft4Dead2;
-int g_iClassTank;
+float g_fCvarSpecial, g_fCvarSelf, g_fCvarSurvivor, g_fCvarTank, g_fDecayDecay, g_fGameTime, g_fGameTimeF;
+bool g_bCvarAllow, g_bMapStarted, g_bLeft4Dead2, g_bDetonationForcePlugin;
+int g_iClassTank, g_iClientOwner;
 
 
 
@@ -131,6 +134,7 @@ public void OnPluginStart()
 	g_hCvarSelf.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarSurvivor.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarTank.AddChangeHook(ConVarChanged_Cvars);
+	g_hDecayDecay.AddChangeHook(ConVarChanged_Cvars);
 
 	g_iClassTank = g_bLeft4Dead2 ? 8 : 5;
 }
@@ -153,14 +157,15 @@ public void OnMapEnd()
 public void OnConfigsExecuted()
 {
 	IsAllowed();
+	g_bDetonationForcePlugin = FindConVar("l4d2_detonation_force_version") != null;
 }
 
-public void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	IsAllowed();
 }
 
-public void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	GetCvars();
 }
@@ -171,6 +176,7 @@ void GetCvars()
 	g_fCvarSelf = g_hCvarSelf.FloatValue;
 	g_fCvarSurvivor = g_hCvarSurvivor.FloatValue;
 	g_fCvarTank = g_hCvarTank.FloatValue;
+	g_fDecayDecay = g_hDecayDecay.FloatValue;
 }
 
 void IsAllowed()
@@ -183,6 +189,7 @@ void IsAllowed()
 	{
 		HookEvent("break_prop", Event_BreakProp, EventHookMode_PostNoCopy);
 		HookClients(true);
+
 		g_bCvarAllow = true;
 	}
 
@@ -190,6 +197,7 @@ void IsAllowed()
 	{
 		UnhookEvent("break_prop", Event_BreakProp, EventHookMode_PostNoCopy);
 		HookClients(false);
+
 		g_bCvarAllow = false;
 	}
 }
@@ -252,7 +260,7 @@ bool IsAllowedGameMode()
 	return true;
 }
 
-public void OnGamemode(const char[] output, int caller, int activator, float delay)
+void OnGamemode(const char[] output, int caller, int activator, float delay)
 {
 	if( strcmp(output, "OnCoop") == 0 )
 		g_iCurrentMode = 1;
@@ -269,7 +277,7 @@ public void OnGamemode(const char[] output, int caller, int activator, float del
 // ====================================================================================================
 //					HOOKS
 // ====================================================================================================
-public void Event_BreakProp(Event event, const char[] name, bool dontBroadcast)
+void Event_BreakProp(Event event, const char[] name, bool dontBroadcast)
 {
 	g_fGameTime = GetGameTime();
 }
@@ -282,7 +290,7 @@ public void OnClientPutInServer(int client)
 	}
 }
 
-public void HookClients(bool hook)
+void HookClients(bool hook)
 {
 	static bool hooked;
 
@@ -312,14 +320,36 @@ public void HookClients(bool hook)
 	}
 }
 
-public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
+Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
-	if( inflictor > MaxClients && damagetype & (DMG_BLAST|DMG_BLAST_SURFACE) )
+	if( inflictor > MaxClients && damagetype & (DMG_BLAST|DMG_BLAST_SURFACE|DMG_NERVEGAS) )
 	{
+		bool checked;
 		char classname[22];
 		GetEdictClassname(inflictor, classname, sizeof(classname));
 
-		if( (g_fGameTime != GetGameTime() && strcmp(classname, "pipe_bomb_projectile") == 0) || GetEntProp(inflictor, Prop_Data, "m_iHammerID") == 19712806 ) // 19712806 used by "Damaged Grenades Explode" and "Bots Ignore PipeBombs and Shoot" to identify damage
+		if( (GetGameTime() != g_fGameTime && strcmp(classname, "pipe_bomb_projectile") == 0) || GetEntProp(inflictor, Prop_Data, "m_iHammerID") == 19712806 ) // 19712806 used by "Damaged Grenades Explode" and "Bots Ignore PipeBombs and Shoot" to identify damage
+		{
+			g_fGameTimeF = GetGameTime();
+			g_iClientOwner = attacker;
+
+			checked = true;
+		}
+		else if( g_bDetonationForcePlugin ) // This plugin adds extra damage using the "point_hurt" entity, the owner no longer exists and damage cannot be scaled correctly
+		{
+			if( damagetype & DMG_NERVEGAS && GetGameTime() - g_fGameTimeF < 0.1 && strcmp(classname, "point_hurt") == 0 ) // Detonation uses this damage type and occurs within 0.1s of the original pipebomb exploding
+			{
+				GetEntPropString(victim, Prop_Data, "m_iName", classname, sizeof(classname));
+				if( strcmp(classname, "hurtme") == 0 ) // Match the targetname giving by the other plugin
+				{
+					checked = true;
+
+					if( victim == g_iClientOwner ) attacker = g_iClientOwner;
+				}
+			}
+		}
+
+		if( checked )
 		{
 			int team = GetClientTeam(victim);
 			if( team == 3 )
@@ -345,9 +375,11 @@ public Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &dam
 					return Plugin_Handled;
 				}
 			}
+
 			return Plugin_Changed;
 		}
 	}
+
 	return Plugin_Continue;
 }
 
@@ -356,7 +388,7 @@ float GetTempHealth(int client)
 	float fGameTime = GetGameTime();
 	float fHealthTime = GetEntPropFloat(client, Prop_Send, "m_healthBufferTime");
 	float fHealth = GetEntPropFloat(client, Prop_Send, "m_healthBuffer");
-	fHealth -= (fGameTime - fHealthTime) * g_hDecayDecay.FloatValue;
+	fHealth -= (fGameTime - fHealthTime) * g_fDecayDecay;
 	return fHealth < 0.0 ? 0.0 : fHealth;
 }
 
