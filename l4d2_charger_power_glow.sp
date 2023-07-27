@@ -1,6 +1,6 @@
 /*
 *	Charger Power - Objects Glow
-*	Copyright (C) 2021 Silvers
+*	Copyright (C) 2023 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.6"
+#define PLUGIN_VERSION 		"1.7"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.7 (27-Jul-2023)
+	- Changes to fix warnings when compiling on SourceMod 1.11.
 
 1.6 (15-Aug-2021)
 	- Fixed "Cannot create new entity when no map is running" error. Thanks to "noto3" for reporting.
@@ -191,12 +194,12 @@ public void OnConfigsExecuted()
 	IsAllowed();
 }
 
-public void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	IsAllowed();
 }
 
-public void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	GetCvars();
 }
@@ -209,7 +212,7 @@ void GetCvars()
 	g_iCvarRange = g_hCvarRange.IntValue;
 }
 
-public void ConVarChanged_Glow(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Glow(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	g_iCvarColor = GetColor(g_hCvarColor);
 
@@ -314,7 +317,7 @@ bool IsAllowedGameMode()
 	return true;
 }
 
-public void OnGamemode(const char[] output, int caller, int activator, float delay)
+void OnGamemode(const char[] output, int caller, int activator, float delay)
 {
 	if( strcmp(output, "OnCoop") == 0 )
 		g_iCurrentMode = 1;
@@ -331,7 +334,7 @@ public void OnGamemode(const char[] output, int caller, int activator, float del
 // ====================================================================================================
 //					EVENTS
 // ====================================================================================================
-public void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
+void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
 	if( client > 0 )
@@ -365,7 +368,7 @@ void CheckClient(int client)
 	}
 }
 
-public Action TimerHook(Handle timer)
+Action TimerHook(Handle timer)
 {
 	int entity;
 	for( int i = 0; i < MAX_ALLOWED; i++ )
@@ -377,9 +380,11 @@ public Action TimerHook(Handle timer)
 			SDKHook(entity, SDKHook_SetTransmit, OnTransmit);
 		}
 	}
+
+	return Plugin_Continue;
 }
 
-public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
+void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
 	if( client > 0 )
@@ -407,23 +412,23 @@ public void OnMapEnd()
 	ResetPlugin(true);
 }
 
-public void Event_RoundEnd(Handle event, const char[] name, bool dontBroadcast)
+void Event_RoundEnd(Handle event, const char[] name, bool dontBroadcast)
 {
 	ResetPlugin(true);
 }
 
-public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
+void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
 	if( g_hTimerStart == null )
 		g_hTimerStart = CreateTimer(4.0, TimerStart, _, TIMER_FLAG_NO_MAPCHANGE);
 }
 
-public Action TimerStart(Handle timer)
+Action TimerStart(Handle timer)
 {
 	g_hTimerStart = null;
 
 	if( g_bLoaded == true )
-		return;
+		return Plugin_Continue;
 
 	g_bLoaded = true;
 	g_iCount = 0;
@@ -535,15 +540,17 @@ public Action TimerStart(Handle timer)
 
 		SDKHook(entity, SDKHook_SetTransmit, OnTransmit);
 	}
+
+	return Plugin_Continue;
 }
 
-public void OnAwakened(const char[] output, int caller, int activator, float delay)
+void OnAwakened(const char[] output, int caller, int activator, float delay)
 {
 	SetEntPropEnt(caller, Prop_Data, "m_hPhysicsAttacker", activator);
 	SetEntPropFloat(caller, Prop_Data, "m_flLastPhysicsInfluenceTime", GetGameTime());
 }
 
-public void OnHealthChanged(const char[] output, int caller, int activator, float delay)
+void OnHealthChanged(const char[] output, int caller, int activator, float delay)
 {
 	if( GetEntProp(caller, Prop_Data, "m_iHealth") >= g_iCvarLimit )
 	{
@@ -567,7 +574,7 @@ public void OnHealthChanged(const char[] output, int caller, int activator, floa
 	}
 }
 
-public Action OnTransmit(int entity, int client)
+Action OnTransmit(int entity, int client)
 {
 	if( g_bShowProp[client] )
 		return Plugin_Continue;
