@@ -1,6 +1,6 @@
 /*
 *	Melee Weapon Spawner
-*	Copyright (C) 2022 Silvers
+*	Copyright (C) 2023 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.7"
+#define PLUGIN_VERSION 		"1.8"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.8 (19-Sep-2023)
+	- Fixed not precaching the Knife model.
 
 1.7 (11-Dec-2022)
 	- Various changes to tidy up code.
@@ -213,6 +216,7 @@ public void OnMapStart()
 	PrecacheModel("models/weapons/melee/v_frying_pan.mdl", true);
 	PrecacheModel("models/weapons/melee/v_golfclub.mdl", true);
 	PrecacheModel("models/weapons/melee/v_katana.mdl", true);
+	PrecacheModel("models/weapons/melee/v_knife_t.mdl", true);
 	PrecacheModel("models/weapons/melee/v_machete.mdl", true);
 	PrecacheModel("models/weapons/melee/v_tonfa.mdl", true);
 	PrecacheModel("models/weapons/melee/v_pitchfork.mdl", true);
@@ -226,6 +230,7 @@ public void OnMapStart()
 	PrecacheModel("models/weapons/melee/w_frying_pan.mdl", true);
 	PrecacheModel("models/weapons/melee/w_golfclub.mdl", true);
 	PrecacheModel("models/weapons/melee/w_katana.mdl", true);
+	PrecacheModel("models/weapons/melee/w_knife_t.mdl", true);
 	PrecacheModel("models/weapons/melee/w_machete.mdl", true);
 	PrecacheModel("models/weapons/melee/w_tonfa.mdl", true);
 	PrecacheModel("models/weapons/melee/w_pitchfork.mdl", true);
@@ -239,6 +244,7 @@ public void OnMapStart()
 	PrecacheGeneric("scripts/melee/frying_pan.txt", true);
 	PrecacheGeneric("scripts/melee/golfclub.txt", true);
 	PrecacheGeneric("scripts/melee/katana.txt", true);
+	PrecacheGeneric("scripts/melee/knife.txt", true);
 	PrecacheGeneric("scripts/melee/machete.txt", true);
 	PrecacheGeneric("scripts/melee/tonfa.txt", true);
 	PrecacheGeneric("scripts/melee/pitchfork.txt", true);
