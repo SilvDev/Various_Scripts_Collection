@@ -1,6 +1,6 @@
 /*
 *	DSP Effects
-*	Copyright (C) 2022 Silvers
+*	Copyright (C) 2023 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.6"
+#define PLUGIN_VERSION 		"1.7"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,12 @@
 
 ========================================================================================
 	Change Log:
+
+1.7 (22-Sep-2023)
+	- No longer resets the DSP level when going AFK.
+	- No longer resets the DSP level when using Adrenaline.
+	- Changed the thirdstrike check.
+	- Thanks to "Automage" for reporting and testing.
 
 1.6 (01-Nov-2022)
 	- Fixed the effect playing after being revived and not black and white, due to conflict with other plugins.
@@ -65,10 +71,13 @@
 #define CVAR_FLAGS			FCVAR_NOTIFY
 
 
-ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarIncap, g_hCvarSpecial, g_hCvarStrike;
+ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarAdren, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarIncap, g_hCvarSpecial, g_hCvarStrike;
 int g_iCvarIncap, g_iCvarSpecial, g_iCvarStrike;
 bool g_bCvarAllow, g_bLeft4Dead2;
+float g_fCvarAdren;
 bool g_bSetDSP[MAXPLAYERS+1];
+int g_iLevelDSP[MAXPLAYERS+1];
+Handle g_gTimerAdren[MAXPLAYERS+1];
 
 
 
@@ -108,6 +117,12 @@ public void OnPluginStart()
 	g_hCvarStrike =		CreateConVar(	"l4d_dsp_effects_strike",		"1",			"0=Off. 1=Apply muffle effect when black and white.", CVAR_FLAGS );
 	CreateConVar(						"l4d_dsp_effects_version",		PLUGIN_VERSION, "DSP Effects plugin version.", FCVAR_NOTIFY|FCVAR_DONTRECORD);
 	AutoExecConfig(true,				"l4d_dsp_effects");
+
+	if( g_bLeft4Dead2 )
+	{
+		g_hCvarAdren = FindConVar("adrenaline_duration");
+		g_hCvarAdren.AddChangeHook(ConVarChanged_Cvars);
+	}
 
 	g_hCvarMPGameMode = FindConVar("mp_gamemode");
 	g_hCvarMPGameMode.AddChangeHook(ConVarChanged_Allow);
@@ -150,8 +165,9 @@ void ResetPlugin()
 		if( g_bSetDSP[i] && IsClientInGame(i) )
 		{
 			SetEffects(i, 1);
-			g_bSetDSP[i] = false;
 		}
+
+		g_bSetDSP[i] = false;
 	}
 }
 
@@ -160,6 +176,8 @@ public void OnMapEnd()
 	for( int i = 1; i <= MaxClients; i++ )
 	{
 		g_bSetDSP[i] = false;
+		g_iLevelDSP[i] = 0;
+		delete g_gTimerAdren[i];
 	}
 }
 
@@ -188,6 +206,11 @@ void GetCvars()
 	g_iCvarIncap = g_hCvarIncap.IntValue;
 	g_iCvarSpecial = g_hCvarSpecial.IntValue;
 	g_iCvarStrike = g_hCvarStrike.IntValue;
+
+	if( g_bLeft4Dead2 )
+	{
+		g_fCvarAdren = g_hCvarAdren.FloatValue + 0.5;
+	}
 }
 
 void IsAllowed()
@@ -200,15 +223,15 @@ void IsAllowed()
 	{
 		g_bCvarAllow = true;
 		HookEvent("round_end",						Event_RoundEnd);
+		HookEvent("player_bot_replace",				Event_Swap_Bot);
+		HookEvent("bot_player_replace",				Event_Swap_User);
 		HookEvent("player_spawn",					Event_PlayerSpawn);
 		HookEvent("player_death",					Event_PlayerDeath);
 		HookEvent("player_incapacitated",			Event_Incapped);
 		HookEvent("revive_success",					Event_Revived);
 		HookEvent("heal_success",					Event_Healed);
-
 		HookEvent("lunge_pounce",					Event_Start);
 		HookEvent("pounce_end",						Event_Stop);
-
 		HookEvent("tongue_grab",					Event_Start);
 		HookEvent("tongue_release",					Event_Stop);
 
@@ -218,9 +241,9 @@ void IsAllowed()
 			HookEvent("charger_carry_end",			Event_Stop);
 			HookEvent("charger_pummel_start",		Event_Start);
 			HookEvent("charger_pummel_end",			Event_Stop);
-
 			HookEvent("jockey_ride",				Event_Start);
 			HookEvent("jockey_ride_end",			Event_Stop);
+			HookEvent("adrenaline_used",			Event_Adren);
 		}
 	}
 
@@ -229,15 +252,15 @@ void IsAllowed()
 		ResetPlugin();
 		g_bCvarAllow = false;
 		UnhookEvent("round_end",					Event_RoundEnd);
+		UnhookEvent("player_bot_replace",			Event_Swap_Bot);
+		UnhookEvent("bot_player_replace",			Event_Swap_User);
 		UnhookEvent("player_spawn",					Event_PlayerSpawn);
 		UnhookEvent("player_death",					Event_PlayerDeath);
 		UnhookEvent("player_incapacitated",			Event_Incapped);
 		UnhookEvent("revive_success",				Event_Revived);
 		UnhookEvent("heal_success",					Event_Healed);
-
 		UnhookEvent("lunge_pounce",					Event_Start);
 		UnhookEvent("pounce_end",					Event_Stop);
-
 		UnhookEvent("tongue_grab",					Event_Start);
 		UnhookEvent("tongue_release",				Event_Stop);
 
@@ -247,9 +270,9 @@ void IsAllowed()
 			UnhookEvent("charger_carry_end",		Event_Stop);
 			UnhookEvent("charger_pummel_start",		Event_Start);
 			UnhookEvent("charger_pummel_end",		Event_Stop);
-
 			UnhookEvent("jockey_ride",				Event_Start);
 			UnhookEvent("jockey_ride_end",			Event_Stop);
+			UnhookEvent("adrenaline_used",			Event_Adren);
 		}
 	}
 }
@@ -305,6 +328,29 @@ void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 	OnMapEnd();
 }
 
+void Event_Swap_Bot(Event event, const char[] name, bool dontBroadcast)
+{
+	int client = GetClientOfUserId(event.GetInt("player"));
+	int bot = GetClientOfUserId(event.GetInt("bot"));
+
+	g_bSetDSP[bot] = g_bSetDSP[client];
+	g_iLevelDSP[bot] = g_iLevelDSP[client];
+}
+
+void Event_Swap_User(Event event, const char[] name, bool dontBroadcast)
+{
+	int client = GetClientOfUserId(event.GetInt("player"));
+	int bot = GetClientOfUserId(event.GetInt("bot"));
+
+	g_bSetDSP[client] = g_bSetDSP[bot];
+	g_iLevelDSP[client] = g_iLevelDSP[bot];
+
+	if( g_bSetDSP[client] )
+	{
+		SetEffects(client, g_iLevelDSP[client]);
+	}
+}
+
 void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
@@ -358,6 +404,29 @@ void Event_Start(Event event, const char[] name, bool dontBroadcast)
 	}
 }
 
+void Event_Adren(Event event, const char[] name, bool dontBroadcast)
+{
+	int userid = event.GetInt("userid");
+	int client = GetClientOfUserId(userid);
+
+	delete g_gTimerAdren[client];
+	g_gTimerAdren[client] = CreateTimer(g_fCvarAdren, TimerAdren, userid);
+}
+
+Action TimerAdren(Handle timer, int client)
+{
+	client = GetClientOfUserId(client);
+	if( client && IsClientInGame(client) )
+	{
+		if( g_bSetDSP[client] )
+		{
+			SetEffects(client, g_iLevelDSP[client]);
+		}
+	}
+
+	return Plugin_Continue;
+}
+
 void Event_Incapped(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
@@ -384,7 +453,7 @@ void OnFrameRevive(int client)
 	client = GetClientOfUserId(client);
 	if( client && IsClientInGame(client) )
 	{
-		if( g_iCvarStrike && GetEntProp(client, Prop_Send, "m_isGoingToDie") && GetEntProp(client, Prop_Send, "m_isHangingFromLedge", 1) == 0 )
+		if( g_iCvarStrike && GetEntProp(client, Prop_Send, g_bLeft4Dead2 ? "m_bIsOnThirdStrike" : "m_isGoingToDie") && GetEntProp(client, Prop_Send, "m_isHangingFromLedge", 1) == 0 )
 		{
 			g_bSetDSP[client] = true;
 			SetEffects(client, 2); // Some muffle
@@ -418,5 +487,6 @@ void Event_Healed(Event event, const char[] name, bool dontBroadcast)
 
 void SetEffects(int client, int effect)
 {
+	g_iLevelDSP[client] = effect;
 	Terror_SetPendingDspEffect(client, 0.0, effect);
 }
