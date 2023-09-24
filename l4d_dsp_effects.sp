@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.7"
+#define PLUGIN_VERSION 		"1.8"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.8 (24-Sep-2023)
+	- Fixed invalid handle errors. Thanks to "Automage" for reporting.
 
 1.7 (22-Sep-2023)
 	- No longer resets the DSP level when going AFK.
@@ -323,6 +326,11 @@ bool IsAllowedGameMode()
 // ====================================================================================================
 //					EVENTS
 // ====================================================================================================
+public void OnClientDisconnect(int client)
+{
+	delete g_gTimerAdren[client];
+}
+
 void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
 	OnMapEnd();
@@ -422,6 +430,8 @@ Action TimerAdren(Handle timer, int client)
 		{
 			SetEffects(client, g_iLevelDSP[client]);
 		}
+
+		g_gTimerAdren[client] = null;
 	}
 
 	return Plugin_Continue;
