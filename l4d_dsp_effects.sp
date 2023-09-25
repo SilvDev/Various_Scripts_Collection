@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.8"
+#define PLUGIN_VERSION 		"1.9"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,11 @@
 
 ========================================================================================
 	Change Log:
+
+1.9 (25-Sep-2023)
+	- Fixed resetting the sound when incapacitated and special infected stop pinning.
+	- Fixed not setting the sound if black and white after defib.
+	- Thanks to "Automage" for reporting and helping.
 
 1.8 (24-Sep-2023)
 	- Fixed invalid handle errors. Thanks to "Automage" for reporting.
@@ -230,6 +235,7 @@ void IsAllowed()
 		HookEvent("bot_player_replace",				Event_Swap_User);
 		HookEvent("player_spawn",					Event_PlayerSpawn);
 		HookEvent("player_death",					Event_PlayerDeath);
+		HookEvent("defibrillator_used",             Event_PlayerDefib);
 		HookEvent("player_incapacitated",			Event_Incapped);
 		HookEvent("revive_success",					Event_Revived);
 		HookEvent("heal_success",					Event_Healed);
@@ -259,6 +265,7 @@ void IsAllowed()
 		UnhookEvent("bot_player_replace",			Event_Swap_User);
 		UnhookEvent("player_spawn",					Event_PlayerSpawn);
 		UnhookEvent("player_death",					Event_PlayerDeath);
+		UnhookEvent("defibrillator_used",           Event_PlayerDefib);
 		UnhookEvent("player_incapacitated",			Event_Incapped);
 		UnhookEvent("revive_success",				Event_Revived);
 		UnhookEvent("heal_success",					Event_Healed);
@@ -379,6 +386,16 @@ void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 	}
 }
 
+Action Event_PlayerDefib(Event event, const char[] name, bool dontBroadcast)
+{
+	if( g_iCvarStrike )
+	{
+		RequestFrame(OnFrameRevive, event.GetInt("subject"));
+	}
+
+	return Plugin_Continue;
+}
+
 void Event_Stop(Event event, const char[] name, bool dontBroadcast)
 {
 	if( g_iCvarSpecial )
@@ -386,7 +403,7 @@ void Event_Stop(Event event, const char[] name, bool dontBroadcast)
 		int client = GetClientOfUserId(event.GetInt("victim"));
 		if( client )
 		{
-			if( g_bSetDSP[client] )
+			if( g_bSetDSP[client] && (!g_iCvarIncap || GetEntProp(client, Prop_Send, "m_isIncapacitated", 1) == 0) )
 			{
 				g_bSetDSP[client] = false;
 				SetEffects(client, 1);
