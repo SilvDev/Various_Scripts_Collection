@@ -1,6 +1,6 @@
 /*
 *	Health Vending Machines
-*	Copyright (C) 2022 Silvers
+*	Copyright (C) 2023 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.11"
+#define PLUGIN_VERSION 		"1.12"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.12 (25-Oct-2023)
+	- Changed the plugin to allow healing over 100 max health. Now uses the players "m_iMaxHealth" value for limit. Requested by "efa561".
 
 1.11 (11-Dec-2022)
 	- Changes to fix compile warnings on SourceMod 1.11.
@@ -708,7 +711,8 @@ void OnTimeUp(const char[] output, int caller, int client, float delay)
 	caller = EntIndexToEntRef(caller);
 
 	int iHealth = GetClientHealth(client);
-	if( iHealth >= 100 )
+	int iMaxHealth = GetEntProp(client, Prop_Send, "m_iMaxHealth");
+	if( iHealth >= iMaxHealth )
 		return;
 
 	for( int i = 0; i < MAX_VENDORS; i++ )
@@ -773,8 +777,8 @@ void OnTimeUp(const char[] output, int caller, int client, float delay)
 				if( fHealth < 0.0 )
 					fHealth = 0.0;
 
-				if( fHealth + iHealth + iBuff > 100 )
-					SetEntPropFloat(client, Prop_Send, "m_healthBuffer", 100.1 - float(iHealth));
+				if( fHealth + iHealth + iBuff > iMaxHealth )
+					SetEntPropFloat(client, Prop_Send, "m_healthBuffer", float(iMaxHealth - iHealth) + 0.1);
 				else
 					SetEntPropFloat(client, Prop_Send, "m_healthBuffer", fHealth + iBuff);
 				SetEntPropFloat(client, Prop_Send, "m_healthBufferTime", fGameTime);
@@ -782,15 +786,15 @@ void OnTimeUp(const char[] output, int caller, int client, float delay)
 			else
 			{
 				iHealth += iBuff;
-				if( iHealth >= 100 )
+				if( iHealth >= iMaxHealth )
 				{
-					iHealth = 100;
+					iHealth = iMaxHealth;
 					SetEntPropFloat(client, Prop_Send, "m_healthBuffer", 0.0);
 					SetEntPropFloat(client, Prop_Send, "m_healthBufferTime", fGameTime);
 				}
-				else if( iHealth + fHealth >= 100 )
+				else if( iHealth + fHealth >= iMaxHealth )
 				{
-					SetEntPropFloat(client, Prop_Send, "m_healthBuffer", 100.1 - iHealth);
+					SetEntPropFloat(client, Prop_Send, "m_healthBuffer", float(iMaxHealth - iHealth) + 0.1);
 					SetEntPropFloat(client, Prop_Send, "m_healthBufferTime", fGameTime);
 				}
 
