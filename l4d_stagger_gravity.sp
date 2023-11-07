@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.0"
+#define PLUGIN_VERSION 		"1.1"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.1 (07-Nov-2023)
+	- Changed method of getting stagger duration. Reading memory was from the old test version, better to use GetEntDataFloat.
 
 1.0 (25-Oct-2023)
 	- Initial release.
@@ -101,7 +104,7 @@ public void OnPluginStart()
 	g_hCvarCmd =		CreateConVar(	"l4d_stagger_gravity_cmd",			"1",			"When using the command should players: 1=Stagger backwards. 2=Stagger forwards. 3=Stagger in random direction.", CVAR_FLAGS );
 	g_hCvarStop =		CreateConVar(	"l4d_stagger_gravity_stop",			"0",			"Stop staggering after falling off a ledge for these types: 1=Survivors, 2=Smoker, 4=Boomer, 8=Hunter, 16=Spitter, 32=Jockey, 64=Charger, 128=Tank, 255=All.", CVAR_FLAGS );
 	g_hCvarType =		CreateConVar(	"l4d_stagger_gravity_type",			"255",			"Enable gravity when staggering for these types: 1=Survivors, 2=Smoker, 4=Boomer, 8=Hunter, 16=Spitter, 32=Jockey, 64=Charger, 128=Tank, 255=All.", CVAR_FLAGS );
-	CreateConVar(						"l4d_stagger_gravity_version",		PLUGIN_VERSION,	"Stagger - Air and Gravity Allowed plugin version.", FCVAR_NOTIFY|FCVAR_DONTRECORD);
+	CreateConVar(						"l4d_stagger_gravity_version",		PLUGIN_VERSION,	"Stagger Animation - Gravity Allowed plugin version.", FCVAR_NOTIFY|FCVAR_DONTRECORD);
 	AutoExecConfig(true,				"l4d_stagger_gravity");
 
 	g_hCvarMPGameMode = FindConVar("mp_gamemode");
@@ -453,7 +456,7 @@ public Action L4D_OnMotionControlledXY(int client, int activity)
 			g_fDist[client] = GetEntPropFloat(client, Prop_Send, "m_staggerDist");
 			g_fDist[client] -= dist;
 
-			g_fTtime[client] = LoadFromAddress(GetEntityAddress(client) + view_as<Address>(g_iOffsetStagger + 8), NumberType_Int32);
+			g_fTtime[client] = GetEntDataFloat(client, g_iOffsetStagger + 8);
 
 			L4D_CancelStagger(client);
 			g_bStagger[client] = false;
@@ -555,7 +558,7 @@ public Action L4D_OnCancelStagger(int client)
 {
 	if( !g_bCvarAllow ) return Plugin_Continue;
 
-	float starttime = LoadFromAddress(GetEntityAddress(client) + view_as<Address>(g_iOffsetStagger + 8), NumberType_Int32);
+	float starttime = GetEntDataFloat(client, g_iOffsetStagger + 8);
 
 	// Maybe fallen off a ledge that wants to cancel the stagger, block the cancel
 	if( g_bFrameStagger[client] )
