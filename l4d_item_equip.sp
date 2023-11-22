@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION		"1.2"
+#define PLUGIN_VERSION		"1.3"
 
 /*=======================================================================================
 	Plugin Info:
@@ -32,8 +32,11 @@
 ========================================================================================
 	Change Log:
 
-1.2 (22-Nov-2023)
+1.3 (22-Nov-2023)
 	- Re-released due to the version by "MasterMind420" being deleted.
+
+1.2 (01-Apr-2020)
+    - Fixed "IsAllowedGameMode" from throwing errors when the "_tog" cvar was changed before MapStart.
 
 1.1 (12-Oct-2019)
 	- Added "allow" and "mode" cvars to control if the the plugin is enabled.
@@ -53,7 +56,7 @@
 #define CVAR_FLAGS			FCVAR_NOTIFY
 
 ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog;
-bool g_bCvarAllow, g_bLeft4Dead2;
+bool g_bCvarAllow, g_bLeft4Dead2, g_bMapStarted;
 
 public Plugin myinfo =
 {
@@ -112,6 +115,16 @@ void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newV
 	IsAllowed();
 }
 
+public void OnMapEnd()
+{
+	g_bMapStarted = false;
+}
+
+public void OnMapStart()
+{
+	g_bMapStarted = true;
+}
+
 void IsAllowed()
 {
 	bool bCvarAllow = g_hCvarAllow.BoolValue;
@@ -139,6 +152,9 @@ bool IsAllowedGameMode()
 	int iCvarModesTog = g_hCvarModesTog.IntValue;
 	if( iCvarModesTog != 0 )
 	{
+		if( g_bMapStarted == false )
+			return false;
+
 		g_iCurrentMode = 0;
 
 		int entity = CreateEntityByName("info_gamemode");
