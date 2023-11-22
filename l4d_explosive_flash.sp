@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.0"
+#define PLUGIN_VERSION 		"1.1"
 
 /*======================================================================================
 	Plugin Info:
@@ -32,6 +32,10 @@
 ========================================================================================
 	Change Log:
 
+1.1 (22-Nov-2023)
+	- Fixed property not found errors. Thanks to "Iizuka07" for reporting.
+	- Removed some unused code.
+
 1.0 (07-Nov-2023)
 	- Initial release.
 
@@ -41,9 +45,9 @@
 #pragma newdecls required
 
 #include <sourcemod>
-#include <left4dhooks>
 #include <sdktools>
 #include <sdkhooks>
+#include <left4dhooks>
 
 #define CVAR_FLAGS			FCVAR_NOTIFY
 #define MAX_LIGHTS			32
@@ -72,7 +76,6 @@ bool g_bCvarAllow, g_bMapStarted, g_bLeft4Dead2;
 int g_iCvarTypes, g_iBarrel, g_iOxygen, g_iPropane, g_iTick[MAX_LIGHTS], g_iEntities[MAX_LIGHTS][2];
 float g_fCvarSpeed, g_fCvarDist[MAX_TYPES + 1];
 char g_sCvarCols[MAX_TYPES + 1][12];
-Handle g_hTimer[MAX_LIGHTS];
 
 
 
@@ -166,8 +169,6 @@ void ResetPlugin()
 {
 	for( int i = 0; i < MAX_LIGHTS; i++ )
 	{
-		delete g_hTimer[i];
-
 		if( IsValidEntRef(g_iEntities[i][INDEX_ENTITY]) == true )
 		{
 			RemoveEntity(g_iEntities[i][INDEX_ENTITY]);
@@ -322,6 +323,8 @@ public void L4D_CBreakableProp_Break(int prop, int entity)
 {
 	g_fBreakable = GetGameTime();
 
+	if( !HasEntProp(entity, Prop_Send, "m_nModelIndex") ) return;
+
 	int type = GetEntProp(entity, Prop_Send, "m_nModelIndex");
 
 	if( type == g_iBarrel )			CreateFlash(prop, TYPE_BARREL);
@@ -392,8 +395,6 @@ void OnFrameFadeOut(int index)
 	if( !IsValidEntRef(g_iEntities[index][INDEX_ENTITY]) )
 	{
 		g_iEntities[index][INDEX_ENTITY] = 0;
-		delete g_hTimer[index];
-
 		return;
 	}
 
@@ -419,7 +420,6 @@ void OnFrameFadeOut(int index)
 
 		g_iTick[index] = 0;
 		g_iEntities[index][INDEX_ENTITY] = 0;
-		delete g_hTimer[index];
 	}
 }
 
