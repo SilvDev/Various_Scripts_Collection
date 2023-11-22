@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.48"
+#define PLUGIN_VERSION 		"1.49"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,10 @@
 
 ========================================================================================
 	Change Log:
+
+1.49 (22-Nov-2023)
+	- Added command "sm_delents" to delete entities of a certain classnames. Allows using * wildcard to match various entities for example "weapon_*" can be used.
+	- Changed command "sm_near" to also show the targetname.
 
 1.48 (19-Feb-2023)
 	- Added command "sm_hexcols" to print a list of hex colors to chat. Requested by "Marttt".
@@ -424,6 +428,7 @@ public void OnPluginStart()
 
 	RegAdminCmd("sm_del",			CmdDel,			ADMFLAG_ROOT, "Deletes the entity your crosshair is over.");
 	RegAdminCmd("sm_dele",			CmdDelE,		ADMFLAG_ROOT, "<entity>. Deletes the entity you specify.");
+	RegAdminCmd("sm_delents",		CmdDelEnts,		ADMFLAG_ROOT, "[classname] Delete all the entities of a specific classname.");
 	RegAdminCmd("sm_ent",			CmdEnt,			ADMFLAG_ROOT, "Displays info about the entity your crosshair is over.");
 	RegAdminCmd("sm_ente",			CmdEntE,		ADMFLAG_ROOT, "<entity>. Displays info about the entity you specify.");
 	RegAdminCmd("sm_vertex",		CmdVertex,		ADMFLAG_ROOT, "[entity]. Displays vMaxs and vMins bounding box about the specified entity or aimed at entity.");
@@ -1530,6 +1535,7 @@ Action CmdNear(int client, int args)
 	}
 
 	char sTemp[64];
+	char sName[64];
 	float range = 150.0;
 
 	if( args == 1 )
@@ -1550,7 +1556,8 @@ Action CmdNear(int client, int args)
 			if( GetVectorDistance(vPos, vEnt) <= range )
 			{
 				GetEdictClassname(i, sTemp, sizeof(sTemp));
-				ReplyToCommand(client, "%d. %f - %s", i, GetVectorDistance(vPos, vEnt), sTemp);
+				GetEntPropString(i, Prop_Data, "m_iName", sName, sizeof(sName));
+				ReplyToCommand(client, "%d. %f - %s (%s)", i, GetVectorDistance(vPos, vEnt), sTemp, sName);
 			}
 		}
 	}
@@ -1862,11 +1869,11 @@ Action CmdDel(int client, int args)
 
 Action CmdDelE(int client, int args)
 {
-	char sTemp[32];
-	int entity;
-
 	if( args == 1 )
 	{
+		char sTemp[32];
+		int entity;
+
 		GetCmdArg(1, sTemp, sizeof(sTemp));
 		entity = StringToInt(sTemp);
 
@@ -1877,6 +1884,27 @@ Action CmdDelE(int client, int args)
 		}
 
 		RemoveEntity(entity);
+	}
+
+	return Plugin_Handled;
+}
+
+Action CmdDelEnts(int client, int args)
+{
+	char sTemp[32];
+
+	if( args == 1 )
+	{
+		GetCmdArg(1, sTemp, sizeof(sTemp));
+		int entity = -1;
+		while( (entity = FindEntityByClassname(entity, sTemp)) != INVALID_ENT_REFERENCE )
+		{
+			RemoveEntity(entity);
+		}
+	}
+	else
+	{
+		ReplyToCommand(client, "[SM] Usage: sm_delents <classname>");
 	}
 
 	return Plugin_Handled;
@@ -2092,7 +2120,7 @@ Action CmdBox(int client, int args)
 	TE_SendBeam(vPos4, vPos2);
 #endif
 
-	ReplyToCommand(client, "[Box] Displaying beams for 5 seconds on %d", entity);
+	ReplyToCommand(client, "[Box] Displaying beams for 10 seconds on %d", entity);
 	return Plugin_Handled;
 }
 
@@ -2149,7 +2177,7 @@ Action CmdFind(int client, int args)
 
 	char class[64], sName[64], sTemp[16];
 	float vPos[3], vMe[3], maxdist, dist;
-	int offset, count, entity = -1;
+	int offset, count, parent, entity = -1;
 	GetCmdArg(1, class, sizeof(class));
 
 	if( args > 1 && client )
@@ -2173,13 +2201,17 @@ Action CmdFind(int client, int args)
 		{
 			GetEntPropVector(entity, Prop_Data, "m_vecOrigin", vPos);
 
-			if( HasEntProp(entity, Prop_Send, "moveparent") && GetEntPropEnt(entity, Prop_Send, "moveparent") > 0 )
+			if( HasEntProp(entity, Prop_Send, "moveparent") )
 			{
-				float vAdd[3];
-				GetEntPropVector(GetEntPropEnt(entity, Prop_Send, "moveparent"), Prop_Send, "m_vecOrigin", vAdd);
-				vPos[0] += vAdd[0];
-				vPos[1] += vAdd[1];
-				vPos[2] += vAdd[2];
+				parent = GetEntPropEnt(entity, Prop_Send, "moveparent");
+				if( parent > 0 && IsValidEntity(parent) && HasEntProp(parent, Prop_Data, "m_vecOrigin") )
+				{
+					float vAdd[3];
+					GetEntPropVector(parent, Prop_Data, "m_vecOrigin", vAdd);
+					vPos[0] += vAdd[0];
+					vPos[1] += vAdd[1];
+					vPos[2] += vAdd[2];
+				}
 			}
 
 			dist = GetVectorDistance(vPos, vMe);
