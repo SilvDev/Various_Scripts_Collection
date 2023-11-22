@@ -1,6 +1,6 @@
 /*
 *	Anomaly
-*	Copyright (C) 2022 Silvers
+*	Copyright (C) 2023 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.10"
+#define PLUGIN_VERSION 		"1.11"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,10 @@
 
 ========================================================================================
 	Change Log:
+
+1.11 (22-Nov-2023)
+	- Added command "sm_anomoff" to remove all anomalies. Requested by "kochiurun119".
+	- Changed command "sm_anom" to allow specifying a time until spawn, this overrides the minimum spawn flow distance. Requested by "kochiurun119".
 
 1.10 (20-Sep-2022)
 	- Added cvars "l4d_anomaly_type_infected", "l4d_anomaly_type_special", "l4d_anomaly_type_survivor" and "l4d_anomaly_type_witch" to control the damage type.
@@ -218,7 +222,8 @@ public void OnPluginStart()
 	// COMMANDS
 	// ====================================================================================================
 	RegAdminCmd("sm_anomaly",	CmdAnomaly,	ADMFLAG_ROOT, "Create an Anomaly where your crosshair is pointing.");
-	RegAdminCmd("sm_anom",		CmdAnom,	ADMFLAG_ROOT, "Create an Anomaly near you using the random spawn placement system.");
+	RegAdminCmd("sm_anom",		CmdAnom,	ADMFLAG_ROOT, "Create an Anomaly near you using the random spawn placement system. [Optional arg: number of seconds until spawn].");
+	RegAdminCmd("sm_anomoff",	CmdRemove,	ADMFLAG_ROOT, "Removes any active anomaly.");
 }
 
 public void OnPluginEnd()
@@ -257,6 +262,12 @@ public void OnMapStart()
 // ====================================================================================================
 //					COMMANDS
 // ====================================================================================================
+Action CmdRemove(int client, int args)
+{
+	DeleteAnomaly(g_iAnomaly);
+	return Plugin_Handled;
+}
+
 Action CmdAnom(int client, int args)
 {
 	if( !g_bCvarAllow )
@@ -265,10 +276,27 @@ Action CmdAnom(int client, int args)
 		return Plugin_Handled;
 	}
 
-	float vPos[3];
-	L4D_GetRandomPZSpawnPosition(client, g_bLeft4Dead2 ? 5 : 0, 10, vPos);
+	if( args != 0 )
+	{
+		char sTemp[6];
+		GetCmdArg(1, sTemp, sizeof(sTemp));
+		float time = StringToFloat(sTemp);
+		if( time > 0.0 )
+		{
+			delete g_hTimer;
+			g_fFlowMin = 0.0;
 
-	CreateAnomaly(vPos);
+			g_hTimer = CreateTimer(time, TimerSpawn);
+		}
+	}
+	else
+	{
+		float vPos[3];
+		L4D_GetRandomPZSpawnPosition(client, g_bLeft4Dead2 ? 5 : 0, 10, vPos);
+
+		CreateAnomaly(vPos);
+	}
+
 	return Plugin_Handled;
 }
 
@@ -606,7 +634,7 @@ void CreateAnomaly(float vPos[3])
 // ====================================================================================================
 //					ANOMALY THINK
 // ====================================================================================================
-Action TimerThink(Handle timer, any entity)
+Action TimerThink(Handle timer, int entity)
 {
 	float fTickTime = GetGameTime();
 
@@ -1089,7 +1117,7 @@ bool SetTeleportEndPoint(int entity, float vPos[3], float vAng[3])
 	return false;
 }
 
-bool TraceFilter(int entity, int contentsMask, any ignore)
+bool TraceFilter(int entity, int contentsMask, int ignore)
 {
 	if( !entity || entity == ignore || !IsValidEntity(entity) ) // Don't hit WORLD, SELF, or INVALID entities
 		return false;
