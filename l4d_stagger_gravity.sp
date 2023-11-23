@@ -33,7 +33,7 @@
 	Change Log:
 
 1.2 (23-Nov-2023)
-	- Fixed the plugin sometimes causing crashing the server on map change. Thanks to "chungocanh12" for reporting.
+	- Fixed the plugin sometimes crashing the server on map change. Thanks to "chungocanh12" for reporting.
 
 1.1 (07-Nov-2023)
 	- Changed method of getting stagger duration. Reading memory was from the old test version, better to use GetEntDataFloat.
