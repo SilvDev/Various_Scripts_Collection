@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.1"
+#define PLUGIN_VERSION 		"1.2"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.2 (23-Nov-2023)
+	- Fixed the plugin sometimes causing crashing the server on map change. Thanks to "chungocanh12" for reporting.
 
 1.1 (07-Nov-2023)
 	- Changed method of getting stagger duration. Reading memory was from the old test version, better to use GetEntDataFloat.
@@ -607,6 +610,6 @@ void OnFrameStagger(int client)
 	{
 		L4D_StaggerPlayer(client, client, g_vStart[client]);
 		SetEntPropFloat(client, Prop_Send, "m_staggerDist", g_fDist[client]);
-		StoreToAddress(GetEntityAddress(client) + view_as<Address>(g_iOffsetStagger + 8), g_fTtime[client], NumberType_Int32);
+		StoreToAddress(GetEntityAddress(client) + view_as<Address>(g_iOffsetStagger + 8), g_fTtime[client], NumberType_Int32, true);
 	}
 }
