@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.2"
+#define PLUGIN_VERSION 		"1.3"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,11 @@
 
 ========================================================================================
 	Change Log:
+
+1.3 (24-Nov-2023)
+	- Changes to prevent shoving and shooting/shoving/moving whilst stumbling. Thanks to "ProjectSky" for reporting.
+	- Fixed possibly creating the "info_gamemode" entity before map start, depending on cvars.
+	- Fixed unhook event errors when turning the plugin off.
 
 1.2 (23-Nov-2023)
 	- Fixed the plugin sometimes crashing the server on map change. Thanks to "chungocanh12" for reporting.
@@ -54,11 +59,12 @@
 #include <left4dhooks>
 
 #define CVAR_FLAGS			FCVAR_NOTIFY
+#define BLOCK_TIME			0.3		// How long to block shooting/shoving/moving when staggering
 
 
 ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarAir, g_hCvarCmd, g_hCvarStop, g_hCvarType;
-bool g_bCvarAllow, g_bMapStarted, g_bLeft4Dead2;
-int g_iCvarAir, g_iCvarCmd, g_iCvarStop, g_iCvarType, g_iClassTank, g_iOffsetStagger;
+bool g_bCvarAllow, g_bMapStarted, g_bRoundStarted, g_bLeft4Dead2;
+int g_iCvarAir, g_iCvarCmd, g_iCvarStop, g_iCvarType, g_iClassTank;
 
 bool g_bStagger[MAXPLAYERS+1], g_bFrameStagger[MAXPLAYERS+1], g_bBlockXY[MAXPLAYERS+1];
 float g_vStart[MAXPLAYERS+1][3], g_fDist[MAXPLAYERS+1], g_fTtime[MAXPLAYERS+1], g_fTimeBlock[MAXPLAYERS+1];
@@ -123,8 +129,6 @@ public void OnPluginStart()
 
 	g_iClassTank = g_bLeft4Dead2 ? 8 : 5;
 
-	g_iOffsetStagger = FindSendPropInfo("CTerrorPlayer", "m_staggerTimer");
-
 	RegAdminCmd("sm_stagger", CmdStagger, ADMFLAG_ROOT, "[#userid|name] stagger the targeted clients, or no args = self.");
 
 	LoadTranslations("common.phrases");
@@ -167,14 +171,17 @@ void IsAllowed()
 	if( g_bCvarAllow == false && bCvarAllow == true && bAllowMode == true )
 	{
 		g_bCvarAllow = true;
-		HookEvent("player_spawn", Event_PlayerSpawn);
+		HookEvent("round_start",	Event_RoundStart, EventHookMode_PostNoCopy);
+		HookEvent("round_end",		Event_RoundEnd, EventHookMode_PostNoCopy);
+		HookEvent("player_spawn",	Event_PlayerSpawn);
 	}
 
 	else if( g_bCvarAllow == true && (bCvarAllow == false || bAllowMode == false) )
 	{
 		g_bCvarAllow = false;
-		UnhookEvent("round_end", Event_RoundEnd, EventHookMode_PostNoCopy);
-		UnhookEvent("player_spawn", Event_PlayerSpawn);
+		UnhookEvent("round_start",	Event_RoundStart, EventHookMode_PostNoCopy);
+		UnhookEvent("round_end",	Event_RoundEnd, EventHookMode_PostNoCopy);
+		UnhookEvent("player_spawn",	Event_PlayerSpawn);
 	}
 }
 
@@ -253,13 +260,26 @@ void OnGamemode(const char[] output, int caller, int activator, float delay)
 // ====================================================================================================
 //					EVENTS
 // ====================================================================================================
+public void OnMapStart()
+{
+	g_bMapStarted = true;
+	g_bRoundStarted = true;
+}
+
 public void OnMapEnd()
 {
+	g_bMapStarted = false;
 	ResetPlugin();
+}
+
+void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
+{
+	g_bRoundStarted = true;
 }
 
 void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 {
+	g_bRoundStarted = false;
 	ResetPlugin();
 }
 
@@ -401,7 +421,7 @@ void MoveForward(const float vPos[3], const float vAng[3], float vReturn[3], flo
 // ====================================================================================================
 public Action L4D_OnMotionControlledXY(int client, int activity)
 {
-	if( !g_bCvarAllow ) return Plugin_Continue;
+	if( !g_bCvarAllow || !g_bRoundStarted ) return Plugin_Continue;
 
 	int class = -1;
 
@@ -444,6 +464,7 @@ public Action L4D_OnMotionControlledXY(int client, int activity)
 			if( !(g_iCvarAir & (1 << class)) ) return Plugin_Continue;
 		}
 
+		SetAttack(client);
 		g_bStagger[client] = true;
 		return Plugin_Handled;
 	}
@@ -459,7 +480,7 @@ public Action L4D_OnMotionControlledXY(int client, int activity)
 			g_fDist[client] = GetEntPropFloat(client, Prop_Send, "m_staggerDist");
 			g_fDist[client] -= dist;
 
-			g_fTtime[client] = GetEntDataFloat(client, g_iOffsetStagger + 8);
+			g_fTtime[client] = GetEntPropFloat(client, Prop_Send, "m_staggerTimer", 1);
 
 			L4D_CancelStagger(client);
 			g_bStagger[client] = false;
@@ -487,23 +508,29 @@ public Action L4D_OnMotionControlledXY(int client, int activity)
 			}
 
 			RequestFrame(OnFrameStagger, GetClientUserId(client));
+
+			SetAttack(client);
 			return Plugin_Handled;
 		}
 
 		if( g_fTimeBlock[client] == 0.0 )
 		{
 			g_fTimeBlock[client] = GetGameTime() + 0.5;
+
+			SetAttack(client);
 			return Plugin_Handled;
 		}
 
 		if( g_fTimeBlock[client] - GetGameTime() > 0.0 )
 		{
+			SetAttack(client);
 			return Plugin_Handled;
 		}
 	}
 
 	if( g_bBlockXY[client] )
 	{
+		SetAttack(client);
 		return Plugin_Handled;
 	}
 
@@ -512,7 +539,7 @@ public Action L4D_OnMotionControlledXY(int client, int activity)
 
 public Action L4D2_OnStagger(int client, int source)
 {
-	if( !g_bCvarAllow ) return Plugin_Continue;
+	if( !g_bCvarAllow || !g_bRoundStarted ) return Plugin_Continue;
 
 	// Verify air stagger
 	if( g_iCvarAir != 255 )
@@ -537,7 +564,7 @@ public Action L4D2_OnStagger(int client, int source)
 public void L4D2_OnPounceOrLeapStumble_Post(int client, int attacker)
 {
 	// Verify air stagger
-	if( g_bCvarAllow && g_iCvarAir )
+	if( g_bCvarAllow && g_bRoundStarted && g_iCvarAir )
 	{
 		if( GetEntPropEnt(client, Prop_Send, "m_hGroundEntity") == -1 )
 		{
@@ -559,9 +586,9 @@ public void L4D2_OnPounceOrLeapStumble_Post(int client, int attacker)
 
 public Action L4D_OnCancelStagger(int client)
 {
-	if( !g_bCvarAllow ) return Plugin_Continue;
+	if( !g_bCvarAllow || !g_bRoundStarted ) return Plugin_Continue;
 
-	float starttime = GetEntDataFloat(client, g_iOffsetStagger + 8);
+	float starttime = GetEntPropFloat(client, Prop_Send, "m_staggerTimer", 1);
 
 	// Maybe fallen off a ledge that wants to cancel the stagger, block the cancel
 	if( g_bFrameStagger[client] )
@@ -603,6 +630,41 @@ public Action L4D_OnCancelStagger(int client)
 	return Plugin_Continue;
 }
 
+public Action OnPlayerRunCmd(int client, int &buttons)
+{
+	if( g_bCvarAllow && g_bRoundStarted && g_bFrameStagger[client] && buttons & (IN_FORWARD|IN_BACK|IN_MOVELEFT|IN_MOVERIGHT) )
+	{
+		buttons &= ~IN_FORWARD;
+		buttons &= ~IN_BACK;
+		buttons &= ~IN_MOVELEFT;
+		buttons &= ~IN_MOVERIGHT;
+		return Plugin_Changed;
+	}
+
+	return Plugin_Continue;
+}
+
+void SetAttack(int client)
+{
+	int weapon;
+	weapon = GetPlayerWeaponSlot(client, 0);
+	if( weapon != -1 )
+	{
+		SetEntPropFloat(weapon, Prop_Send, "m_flNextPrimaryAttack", GetGameTime() + BLOCK_TIME);
+		SetEntPropFloat(weapon, Prop_Send, "m_flNextSecondaryAttack", GetGameTime() + BLOCK_TIME);
+	}
+
+	weapon = GetPlayerWeaponSlot(client, 1);
+	if( weapon != -1 )
+	{
+		SetEntPropFloat(weapon, Prop_Send, "m_flNextPrimaryAttack", GetGameTime() + BLOCK_TIME);
+		SetEntPropFloat(weapon, Prop_Send, "m_flNextSecondaryAttack", GetGameTime() + BLOCK_TIME);
+	}
+
+	SetEntPropFloat(client, Prop_Send, "m_flNextShoveTime", GetGameTime() + BLOCK_TIME);
+	SetEntPropFloat(client, Prop_Send, "m_jumpSupressedUntil", GetGameTime() + BLOCK_TIME);
+}
+
 void OnFrameStagger(int client)
 {
 	client = GetClientOfUserId(client);
@@ -610,6 +672,6 @@ void OnFrameStagger(int client)
 	{
 		L4D_StaggerPlayer(client, client, g_vStart[client]);
 		SetEntPropFloat(client, Prop_Send, "m_staggerDist", g_fDist[client]);
-		StoreToAddress(GetEntityAddress(client) + view_as<Address>(g_iOffsetStagger + 8), g_fTtime[client], NumberType_Int32, true);
+		SetEntPropFloat(client, Prop_Send, "m_staggerTimer", g_fTtime[client], 1);
 	}
 }
