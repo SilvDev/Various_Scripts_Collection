@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.0"
+#define PLUGIN_VERSION 		"1.1"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.1 (04-Dec-2023)
+	- Fixed the "l4d2_vomitjar_glow_time" cvar not working and glow time being stuck on 15 seconds. Thanks to "S.A.S" for reporting.
 
 1.0 (03-Dec-2023)
 	- Initial release.
@@ -262,8 +265,6 @@ public void L4D2_VomitJar_Detonate_Post(int target, int client)
 
 		g_iEntities[index] = EntIndexToEntRef(entity);
 
-		float fInfernoTime = g_fCvarTime;
-
 		FormatEx(sTemp, sizeof(sTemp), "%s 255", g_sCvarCols);
 		DispatchKeyValue(entity, "_light", sTemp);
 		DispatchKeyValue(entity, "brightness", "3");
@@ -290,7 +291,7 @@ public void L4D2_VomitJar_Detonate_Post(int target, int client)
 		}
 
 		g_iTick[index] = 7;
-		g_fFaderEnd[index] = GetGameTime() + fInfernoTime - (flTickInterval * iTickRate);
+		g_fFaderEnd[index] = GetGameTime() + g_fCvarTime - (flTickInterval * iTickRate);
 		g_fFaderStart[index] = GetGameTime() + flTickInterval * iTickRate + 2.0;
 		g_fFaderTick[index] = GetGameTime() - 1.0;
 
@@ -307,14 +308,14 @@ public void L4D2_VomitJar_Detonate_Post(int target, int client)
 		// Fade out
 		for(int i = iTickRate; i > 1; --i)
 		{
-			Format(sTemp, sizeof(sTemp), "OnUser2 !self:distance:%f:%f:-1", (g_fCvarDist / iTickRate) * i, fInfernoTime - flTickInterval * i);
+			Format(sTemp, sizeof(sTemp), "OnUser2 !self:distance:%f:%f:-1", (g_fCvarDist / iTickRate) * i, g_fCvarTime - flTickInterval * i);
 			SetVariantString(sTemp);
 			AcceptEntityInput(entity, "AddOutput");
 		}
 		AcceptEntityInput(entity, "FireUser2");
 		*/
 
-		FormatEx(sTemp, sizeof(sTemp), "OnUser3 !self:Kill::15.000000:-1", fInfernoTime + 1.0);
+		FormatEx(sTemp, sizeof(sTemp), "OnUser3 !self:Kill::%f:-1", g_fCvarTime + 1.0);
 		SetVariantString(sTemp);
 		AcceptEntityInput(entity, "AddOutput");
 		AcceptEntityInput(entity, "FireUser3");
