@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION		"1.0"
+#define PLUGIN_VERSION		"1.1"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.1 (20-Dec-2023)
+	- Fixed teleporting after a mission change. Thanks to "JustMadMan" for reporting.
 
 1.0 (27-Nov-2023)
 	- Initial release.
@@ -92,9 +95,16 @@ public void OnMapStart()
 	StartMap();
 }
 
+public void OnMapEnd()
+{
+	delete g_hTimer;
+}
+
 void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
 	StartMap();
+
+	delete g_hTimer;
 }
 
 void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
@@ -104,6 +114,8 @@ void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 
 void StartMap()
 {
+	if( L4D_IsMissionFinalMap() ) return;
+
 	// Find end saferoom door
 	int door = L4D_GetCheckpointLast();
 	if( door != -1 )
