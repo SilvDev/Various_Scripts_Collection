@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION		"1.8"
+#define PLUGIN_VERSION		"1.9"
 #define DEBUG_LOGGING		false
 
 /*=======================================================================================
@@ -32,6 +32,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.9 (20-Dec-2023)
+	- Added option to fire triggers "Once per player", under the refire options menu. Requested by "replay_84".
 
 1.8 (01-Oct-2023)
 	- Added a new menu option which allows requiring all players to be present to activate. Requested by "replay_84".
@@ -111,7 +114,7 @@ int g_iColors[4], g_iCvarRefire, g_iEngine, g_iHaloMaterial, g_iLaserMaterial, g
 bool g_bLateLoad, g_bCvarAllow, g_bLoaded;
 
 Handle g_hTimerEnable[MAX_ENTITIES];
-int g_iChance[MAX_ENTITIES], g_iCmdData[MAX_ENTITIES], g_iInside[2049][MAXPLAYERS+1], g_iMenuEdit[MAXPLAYERS+1], g_iMenuSelected[MAXPLAYERS+1], g_iRefireCount[MAX_ENTITIES], g_iTriggers[MAX_ENTITIES];
+int g_iChance[MAX_ENTITIES], g_iCmdData[MAX_ENTITIES], g_iInside[2049][MAXPLAYERS+1], g_iMenuEdit[MAXPLAYERS+1], g_iMenuSelected[MAXPLAYERS+1], g_iRefirePlayer[MAX_ENTITIES][MAXPLAYERS+1], g_iRefireCount[MAX_ENTITIES], g_iTriggers[MAX_ENTITIES];
 bool g_bStopEnd[MAX_ENTITIES];
 char g_sCommand[MAX_ENTITIES][CMD_MAX_LENGTH], g_sMaterialBeam[PLATFORM_MAX_PATH], g_sMaterialHalo[PLATFORM_MAX_PATH], g_sModelBox[PLATFORM_MAX_PATH];
 float g_fDelayTime[MAX_ENTITIES], g_fRefireTime[MAX_ENTITIES];
@@ -440,6 +443,7 @@ public void OnPluginStart()
 
 	g_hMenuRefire = new Menu(RefireMenuHandler);
 	g_hMenuRefire.AddItem("0", "Unlimited");
+	g_hMenuRefire.AddItem("-1", "Once Per Player");
 	g_hMenuRefire.AddItem("-", "- 1");
 	g_hMenuRefire.AddItem("+", "+ 1");
 	g_hMenuRefire.AddItem("1", "1");
@@ -630,6 +634,11 @@ void ResetPlugin()
 
 	for( int i = 0; i < MAX_ENTITIES; i++ )
 	{
+		for( int x = 0; x <= MaxClients; x++ )
+		{
+			g_iRefirePlayer[i][x] = 0;
+		}
+
 		g_sCommand[i][0] = 0;
 		g_bStopEnd[i] = false;
 		g_iChance[i] = FIRE_CHANCE;
@@ -1552,18 +1561,21 @@ int RefireMenuHandler(Menu menu, MenuAction action, int client, int index)
 	{
 		int cfgindex = g_iMenuSelected[client];
 
+		#define INDEX_MINUS	2
+		#define INDEX_PLUS	3
+
 		int value;
-		if( index == 1 )		value = g_iRefireCount[cfgindex] - 1;
-		else if( index == 2 )	value = g_iRefireCount[cfgindex] + 1;
+		if( index == INDEX_MINUS )		value = g_iRefireCount[cfgindex] - 1;
+		else if( index == INDEX_PLUS )	value = g_iRefireCount[cfgindex] + 1;
 		else
 		{
 			char sMenu[8];
 			menu.GetItem(index, sMenu, sizeof(sMenu));
 			value = StringToInt(sMenu);
 		}
-		if( value < 0 )			value = 0;
+		if( value < -1 )			value = 0;
 
-		if( g_iMenuEdit[client] == 0 && (index == 1 || index == 2) )
+		if( g_iMenuEdit[client] == 0 && (index == INDEX_MINUS || index == INDEX_PLUS) )
 		{
 			PrintToChat(client, "%sCannot select + or - when setting up, please choose a default value.", CHAT_TAG);
 			g_hMenuRefire.Display(client, MENU_TIME_FOREVER);
@@ -1587,7 +1599,11 @@ int RefireMenuHandler(Menu menu, MenuAction action, int client, int index)
 					int trigger = g_iTriggers[cfgindex];
 					g_iRefireCount[cfgindex] = value;
 					hFile.SetNum("refire_count", value);
-					PrintToChat(client, "%sSet trigger box '\x03%d\x05' refire count to \x03%d", CHAT_TAG, cfgindex+1, value);
+
+					if( value == -1 )
+						PrintToChat(client, "%sSet trigger box '\x03%d\x05' refire count to \x03Once per player.", CHAT_TAG, cfgindex+1);
+					else
+						PrintToChat(client, "%sSet trigger box '\x03%d\x05' refire count to \x03%d", CHAT_TAG, cfgindex+1, value);
 
 					if( g_iMenuEdit[client] != 0 && IsValidEntRef(trigger) && GetEntProp(trigger, Prop_Data, "m_iHammerID") <= value )
 					{
@@ -1615,7 +1631,7 @@ int RefireMenuHandler(Menu menu, MenuAction action, int client, int index)
 				g_hMenuTime.Display(client, MENU_TIME_FOREVER);
 			}
 		}
-		else if( index == 1 || index == 2 ) g_hMenuRefire.Display(client, MENU_TIME_FOREVER);
+		else if( index == INDEX_MINUS || index == INDEX_PLUS ) g_hMenuRefire.Display(client, MENU_TIME_FOREVER);
 		else g_hMenuEdit.Display(client, MENU_TIME_FOREVER);
 	}
 
@@ -2116,6 +2132,11 @@ void DeleteTrigger(int client, int cfgindex)
 						strcopy(g_sCommand[i-1], CMD_MAX_LENGTH, g_sCommand[i]);
 						strcopy(g_sCommand[i], CMD_MAX_LENGTH, "");
 
+						for( int x = 1; x <= MaxClients; x++ )
+						{
+							g_iRefirePlayer[i-1][x] = g_iRefirePlayer[i][x];
+							g_iRefirePlayer[i][x] = 0;
+						}
 
 						IntToString(i+1, sTemp, sizeof(sTemp));
 
@@ -2575,24 +2596,39 @@ void OnStartTouch(const char[] output, int caller, int activator, float delay)
 						}
 						else // Limited refires
 						{
-							int fired = GetEntProp(callref, Prop_Data, "m_iHammerID");
+							int fired;
+
+							// Once per player
+							if( g_iRefireCount[i] == -1 )
+							{
+								fired = -2;
+							}
+							else
+							{
+								fired = GetEntProp(callref, Prop_Data, "m_iHammerID");
+							}
 
 							if( g_iRefireCount[i] > fired )
 							{
-								executed = true;
-								if( g_fDelayTime[i] > 0.0 )
+								if( fired != -2 || g_iRefirePlayer[i][activator] != 1 )
 								{
-									CreateTimer(g_fDelayTime[i], TimerExecuteCommand, GetClientUserId(activator) | (i << 7));
-								} else {
-									ExecuteCommand(activator, i);
+									g_iRefirePlayer[i][activator] = 1;
 
-									#if DEBUG_LOGGING
-									LogData("[%d] Executing command (limited triggers %d of %d), index: %d. Player: %d (%N) [%s]", i, fired + 1, g_iRefireCount[i], i + 1, activator, activator, g_sCommand[i]);
-									#endif
+									executed = true;
+									if( g_fDelayTime[i] > 0.0 )
+									{
+										CreateTimer(g_fDelayTime[i], TimerExecuteCommand, GetClientUserId(activator) | (i << 7));
+									} else {
+										ExecuteCommand(activator, i);
+
+										#if DEBUG_LOGGING
+										LogData("[%d] Executing command (limited triggers %d of %d), index: %d. Player: %d (%N) [%s]", i, fired + 1, g_iRefireCount[i], i + 1, activator, activator, g_sCommand[i]);
+										#endif
+									}
 								}
 
 								SetEntProp(callref, Prop_Data, "m_iHammerID", fired + 1);
-								if( fired + 1 != g_iRefireCount[i] ) // Enable again if allowed
+								if( fired == -2 || fired + 1 != g_iRefireCount[i] ) // Enable again if allowed
 								{
 									if( g_fRefireTime[i] > 0.0 )
 									{
@@ -2609,13 +2645,13 @@ void OnStartTouch(const char[] output, int caller, int activator, float delay)
 							}
 						}
 
-						if( !executed && g_iCvarRefire == 1 && g_iRefireCount[i] != 0 )
+						if( !executed && g_iCvarRefire == 1 && g_iRefireCount[i] > 0 )
 						{
 							int fired = GetEntProp(callref, Prop_Data, "m_iHammerID");
 							SetEntProp(callref, Prop_Data, "m_iHammerID", fired + 1);
 						}
 					} else { // Chance fail, do we add to refire?
-						if( g_iCvarRefire == 1 && g_iRefireCount[i] != 0 )
+						if( g_iCvarRefire == 1 && g_iRefireCount[i] > 0 )
 						{
 							int fired = GetEntProp(callref, Prop_Data, "m_iHammerID");
 							if( g_iRefireCount[i] > fired )
