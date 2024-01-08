@@ -1,6 +1,6 @@
 /*
 *	[L4D2] Vomitjar Glow
-*	Copyright (C) 2023 Silvers
+*	Copyright (C) 2024 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.1"
+#define PLUGIN_VERSION 		"1.2"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.2 (08-Jan-2024)
+	- Fixed the plugins on/off/mode cvars having no affect. Thanks to "S.A.S" for reporting.
 
 1.1 (04-Dec-2023)
 	- Fixed the "l4d2_vomitjar_glow_time" cvar not working and glow time being stuck on 15 seconds. Thanks to "S.A.S" for reporting.
@@ -236,7 +239,7 @@ void OnGamemode(const char[] output, int caller, int activator, float delay)
 // ====================================================================================================
 public void L4D2_VomitJar_Detonate_Post(int target, int client)
 {
-	if( (target = EntRefToEntIndex(target)) != INVALID_ENT_REFERENCE )
+	if( g_bCvarAllow && (target = EntRefToEntIndex(target)) != INVALID_ENT_REFERENCE )
 	{
 		// Find index
 		int index = -1;
