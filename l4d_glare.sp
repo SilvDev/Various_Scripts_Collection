@@ -1,6 +1,6 @@
 /*
 *	Glare
-*	Copyright (C) 2022 Silvers
+*	Copyright (C) 2024 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"2.14"
+#define PLUGIN_VERSION 		"2.15"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,10 @@
 
 ========================================================================================
 	Change Log:
+
+2.15 (10-Jan-2024)
+	- Fixed the saved color not restoring on connection when the cookies are loaded early. Thanks to "Voevoda" for reporting.
+	- Possibly fixed rare invalid handle errors. Thanks to "Voevoda" for reporting.
 
 2.14 (28-Aug-2022)
 	- Really fixed invalid handles.
@@ -343,7 +347,7 @@ public void OnClientDisconnect_Post(int client)
 	g_bQuitting[client] = false;
 }
 
-public void OnClientPutInServer(int client)
+public void OnClientConnected(int client)
 {
 	g_iGlareColor[client] = g_iCvarColor;
 
@@ -682,7 +686,7 @@ void IsAllowed()
 			{
 				if( IsClientInGame(i) )
 				{
-					OnClientPutInServer(i);
+					OnClientConnected(i);
 					OnClientCookiesCached(i);
 				}
 			}
@@ -1066,8 +1070,7 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 				char sTemp[32];
 				GetClientWeapon(client, sTemp, sizeof(sTemp));
 
-				int val;
-				if( g_hWeapons.GetValue(sTemp[7], val) == false )
+				if( g_hWeapons.ContainsKey(sTemp[7]) == false )
 				{
 					g_iPlayerEnum[client] |= ENUM_BLOCK;
 				}
@@ -1156,19 +1159,18 @@ void CreateLight(int client)
 
 	if( !g_bQuitting[client] )
 	{
-		g_hTimerCreate[client] = CreateTimer(0.3, TimerCreate, GetClientUserId(client));
+		g_hTimerCreate[client] = CreateTimer(0.3, TimerCreate, client);
 	}
 }
 
 Action TimerCreate(Handle timer, int client)
 {
-	client = GetClientOfUserId(client);
-	if( client && IsClientInGame(client) )
+	g_hTimerCreate[client] = null;
+
+	if( IsClientInGame(client) )
 	{
 		CreateBeam(client);
 	}
-
-	g_hTimerCreate[client] = null;
 
 	return Plugin_Continue;
 }
@@ -1215,8 +1217,7 @@ void CreateBeam(int client)
 
 	GetClientWeapon(client, sTemp, sizeof(sTemp));
 
-	int val;
-	if( g_hWeapons.GetValue(sTemp[7], val) )
+	if( g_hWeapons.ContainsKey(sTemp[7]) )
 	{
 		int bone = Attachments_GetWorldModel(client, weapon);
 		SetVariantString("!activator");
@@ -1235,7 +1236,7 @@ Action Hook_SetTransmitLight(int entity, int client)
 	return Plugin_Continue;
 }
 
-Action TimerLightOn(Handle timer, any client)
+Action TimerLightOn(Handle timer, int client)
 {
 	client = GetClientOfUserId(client);
 	if( client && IsClientInGame(client) )
