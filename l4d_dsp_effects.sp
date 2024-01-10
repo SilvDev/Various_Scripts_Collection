@@ -1,6 +1,6 @@
 /*
 *	DSP Effects
-*	Copyright (C) 2023 Silvers
+*	Copyright (C) 2024 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.9"
+#define PLUGIN_VERSION 		"1.10"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.10 (10-Jan-2024)
+	- Fixed the "l4d_dsp_effects_modes_tog" cvar detecting Versus and Survival modes incorrectly.
 
 1.9 (25-Sep-2023)
 	- Fixed resetting the sound when incapacitated and special infected stop pinning.
@@ -298,12 +301,24 @@ bool IsAllowedGameMode()
 	if( g_hCvarMPGameMode == null )
 		return false;
 
-	if( g_iCurrentMode == 0 ) g_iCurrentMode = L4D_GetGameModeType();
-
 	int iCvarModesTog = g_hCvarModesTog.IntValue;
+	if( iCvarModesTog != 0 )
+	{
+		if( g_iCurrentMode == 0 )
+			g_iCurrentMode = L4D_GetGameModeType();
 
-	if( iCvarModesTog && !(iCvarModesTog & g_iCurrentMode) )
-		return false;
+		if( g_iCurrentMode == 0 )
+			return false;
+
+		switch( g_iCurrentMode ) // Left4DHooks values are flipped for these modes, sadly
+		{
+			case 2:		g_iCurrentMode = 4;
+			case 4:		g_iCurrentMode = 2;
+		}
+
+		if( !(iCvarModesTog & g_iCurrentMode) )
+			return false;
+	}
 
 	char sGameModes[64], sGameMode[64];
 	g_hCvarMPGameMode.GetString(sGameMode, sizeof(sGameMode));
