@@ -1,6 +1,6 @@
 /*
 *	PipeBomb Damage Modifier
-*	Copyright (C) 2023 Silvers
+*	Copyright (C) 2024 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.8"
+#define PLUGIN_VERSION 		"1.9"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.9 (13-Jan-2024)
+	- Plugin now supports simultaneous explosions from PipeBombs and breakable props (propane tank, oxygen tank etc) to correctly detect PipeBombs.
 
 1.8 (19-Jun-2023)
 	- Compatibility update for the "Detonation Force" plugin by "OIRV" to scale the additional damage created. Thanks to "Fsky" for reporting.
@@ -76,7 +79,8 @@
 
 
 ConVar g_hCvarAllow, g_hDecayDecay, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarSpecial, g_hCvarSelf, g_hCvarSurvivor, g_hCvarTank;
-float g_fCvarSpecial, g_fCvarSelf, g_fCvarSurvivor, g_fCvarTank, g_fDecayDecay, g_fGameTime, g_fGameTimeF;
+float g_fCvarSpecial, g_fCvarSelf, g_fCvarSurvivor, g_fCvarTank, g_fDecayDecay, g_fGameTimeF, g_fCreatedTime[2048];
+// float g_fGameTime; // Old version
 bool g_bCvarAllow, g_bMapStarted, g_bLeft4Dead2, g_bDetonationForcePlugin;
 int g_iClassTank, g_iClientOwner;
 
@@ -187,7 +191,7 @@ void IsAllowed()
 
 	if( g_bCvarAllow == false && bCvarAllow == true && bAllowMode == true )
 	{
-		HookEvent("break_prop", Event_BreakProp, EventHookMode_PostNoCopy);
+		// HookEvent("break_prop", Event_BreakProp, EventHookMode_PostNoCopy);
 		HookClients(true);
 
 		g_bCvarAllow = true;
@@ -195,7 +199,7 @@ void IsAllowed()
 
 	else if( g_bCvarAllow == true && (bCvarAllow == false || bAllowMode == false) )
 	{
-		UnhookEvent("break_prop", Event_BreakProp, EventHookMode_PostNoCopy);
+		// UnhookEvent("break_prop", Event_BreakProp, EventHookMode_PostNoCopy);
 		HookClients(false);
 
 		g_bCvarAllow = false;
@@ -277,9 +281,19 @@ void OnGamemode(const char[] output, int caller, int activator, float delay)
 // ====================================================================================================
 //					HOOKS
 // ====================================================================================================
+/* Old version
 void Event_BreakProp(Event event, const char[] name, bool dontBroadcast)
 {
 	g_fGameTime = GetGameTime();
+}
+*/
+
+public void OnEntityCreated(int entity, const char[] classname)
+{
+	if( g_bCvarAllow && strncmp(classname, "pipe_bomb_p", 11) == 0 ) // pipe_bomb_projectile
+	{
+		g_fCreatedTime[entity] = GetGameTime();
+	}
 }
 
 public void OnClientPutInServer(int client)
@@ -328,7 +342,8 @@ Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, in
 		char classname[22];
 		GetEdictClassname(inflictor, classname, sizeof(classname));
 
-		if( (GetGameTime() != g_fGameTime && strcmp(classname, "pipe_bomb_projectile") == 0) || GetEntProp(inflictor, Prop_Data, "m_iHammerID") == 19712806 ) // 19712806 used by "Damaged Grenades Explode" and "Bots Ignore PipeBombs and Shoot" to identify damage
+		// if( (GetGameTime() != g_fGameTime && // Old version
+		if( (g_fCreatedTime[inflictor] + 0.1 < GetGameTime() && strcmp(classname, "pipe_bomb_projectile") == 0) || GetEntProp(inflictor, Prop_Data, "m_iHammerID") == 19712806 ) // 19712806 used by "Damaged Grenades Explode" and "Bots Ignore PipeBombs and Shoot" to identify damage
 		{
 			g_fGameTimeF = GetGameTime();
 			g_iClientOwner = attacker;
