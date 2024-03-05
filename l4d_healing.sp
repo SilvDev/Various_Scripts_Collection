@@ -1,6 +1,6 @@
 /*
 *	Regenerative Healing
-*	Copyright (C) 2023 Silvers
+*	Copyright (C) 2024 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.12"
+#define PLUGIN_VERSION 		"1.13"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.13 (05-Mar-2024)
+	- Fixed invalid handle errors. Thanks to "bullet28" for reporting and suggested solution.
 
 1.12 (19-Feb-2023)
 	- Fixed healing not continuing when a bot or player takeover each other. Thanks to "Iciaria" for reporting.
@@ -687,6 +690,8 @@ Action TimerRegenAlways(Handle timer)
 // ====================================================================================================
 void SetupHealTimer(int client, int userid, int type)
 {
+	if( g_bActive == false ) return;
+
 	// Remove temp / main health that was added?
 	if( g_iCvarTemp & (1<<0) )
 	{
@@ -711,8 +716,6 @@ void SetupHealTimer(int client, int userid, int type)
 
 Action TimerRegenTemp(Handle timer, DataPack dPack)
 {
-	if( g_bActive == false ) return Plugin_Stop;
-
 	// Get vars
 	dPack.Reset();
 	int type = dPack.ReadCell();
