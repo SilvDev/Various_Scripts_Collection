@@ -1,6 +1,6 @@
 /*
 *	Dev Cmds
-*	Copyright (C) 2023 Silvers
+*	Copyright (C) 2024 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.49"
+#define PLUGIN_VERSION 		"1.50"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.50 (05-Mar-2024)
+	- Added a few more "m_h*" variables to read the entity index instead of reference number. Probably only for L4D/2 series.
 
 1.49 (22-Nov-2023)
 	- Added command "sm_delents" to delete entities of a certain classnames. Allows using * wildcard to match various entities for example "weapon_*" can be used.
@@ -428,7 +431,7 @@ public void OnPluginStart()
 
 	RegAdminCmd("sm_del",			CmdDel,			ADMFLAG_ROOT, "Deletes the entity your crosshair is over.");
 	RegAdminCmd("sm_dele",			CmdDelE,		ADMFLAG_ROOT, "<entity>. Deletes the entity you specify.");
-	RegAdminCmd("sm_delents",		CmdDelEnts,		ADMFLAG_ROOT, "[classname] Delete all the entities of a specific classname.");
+	RegAdminCmd("sm_delents",		CmdDelEnts,		ADMFLAG_ROOT, "<classname> Delete all the entities of a specific classname.");
 	RegAdminCmd("sm_ent",			CmdEnt,			ADMFLAG_ROOT, "Displays info about the entity your crosshair is over.");
 	RegAdminCmd("sm_ente",			CmdEntE,		ADMFLAG_ROOT, "<entity>. Displays info about the entity you specify.");
 	RegAdminCmd("sm_vertex",		CmdVertex,		ADMFLAG_ROOT, "[entity]. Displays vMaxs and vMins bounding box about the specified entity or aimed at entity.");
@@ -602,6 +605,11 @@ public void OnPluginStart()
 	g_hEntityKeys.SetValue("m_hViewPosition", true);
 	g_hEntityKeys.SetValue("m_hWeapon", true);
 	g_hEntityKeys.SetValue("m_hZoomOwner", true);
+	g_hEntityKeys.SetValue("m_useActionTarget", true);
+	g_hEntityKeys.SetValue("m_useActionOwner", true);
+	g_hEntityKeys.SetValue("m_reviveTarget", true);
+	g_hEntityKeys.SetValue("m_reviveOwner", true);
+	g_hEntityKeys.SetValue("m_healTarget", true);
 
 	// GameRules net class name
 	switch( g_iEngine )
