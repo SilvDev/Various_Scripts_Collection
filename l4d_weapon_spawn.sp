@@ -1,6 +1,6 @@
 /*
 *	Weapon Spawn
-*	Copyright (C) 2023 Silvers
+*	Copyright (C) 2024 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.14"
+#define PLUGIN_VERSION 		"1.15"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.15 (25-Mar-2024)
+	- Changes to fix conflicts with the "ConVars Anomaly Fixer" plugin. Thanks to "komikoza" for reporting and testing.
 
 1.14 (25-May-2023)
 	- Fixed the M60, Grenade Launcher and Chainsaw not following the count cvar limit. Thanks to "gamer_kanelita" for reporting.
@@ -736,7 +739,7 @@ Action TimerStart(Handle timer)
 // ====================================================================================================
 void LoadSpawns()
 {
-	if( g_bLoaded || g_iCvarRandom == 0 ) return;
+	if( !g_bMapStarted || g_bLoaded || g_iCvarRandom == 0 ) return;
 	g_bLoaded = true;
 
 	char sPath[PLATFORM_MAX_PATH];
