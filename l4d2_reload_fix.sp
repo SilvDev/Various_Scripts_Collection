@@ -16,7 +16,7 @@
 *	along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#define PLUGIN_VERSION 		"1.7"
+#define PLUGIN_VERSION 		"1.8"
 
 
 
@@ -27,6 +27,7 @@
  * Reload Fix - Max Clip Size: https://forums.alliedmods.net/showthread.php?t=327105
  * l4d2_weapon_csgo_reload: https://github.com/fbef0102/L4D2-Plugins/tree/master/l4d2_weapon_csgo_reload
 */
+
 
 
 /*======================================================================================
@@ -40,6 +41,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.8 (03-Apr-2024)
+	- Fixed wrong weapons ammo when switch weapons. Thanks to "HarryPotter" for the update.
 
 1.7 (12-Mar-2024)
 	- Save all clients weapons ammo, useful if weapon ammo exceeded the official ammo cvar. Thanks to "HarryPotter" for the update.
@@ -309,9 +313,22 @@ void OnFrame(DataPack dPack)
 		SetEntProp(weapon, Prop_Send, "m_iClip1", g_iClip[client][weapon_weaponid][weapon_skin]);
 
 		// Add new ammo received to reserve ammo
-		int ammo = g_iAmmo[client][weapon_weaponid][weapon_skin];
-		GetOrSetPlayerAmmo(client, weapon, ammo + clip - g_iClip[client][weapon_weaponid][weapon_skin]);
+		int cur_ammo = GetOrSetPlayerAmmo(client, weapon) + clip - g_iClip[client][weapon_weaponid][weapon_skin];
+		int old_ammo = g_iAmmo[client][weapon_weaponid][weapon_skin];
+		if( old_ammo <= cur_ammo )
+		{
+			GetOrSetPlayerAmmo(client, weapon, GetMin(cur_ammo, 999));
+		}
+		else
+		{
+			GetOrSetPlayerAmmo(client, weapon, old_ammo);
+		}
 	}
+}
+
+int GetMin(int a, int b)
+{
+	return a < b ? a : b;
 }
 
 void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
