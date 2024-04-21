@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.15"
+#define PLUGIN_VERSION 		"1.16"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.16 (21-Apr-2024)
+	- Fixed revive count increasing by 2 instead of 1 under certain circumstances. Thanks to "S.A.S" for reporting.
 
 1.15 (16-Apr-2024)
 	- Removed gamedata method patching the game which created a health bug. Thanks to "S.A.S" for reporting.
@@ -101,12 +104,16 @@
 
 #define CVAR_FLAGS			FCVAR_NOTIFY
 #define SOUND_HEART			"player/heartbeatloop.wav"
-#define DEBUG				false
+#define DEBUG				0
+
+#if DEBUG
+// #include <left4dhooks>
+#endif
 
 
 ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarIncap, g_hCvarRevives, g_hCvarScreen, g_hCvarSound, g_hCvarVocal, g_hCvarMaxIncap, g_hCvarDecay;
 bool g_bCvarAllow, g_bCvarIncap, g_bMapStarted, g_bLeft4Dead2;
-float g_fDecayDecay;
+float g_fDecayDecay, g_fTimeRevive;
 int g_iCvarRevives, g_iCvarScreen, g_iCvarSound, g_iCvarVocal;
 int g_iReviveCount[MAXPLAYERS+1];
 bool g_bHookedDamage[MAXPLAYERS+1];
@@ -356,7 +363,9 @@ Action CmdHeatbeat(int client, int args)
 				}
 			}
 		}
-	} else {
+	}
+	else
+	{
 		if( !client )
 		{
 			ReplyToCommand(client, "Command can only be used %s", IsDedicatedServer() ? "in game on a dedicated server." : "in chat on a Listen server.");
@@ -398,6 +407,7 @@ Action CommandListener(int client, const char[] command, int args)
 
 		if( strcmp(buffer, "health") == 0 )
 		{
+			g_fTimeRevive = GetGameTime() + 0.1;
 			ResetCount(client);
 		}
 	}
@@ -564,6 +574,7 @@ void OnGamemode(const char[] output, int caller, int activator, float delay)
 // ====================================================================================================
 public void OnMapStart()
 {
+	g_fTimeRevive = 0.0;
 	g_bMapStarted = true;
 	PrecacheSound(SOUND_HEART);
 }
@@ -711,6 +722,8 @@ void Event_Healed(Event event, const char[] name, bool dontBroadcast)
 
 void Event_Revive(Event event, const char[] name, bool dontBroadcast)
 {
+	if( g_fTimeRevive >= GetGameTime() ) return;
+
 	int userid;
 	if( (userid = event.GetInt("subject")) && event.GetInt("ledge_hang") == 0 )
 	{
@@ -756,7 +769,9 @@ void ReviveLogic(int client)
 			SetEntProp(client, Prop_Send, "m_bIsOnThirdStrike", 1);
 		else
 			SetEntProp(client, Prop_Send, "m_currentReviveCount", 2);
-	} else {
+	}
+	else
+	{
 		if( g_bLeft4Dead2 )
 			SetEntProp(client, Prop_Send, "m_bIsOnThirdStrike", 0);
 		else
@@ -774,6 +789,10 @@ void ReviveLogic(int client)
 		}
 
 		SetEntProp(client, Prop_Send, "m_isGoingToDie", 0);
+	}
+	else
+	{
+		SetEntProp(client, Prop_Send, "m_isGoingToDie", 1);
 	}
 
 	// Heartbeat sound, stop dupe sound bug, only way.
