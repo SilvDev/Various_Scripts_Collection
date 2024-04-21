@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.9"
+#define PLUGIN_VERSION 		"1.10"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.10 (21-Apr-2024)
+	- Fixed random error spam. Thanks to "CrazMan" for reporting.
 
 1.9 (13-Jan-2024)
 	- Plugin now supports simultaneous explosions from PipeBombs and breakable props (propane tank, oxygen tank etc) to correctly detect PipeBombs.
@@ -81,7 +84,7 @@
 ConVar g_hCvarAllow, g_hDecayDecay, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarSpecial, g_hCvarSelf, g_hCvarSurvivor, g_hCvarTank;
 float g_fCvarSpecial, g_fCvarSelf, g_fCvarSurvivor, g_fCvarTank, g_fDecayDecay, g_fGameTimeF, g_fCreatedTime[2048];
 // float g_fGameTime; // Old version
-bool g_bCvarAllow, g_bMapStarted, g_bLeft4Dead2, g_bDetonationForcePlugin;
+bool g_bCvarAllow, g_bMapStarted, g_bLeft4Dead2, g_bIgnoreDamage, g_bDetonationForcePlugin;
 int g_iClassTank, g_iClientOwner;
 
 
@@ -336,7 +339,7 @@ void HookClients(bool hook)
 
 Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
-	if( inflictor > MaxClients && damagetype & (DMG_BLAST|DMG_BLAST_SURFACE|DMG_NERVEGAS) )
+	if( !g_bIgnoreDamage && inflictor > MaxClients && damagetype & (DMG_BLAST|DMG_BLAST_SURFACE|DMG_NERVEGAS) )
 	{
 		bool checked;
 		char classname[22];
@@ -385,7 +388,10 @@ Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, in
 				float health = GetClientHealth(victim) + GetTempHealth(victim);
 				if( health - damage <= 0 )
 				{
+					g_bIgnoreDamage = true;
 					HurtEntity(victim, attacker, health);
+					g_bIgnoreDamage = false;
+
 					damage = 0.0;
 					return Plugin_Handled;
 				}
