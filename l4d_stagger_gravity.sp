@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.4"
+#define PLUGIN_VERSION 		"1.5"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.5 (30-Apr-2024)
+	- Fixed not resetting a variable which could cause subsequent staggers to not be blocked.
 
 1.4 (10-Jan-2024)
 	- Changed the plugins on/off/mode cvars to use the "Left 4 DHooks" method instead of creating an entity.
@@ -654,6 +657,8 @@ void OnFrameStagger(int client)
 	client = GetClientOfUserId(client);
 	if( client && IsClientInGame(client) )
 	{
+		g_bFrameStagger[client] = false;
+
 		L4D_StaggerPlayer(client, client, g_vStart[client]);
 		SetEntPropFloat(client, Prop_Send, "m_staggerDist", g_fDist[client]);
 		SetEntPropFloat(client, Prop_Send, "m_staggerTimer", g_fTtime[client], 1);
