@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.10"
+#define PLUGIN_VERSION 		"1.11"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.11 (31-May-2024)
+	- Added cvar "l4d_dsp_effects_remove" to remove the DSP effect when using Adrenaline. Requested by "1337joshi".
 
 1.10 (10-Jan-2024)
 	- Fixed the "l4d_dsp_effects_modes_tog" cvar detecting Versus and Survival modes incorrectly.
@@ -82,9 +85,9 @@
 #define CVAR_FLAGS			FCVAR_NOTIFY
 
 
-ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarAdren, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarIncap, g_hCvarSpecial, g_hCvarStrike;
+ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarAdren, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarIncap, g_hCvarRemove, g_hCvarSpecial, g_hCvarStrike;
 int g_iCvarIncap, g_iCvarSpecial, g_iCvarStrike;
-bool g_bCvarAllow, g_bLeft4Dead2;
+bool g_bCvarAllow, g_bCvarRemove, g_bLeft4Dead2;
 float g_fCvarAdren;
 bool g_bSetDSP[MAXPLAYERS+1];
 int g_iLevelDSP[MAXPLAYERS+1];
@@ -124,6 +127,8 @@ public void OnPluginStart()
 	g_hCvarModesOff =	CreateConVar(	"l4d_dsp_effects_modes_off",	"",				"Turn off the plugin in these game modes, separate by commas (no spaces). (Empty = none).", CVAR_FLAGS );
 	g_hCvarModesTog =	CreateConVar(	"l4d_dsp_effects_modes_tog",	"0",			"Turn on the plugin in these game modes. 0=All, 1=Coop, 2=Survival, 4=Versus, 8=Scavenge. Add numbers together.", CVAR_FLAGS );
 	g_hCvarIncap =		CreateConVar(	"l4d_dsp_effects_incap",		"1",			"0=Off. 1=Apply muffle effect when incapacitated.", CVAR_FLAGS );
+	if( g_bLeft4Dead2 )
+		g_hCvarRemove =	CreateConVar(	"l4d_dsp_effects_remove",		"1",			"0=Off. 1=Allow DSP effect when using Adrenaline.", CVAR_FLAGS );
 	g_hCvarSpecial =	CreateConVar(	"l4d_dsp_effects_special",		"1",			"0=Off. 1=Apply muffle effect when pinned by a Special Infected.", CVAR_FLAGS );
 	g_hCvarStrike =		CreateConVar(	"l4d_dsp_effects_strike",		"1",			"0=Off. 1=Apply muffle effect when black and white.", CVAR_FLAGS );
 	CreateConVar(						"l4d_dsp_effects_version",		PLUGIN_VERSION, "DSP Effects plugin version.", FCVAR_NOTIFY|FCVAR_DONTRECORD);
@@ -142,6 +147,8 @@ public void OnPluginStart()
 	g_hCvarModesOff.AddChangeHook(ConVarChanged_Allow);
 	g_hCvarModesTog.AddChangeHook(ConVarChanged_Allow);
 	g_hCvarIncap.AddChangeHook(ConVarChanged_Cvars);
+	if( g_bLeft4Dead2 )
+		g_hCvarRemove.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarSpecial.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarStrike.AddChangeHook(ConVarChanged_Cvars);
 	AddCommandListener(CommandListener, "give");
@@ -215,6 +222,8 @@ void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newV
 void GetCvars()
 {
 	g_iCvarIncap = g_hCvarIncap.IntValue;
+	if( g_bLeft4Dead2 )
+		g_bCvarRemove = g_hCvarRemove.BoolValue;
 	g_iCvarSpecial = g_hCvarSpecial.IntValue;
 	g_iCvarStrike = g_hCvarStrike.IntValue;
 
@@ -449,8 +458,16 @@ void Event_Adren(Event event, const char[] name, bool dontBroadcast)
 	int userid = event.GetInt("userid");
 	int client = GetClientOfUserId(userid);
 
-	delete g_gTimerAdren[client];
-	g_gTimerAdren[client] = CreateTimer(g_fCvarAdren, TimerAdren, userid);
+	if( g_bCvarRemove )
+	{
+		g_bSetDSP[client] = false;
+		SetEffects(client, 1);
+	}
+	else
+	{
+		delete g_gTimerAdren[client];
+		g_gTimerAdren[client] = CreateTimer(g_fCvarAdren, TimerAdren, userid);
+	}
 }
 
 Action TimerAdren(Handle timer, int client)
