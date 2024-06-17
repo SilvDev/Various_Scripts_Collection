@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.11"
+#define PLUGIN_VERSION 		"1.12"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.12 (17-Jun-2024)
+	- Added support for the "sm_adren" command, which does not fire the "adrenaline_used" event. Thanks to "1337joshi" for reporting.
 
 1.11 (31-May-2024)
 	- Added cvar "l4d_dsp_effects_remove" to remove the DSP effect when using Adrenaline. Requested by "1337joshi".
@@ -152,6 +155,44 @@ public void OnPluginStart()
 	g_hCvarSpecial.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarStrike.AddChangeHook(ConVarChanged_Cvars);
 	AddCommandListener(CommandListener, "give");
+
+	if( g_bLeft4Dead2 )
+		AddCommandListener(CommandAdrenaline, "sm_adren");
+}
+
+Action CommandAdrenaline(int client, const char[] command, int args)
+{
+	if( !g_bCvarRemove ) return Plugin_Continue;
+
+	char arg1[32];
+	GetCmdArg(1, arg1, sizeof(arg1));
+
+	char target_name[MAX_TARGET_LENGTH];
+	int target_list[MAXPLAYERS], target_count;
+	bool tn_is_ml;
+
+	if( (target_count = ProcessTargetString(
+		arg1,
+		client,
+		target_list,
+		MAXPLAYERS,
+		0,
+		target_name,
+		sizeof(target_name),
+		tn_is_ml)) <= 0)
+	{
+		ReplyToTargetError(client, target_count);
+		return Plugin_Handled;
+	}
+
+	int target;
+	for( int i = 0; i < target_count; i++ )
+	{
+		target = target_list[i];
+		RequestFrame(OnFrameAdren, GetClientUserId(target));
+	}
+
+	return Plugin_Continue;
 }
 
 Action CommandListener(int client, const char[] command, int args)
@@ -460,13 +501,22 @@ void Event_Adren(Event event, const char[] name, bool dontBroadcast)
 
 	if( g_bCvarRemove )
 	{
-		g_bSetDSP[client] = false;
-		SetEffects(client, 1);
+		RequestFrame(OnFrameAdren, userid);
 	}
 	else
 	{
 		delete g_gTimerAdren[client];
 		g_gTimerAdren[client] = CreateTimer(g_fCvarAdren, TimerAdren, userid);
+	}
+}
+
+void OnFrameAdren(int client)
+{
+	client = GetClientOfUserId(client);
+	if( client && IsClientInGame(client) )
+	{
+		g_bSetDSP[client] = false;
+		SetEffects(client, 1);
 	}
 }
 
