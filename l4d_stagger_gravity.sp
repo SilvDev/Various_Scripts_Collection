@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.5"
+#define PLUGIN_VERSION 		"1.6"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,10 @@
 
 ========================================================================================
 	Change Log:
+
+1.6 (17-Jun-2024)
+	- Fixed the Charger releasing survivors after pummel. Thanks to "JustMadMan" for reporting.
+	- This fix requires updating "Left4DHooks" plugin to version 1.151 or newer.
 
 1.5 (30-Apr-2024)
 	- Fixed not resetting a variable which could cause subsequent staggers to not be blocked.
@@ -66,6 +70,7 @@
 
 #define CVAR_FLAGS			FCVAR_NOTIFY
 #define BLOCK_TIME			0.3		// How long to block shooting/shoving/moving when staggering
+#define CHARGE_TIME			0.3		// Time between charging/pummel where the game tries to stagger players causing chargers to release victim
 
 
 ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarAir, g_hCvarCmd, g_hCvarStop, g_hCvarType;
@@ -73,7 +78,7 @@ bool g_bCvarAllow, g_bRoundStarted, g_bLeft4Dead2;
 int g_iCvarAir, g_iCvarCmd, g_iCvarStop, g_iCvarType, g_iClassTank;
 
 bool g_bStagger[MAXPLAYERS+1], g_bFrameStagger[MAXPLAYERS+1], g_bBlockXY[MAXPLAYERS+1];
-float g_vStart[MAXPLAYERS+1][3], g_fDist[MAXPLAYERS+1], g_fTtime[MAXPLAYERS+1], g_fTimeBlock[MAXPLAYERS+1];
+float g_vStart[MAXPLAYERS+1][3], g_fDist[MAXPLAYERS+1], g_fTtime[MAXPLAYERS+1], g_fTimeBlock[MAXPLAYERS+1], g_fTimeCharger[MAXPLAYERS+1];
 
 
 
@@ -180,6 +185,14 @@ void IsAllowed()
 		HookEvent("round_start",	Event_RoundStart, EventHookMode_PostNoCopy);
 		HookEvent("round_end",		Event_RoundEnd, EventHookMode_PostNoCopy);
 		HookEvent("player_spawn",	Event_PlayerSpawn);
+
+		if( g_bLeft4Dead2 )
+		{
+			HookEvent("charger_carry_start",	Event_Charger);
+			HookEvent("charger_carry_end",		Event_Charger);
+			HookEvent("charger_pummel_start",	Event_Charger);
+			HookEvent("charger_pummel_end",		Event_Charger);
+		}
 	}
 
 	else if( g_bCvarAllow == true && (bCvarAllow == false || bAllowMode == false) )
@@ -188,6 +201,14 @@ void IsAllowed()
 		UnhookEvent("round_start",	Event_RoundStart, EventHookMode_PostNoCopy);
 		UnhookEvent("round_end",	Event_RoundEnd, EventHookMode_PostNoCopy);
 		UnhookEvent("player_spawn",	Event_PlayerSpawn);
+
+		if( g_bLeft4Dead2 )
+		{
+			UnhookEvent("charger_carry_start",		Event_Charger);
+			UnhookEvent("charger_carry_end",		Event_Charger);
+			UnhookEvent("charger_pummel_start",		Event_Charger);
+			UnhookEvent("charger_pummel_end",		Event_Charger);
+		}
 	}
 }
 
@@ -276,6 +297,12 @@ void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 	ResetVars(client);
 }
 
+void Event_Charger(Event event, const char[] name, bool dontBroadcast)
+{
+	int client = GetClientOfUserId(event.GetInt("userid"));
+	g_fTimeCharger[client] = GetGameTime();
+}
+
 void ResetPlugin()
 {
 	for( int i = 1; i <= MaxClients; i++ )
@@ -293,6 +320,7 @@ void ResetVars(int client)
 	g_fDist[client] = 0.0;
 	g_fTtime[client] = 0.0;
 	g_fTimeBlock[client] = 0.0;
+	g_fTimeCharger[client] = 0.0;
 }
 
 
@@ -527,6 +555,8 @@ public Action L4D_OnMotionControlledXY(int client, int activity)
 public Action L4D2_OnStagger(int client, int source)
 {
 	if( !g_bCvarAllow || !g_bRoundStarted ) return Plugin_Continue;
+
+	if( GetGameTime() - g_fTimeCharger[client] < CHARGE_TIME ) return Plugin_Handled;
 
 	// Verify air stagger
 	if( g_iCvarAir != 255 )
