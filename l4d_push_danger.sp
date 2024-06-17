@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.0"
+#define PLUGIN_VERSION 		"1.1"
 
 /*======================================================================================
 	Plugin Info:
@@ -32,6 +32,12 @@
 ========================================================================================
 	Change Log:
 
+1.1 (17-Jun-2024)
+	- Added cvar "l4d_push_danger_damage_types" - What damage type can push a player away: 1=Acid, 2=Burn, 3=Both. Default: 3.
+	- Fixed cvar "l4d_push_danger_allow" having no affect.
+	- Fixed debug message spam.
+	- Thanks to "BloodyBlade" for changes.
+
 1.0 (03-Jun-2024)
 	- Initial release.
 
@@ -44,15 +50,14 @@
 #include <left4dhooks>
 
 
-#define CVAR_FLAGS				FCVAR_NOTIFY
-
+#define CVAR_FLAGS			FCVAR_NOTIFY
 #define TYPE_BOTS 			(1 << 0)
 #define TYPE_HUMAN	 		(1 << 1)
 
 
-ConVar g_hCvarMPGameMode, g_hCvarAllow, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarTypes;
+ConVar g_hCvarMPGameMode, g_hCvarAllow, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarTypes, g_hCvarDamageTypes;
 bool g_bCvarAllow, g_bLeft4Dead2;
-int g_iCvarTypes;
+int g_iCvarTypes, g_iCvarDamageTypes;
 
 
 
@@ -89,12 +94,13 @@ public void OnPluginStart()
 	// =================
 	// CVARS
 	// =================
-	g_hCvarAllow =			CreateConVar(	"l4d_push_danger_allow",				"1",					"0=Plugin off, 1=Plugin on.", CVAR_FLAGS );
-	g_hCvarModes =			CreateConVar(	"l4d_push_danger_modes",				"",						"Turn on the plugin in these game modes, separate by commas (no spaces). (Empty = all).", CVAR_FLAGS );
-	g_hCvarModesOff =		CreateConVar(	"l4d_push_danger_modes_off",			"",						"Turn off the plugin in these game modes, separate by commas (no spaces). (Empty = none).", CVAR_FLAGS );
-	g_hCvarModesTog =		CreateConVar(	"l4d_push_danger_modes_tog",			"0",					"Turn on the plugin in these game modes. 0=All, 1=Coop, 2=Survival, 4=Versus, 8=Scavenge. Add numbers together.", CVAR_FLAGS );
-	g_hCvarTypes =			CreateConVar(	"l4d_push_danger_types",				"1",					"Who should be pushed away from acid/fire damage: 1=Bots, 2=Humans, 3=Both.", CVAR_FLAGS );
-	CreateConVar(							"l4d_push_danger_version",				PLUGIN_VERSION,			"Push Away From Danger plugin version.", FCVAR_NOTIFY|FCVAR_DONTRECORD);
+	g_hCvarAllow =			CreateConVar(	"l4d_push_danger_allow",			"1",					"0=Plugin off, 1=Plugin on.", CVAR_FLAGS );
+	g_hCvarModes =			CreateConVar(	"l4d_push_danger_modes",			"",						"Turn on the plugin in these game modes, separate by commas (no spaces). (Empty = all).", CVAR_FLAGS );
+	g_hCvarModesOff =		CreateConVar(	"l4d_push_danger_modes_off",		"",						"Turn off the plugin in these game modes, separate by commas (no spaces). (Empty = none).", CVAR_FLAGS );
+	g_hCvarModesTog =		CreateConVar(	"l4d_push_danger_modes_tog",		"0",					"Turn on the plugin in these game modes. 0=All, 1=Coop, 2=Survival, 4=Versus, 8=Scavenge. Add numbers together.", CVAR_FLAGS );
+	g_hCvarTypes =			CreateConVar(	"l4d_push_danger_types",			"1",					"Who should be pushed away from acid/fire damage: 1=Bots, 2=Humans, 3=Both.", CVAR_FLAGS );
+	g_hCvarDamageTypes = 	CreateConVar(	"l4d_push_danger_damage_types",		"3",					"What damage type can push a player away: 1=Acid, 2=Burn, 3=Both.", CVAR_FLAGS );
+	CreateConVar(							"l4d_push_danger_version",			PLUGIN_VERSION,			"Push Away From Danger plugin version.", FCVAR_NOTIFY|FCVAR_DONTRECORD );
 	AutoExecConfig(true,					"l4d_push_danger");
 
 	g_hCvarMPGameMode = FindConVar("mp_gamemode");
@@ -108,7 +114,7 @@ public void OnPluginStart()
 	{
 		if( IsClientInGame(i) )
 		{
-			SDKHook(i, SDKHook_OnTakeDamageAlive, OnTakeDamage);
+			OnClientPutInServer(i);
 		}
 	}
 }
@@ -136,6 +142,7 @@ void ConVarChanged_Cvars(Handle convar, const char[] oldValue, const char[] newV
 void GetCvars()
 {
 	g_iCvarTypes = g_hCvarTypes.IntValue;
+	g_iCvarDamageTypes = g_hCvarDamageTypes.IntValue;
 }
 
 void IsAllowed()
@@ -220,22 +227,52 @@ public void OnClientPutInServer(int client)
 
 Action OnTakeDamage(int victim, int &attacker, int &inflictor, float &damage, int &damagetype)
 {
-	if( g_bLeft4Dead2 && (damagetype == 263168 || damagetype == 265216) || damagetype & DMG_BURN )
+	if( g_bCvarAllow && (damagetype == 263168 || damagetype == 265216) || damagetype & DMG_BURN )
 	{
 		if( GetClientTeam(victim) == 2 )
 		{
 			if( g_iCvarTypes != 3 )
 			{
 				bool fake = IsFakeClient(victim);
-				PrintToChatAll("%d %d",fake,g_iCvarTypes);
 				if( fake && g_iCvarTypes == 2 ) return Plugin_Continue;
 				if( !fake && g_iCvarTypes == 1 ) return Plugin_Continue;
 			}
 
-			static char classname[64];
-			GetEntityClassname(inflictor, classname, sizeof(classname));
+			static char classname[16];
+			bool checked;
+			bool pass;
 
-			if( strcmp(classname, "inferno") == 0 || (g_bLeft4Dead2 && strcmp(classname, "insect_swarm") == 0) )
+			if( g_iCvarDamageTypes & (1<<0) )
+			{
+				if( g_bLeft4Dead2 && (damagetype == 263168 || damagetype == 265216) )
+				{
+					GetEntityClassname(inflictor, classname, sizeof(classname));
+					checked = true;
+
+					if( strcmp(classname, "insect_swarm") == 0 )
+					{
+						pass = true;
+					}
+				}
+			}
+
+			if( !pass && g_iCvarDamageTypes & (1<<1) )
+			{
+				if( (damagetype & DMG_BURN) )
+				{
+					if( !checked )
+					{
+						GetEntityClassname(inflictor, classname, sizeof(classname));
+					}
+
+					if( strcmp(classname, "inferno") == 0 )
+					{
+						pass = true;
+					}
+				}
+			}
+
+			if( pass )
 			{
 				L4D_StaggerPlayer(victim, inflictor, NULL_VECTOR);
 			}
