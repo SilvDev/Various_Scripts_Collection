@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.50"
+#define PLUGIN_VERSION 		"1.51"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.51 (17-Jun-2024)
+	- Fixed command "sm_weapons" showing your own held weapon, instead of the targets.
 
 1.50 (05-Mar-2024)
 	- Added a few more "m_h*" variables to read the entity index instead of reference number. Probably only for L4D/2 series.
@@ -610,6 +613,7 @@ public void OnPluginStart()
 	g_hEntityKeys.SetValue("m_reviveTarget", true);
 	g_hEntityKeys.SetValue("m_reviveOwner", true);
 	g_hEntityKeys.SetValue("m_healTarget", true);
+	g_hEntityKeys.SetValue("m_survivor", true);
 
 	// GameRules net class name
 	switch( g_iEngine )
@@ -2571,7 +2575,7 @@ Action CmdWeapons(int client, int args)
 
 	ReplyToCommand(client, "Showing weapons for: %N", target);
 
-	weapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
+	weapon = GetEntPropEnt(target, Prop_Send, "m_hActiveWeapon");
 	if( weapon != -1 )
 	{
 		GetEdictClassname(weapon, classname, sizeof(classname));
