@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.12"
+#define PLUGIN_VERSION 		"1.13"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.13 (18-Jun-2024)
+	- Fixed errors in L4D1 due to the last updates.
 
 1.12 (17-Jun-2024)
 	- Added support for the "sm_adren" command, which does not fire the "adrenaline_used" event. Thanks to "1337joshi" for reporting.
@@ -288,7 +291,6 @@ void IsAllowed()
 		HookEvent("bot_player_replace",				Event_Swap_User);
 		HookEvent("player_spawn",					Event_PlayerSpawn);
 		HookEvent("player_death",					Event_PlayerDeath);
-		HookEvent("defibrillator_used",             Event_PlayerDefib);
 		HookEvent("player_incapacitated",			Event_Incapped);
 		HookEvent("revive_success",					Event_Revived);
 		HookEvent("heal_success",					Event_Healed);
@@ -299,6 +301,7 @@ void IsAllowed()
 
 		if( g_bLeft4Dead2 )
 		{
+			HookEvent("defibrillator_used",			Event_PlayerDefib);
 			HookEvent("charger_carry_start",		Event_Start);
 			HookEvent("charger_carry_end",			Event_Stop);
 			HookEvent("charger_pummel_start",		Event_Start);
@@ -318,7 +321,6 @@ void IsAllowed()
 		UnhookEvent("bot_player_replace",			Event_Swap_User);
 		UnhookEvent("player_spawn",					Event_PlayerSpawn);
 		UnhookEvent("player_death",					Event_PlayerDeath);
-		UnhookEvent("defibrillator_used",           Event_PlayerDefib);
 		UnhookEvent("player_incapacitated",			Event_Incapped);
 		UnhookEvent("revive_success",				Event_Revived);
 		UnhookEvent("heal_success",					Event_Healed);
@@ -329,6 +331,7 @@ void IsAllowed()
 
 		if( g_bLeft4Dead2 )
 		{
+			UnhookEvent("defibrillator_used",		Event_PlayerDefib);
 			UnhookEvent("charger_carry_start",		Event_Start);
 			UnhookEvent("charger_carry_end",		Event_Stop);
 			UnhookEvent("charger_pummel_start",		Event_Start);
