@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.13"
+#define PLUGIN_VERSION 		"1.14"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.14 (04-Aug-2024)
+	- Added support for the "Emergency Treatment With First Aid Kit And CPR" plugin. Thanks to "sonic155" for reporting.
 
 1.13 (18-Jun-2024)
 	- Fixed errors in L4D1 due to the last updates.
@@ -91,8 +94,8 @@
 #define CVAR_FLAGS			FCVAR_NOTIFY
 
 
-ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarAdren, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarIncap, g_hCvarRemove, g_hCvarSpecial, g_hCvarStrike;
-int g_iCvarIncap, g_iCvarSpecial, g_iCvarStrike;
+ConVar g_hCvarAllow, g_hCvarMPGameMode, g_hCvarAdren, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarIncap, g_hCvarRemove, g_hCvarSpecial, g_hCvarStrike, g_hCvarMaxIncap;
+int g_iCvarIncap, g_iCvarSpecial, g_iCvarStrike, g_iCvarMaxIncap;
 bool g_bCvarAllow, g_bCvarRemove, g_bLeft4Dead2;
 float g_fCvarAdren;
 bool g_bSetDSP[MAXPLAYERS+1];
@@ -157,6 +160,7 @@ public void OnPluginStart()
 		g_hCvarRemove.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarSpecial.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarStrike.AddChangeHook(ConVarChanged_Cvars);
+	g_hCvarMaxIncap = FindConVar("survivor_max_incapacitated_count");
 	AddCommandListener(CommandListener, "give");
 
 	if( g_bLeft4Dead2 )
@@ -270,6 +274,7 @@ void GetCvars()
 		g_bCvarRemove = g_hCvarRemove.BoolValue;
 	g_iCvarSpecial = g_hCvarSpecial.IntValue;
 	g_iCvarStrike = g_hCvarStrike.IntValue;
+	g_iCvarMaxIncap = g_hCvarMaxIncap.IntValue;
 
 	if( g_bLeft4Dead2 )
 	{
@@ -394,6 +399,22 @@ bool IsAllowedGameMode()
 	}
 
 	return true;
+}
+
+
+
+// ====================================================================================================
+//					FORWARD - from "Emergency Treatment With First Aid Kit And CPR" plugin by "Dragokas"
+// ====================================================================================================
+public void OnClientCPR(int client, int subject, bool bUseMedkit)
+{
+	if( g_iCvarIncap || g_iCvarStrike )
+	{
+		if( GetEntProp(subject, Prop_Send, "m_currentReviveCount") >= g_iCvarMaxIncap )
+		{
+			RequestFrame(OnFrameRevive, GetClientUserId(subject));
+		}
+	}
 }
 
 
