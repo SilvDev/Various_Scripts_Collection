@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.6"
+#define PLUGIN_VERSION 		"1.7"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.7 (04-Aug-2024)
+	- Attempt to fix players teleporting after staggering. Thanks to "3ipKa" for reporting.
 
 1.6 (17-Jun-2024)
 	- Fixed the Charger releasing survivors after pummel. Thanks to "JustMadMan" for reporting.
@@ -66,6 +69,7 @@
 #pragma newdecls required
 
 #include <sourcemod>
+#include <sdktools>
 #include <left4dhooks>
 
 #define CVAR_FLAGS			FCVAR_NOTIFY
@@ -481,6 +485,7 @@ public Action L4D_OnMotionControlledXY(int client, int activity)
 
 		SetAttack(client);
 		g_bStagger[client] = true;
+		TeleportPlayer(client);
 		return Plugin_Handled;
 	}
 	else
@@ -525,6 +530,7 @@ public Action L4D_OnMotionControlledXY(int client, int activity)
 			RequestFrame(OnFrameStagger, GetClientUserId(client));
 
 			SetAttack(client);
+			TeleportPlayer(client);
 			return Plugin_Handled;
 		}
 
@@ -533,12 +539,14 @@ public Action L4D_OnMotionControlledXY(int client, int activity)
 			g_fTimeBlock[client] = GetGameTime() + 0.5;
 
 			SetAttack(client);
+			TeleportPlayer(client);
 			return Plugin_Handled;
 		}
 
 		if( g_fTimeBlock[client] - GetGameTime() > 0.0 )
 		{
 			SetAttack(client);
+			TeleportPlayer(client);
 			return Plugin_Handled;
 		}
 	}
@@ -546,10 +554,18 @@ public Action L4D_OnMotionControlledXY(int client, int activity)
 	if( g_bBlockXY[client] )
 	{
 		SetAttack(client);
+		TeleportPlayer(client);
 		return Plugin_Handled;
 	}
 
 	return Plugin_Continue;
+}
+
+void TeleportPlayer(int client)
+{
+	float vPos[3];
+	GetClientAbsOrigin(client, vPos);
+	TeleportEntity(client, vPos, NULL_VECTOR, NULL_VECTOR);
 }
 
 public Action L4D2_OnStagger(int client, int source)
