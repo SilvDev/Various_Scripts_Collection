@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.7"
+#define PLUGIN_VERSION 		"1.8"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.8 (06-Aug-2024)
+	- Reverted changes from the previous plugin update.
 
 1.7 (04-Aug-2024)
 	- Attempt to fix players teleporting after staggering. Thanks to "3ipKa" for reporting.
@@ -485,7 +488,7 @@ public Action L4D_OnMotionControlledXY(int client, int activity)
 
 		SetAttack(client);
 		g_bStagger[client] = true;
-		TeleportPlayer(client);
+		// TeleportPlayer(client);
 		return Plugin_Handled;
 	}
 	else
@@ -530,7 +533,7 @@ public Action L4D_OnMotionControlledXY(int client, int activity)
 			RequestFrame(OnFrameStagger, GetClientUserId(client));
 
 			SetAttack(client);
-			TeleportPlayer(client);
+			// TeleportPlayer(client);
 			return Plugin_Handled;
 		}
 
@@ -539,14 +542,14 @@ public Action L4D_OnMotionControlledXY(int client, int activity)
 			g_fTimeBlock[client] = GetGameTime() + 0.5;
 
 			SetAttack(client);
-			TeleportPlayer(client);
+			// TeleportPlayer(client);
 			return Plugin_Handled;
 		}
 
 		if( g_fTimeBlock[client] - GetGameTime() > 0.0 )
 		{
 			SetAttack(client);
-			TeleportPlayer(client);
+			// TeleportPlayer(client);
 			return Plugin_Handled;
 		}
 	}
@@ -554,19 +557,21 @@ public Action L4D_OnMotionControlledXY(int client, int activity)
 	if( g_bBlockXY[client] )
 	{
 		SetAttack(client);
-		TeleportPlayer(client);
+		// TeleportPlayer(client);
 		return Plugin_Handled;
 	}
 
 	return Plugin_Continue;
 }
 
+/*
 void TeleportPlayer(int client)
 {
 	float vPos[3];
 	GetClientAbsOrigin(client, vPos);
 	TeleportEntity(client, vPos, NULL_VECTOR, NULL_VECTOR);
 }
+*/
 
 public Action L4D2_OnStagger(int client, int source)
 {
