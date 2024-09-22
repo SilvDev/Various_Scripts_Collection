@@ -424,7 +424,7 @@ public void OnPluginStart()
 	RegAdminCmd("sm_setang",		CmdSetAng,		ADMFLAG_ROOT, "<#userid|name> <vector ang>. Teleport someone to the x y z angles vector specified. Place ? to ignore an XYZ vector and use the targets current value.");
 	RegAdminCmd("sm_setpos",		CmdSetPos,		ADMFLAG_ROOT, "<#userid|name> <vector pos>. Teleport someone to the x y z origin vector specified. Place ? to ignore an XYZ vector and use the targets current value.");
 	RegAdminCmd("sm_bringents",		CmdBring,		ADMFLAG_ROOT, "<classname> [distance: (default 50)]. Teleport specified entities by classname to around the player. e.g. sm_bringents weapon_rifle.");
-	RegAdminCmd("sm_tele",			CmdTele,		ADMFLAG_ROOT, "<#userid|name> [x y z vecctor pos]. Teleport specified targets to aim location or to the x y z origin vector specified. Place ? to ignore an XYZ vector and use the targets current value.");
+	RegAdminCmd("sm_tele",			CmdTele,		ADMFLAG_ROOT, "<#userid|name> [x y z vector pos]. Teleport specified targets to aim location or to the x y z origin vector specified. Place ? to ignore an XYZ vector and use the targets current value.");
 	RegAdminCmd("sm_tel",			CmdTeleport,	ADMFLAG_ROOT, "<vector pos> [vector ang]. Teleport yourself to the x y z vector specified. Place ? to ignore an XYZ vector and use the targets current value.");
 	RegAdminCmd("sm_range",			CmdRange,		ADMFLAG_ROOT, "[entity] Shows how far away an object is that you're aiming at, or optional arg to specify an entity index.");
 	RegAdminCmd("sm_near",			CmdNear,		ADMFLAG_ROOT, "Lists all nearby entities within the specified range. Usage sm_near: [range].");
