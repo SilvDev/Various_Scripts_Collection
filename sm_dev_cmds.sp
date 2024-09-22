@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.51"
+#define PLUGIN_VERSION 		"1.52"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.52 (22-Sep-2024)
+	- Changed commands "sm_setang", "sm_setpos", "sm_tele" and "sm_tel" to allow placing "?" in any given XYZ vector to ignore and use the current targets value. Requested by "Tonblader".
 
 1.51 (17-Jun-2024)
 	- Fixed command "sm_weapons" showing your own held weapon, instead of the targets.
@@ -145,7 +148,7 @@
 1.23 (11-Aug-2021)
 	- Added commands "sm_bit" and "sm_val" to get and return values from: "1<<20" to "1048576" and "1048577" to "(1<<0); (1<<20)" for example.
 	- Added command "sm_dmg" to return SDKHooks damage flags from a value. For example "sm_dmg 9" returns "DMG_CRUSH (1<<0); DMG_BURN (1<<3)".
-	- Added command "sm_adm" to toggle between ROOT and BAN admin flags (or specified target flags). Requires ROOT to work. E.g: "sm_adm BAN KICK".
+	- Added command "sm_adm" to toggle between ROOT and BAN admin flags (or specified target flags). Requires ROOT to work. e.g: "sm_adm BAN KICK".
 	- Changed command "sm_anim" to watch sequence numbers on every frame and display only when they change, until toggled off.
 
 1.22 (29-Jul-2021)
@@ -418,11 +421,11 @@ public void OnPluginStart()
 	RegAdminCmd("sm_viewr",			CmdViewR,		ADMFLAG_ROOT, "Teleports you to the saved position and eye angles.");
 	RegAdminCmd("sm_pos",			CmdPosition,	ADMFLAG_ROOT, "Displays your position vector.");
 	RegAdminCmd("sm_aimpos",		CmdAimPos,		ADMFLAG_ROOT, "Displays the position vector where your crosshair is aiming.");
-	RegAdminCmd("sm_setang",		CmdSetAng,		ADMFLAG_ROOT, "<#userid|name> <vector ang>. Teleport someone to the x y z angles vector specified.");
-	RegAdminCmd("sm_setpos",		CmdSetPos,		ADMFLAG_ROOT, "<#userid|name> <vector pos>. Teleport someone to the x y z origin vector specified.");
-	RegAdminCmd("sm_bringents",		CmdBring,		ADMFLAG_ROOT, "<classname> [distance: (default 50)]. Teleport specified entities by classname to around the player. E.G. sm_bringents weapon_rifle.");
-	RegAdminCmd("sm_tele",			CmdTele,		ADMFLAG_ROOT, "<#userid|name> [x y z vecctor pos]. Teleport specified targets to aim location or to the x y z origin vector specified.");
-	RegAdminCmd("sm_tel",			CmdTeleport,	ADMFLAG_ROOT, "<vector pos> [vector ang]. Teleport yourself to the x y z vector specified.");
+	RegAdminCmd("sm_setang",		CmdSetAng,		ADMFLAG_ROOT, "<#userid|name> <vector ang>. Teleport someone to the x y z angles vector specified. Place ? to ignore an XYZ vector and use the targets current value.");
+	RegAdminCmd("sm_setpos",		CmdSetPos,		ADMFLAG_ROOT, "<#userid|name> <vector pos>. Teleport someone to the x y z origin vector specified. Place ? to ignore an XYZ vector and use the targets current value.");
+	RegAdminCmd("sm_bringents",		CmdBring,		ADMFLAG_ROOT, "<classname> [distance: (default 50)]. Teleport specified entities by classname to around the player. e.g. sm_bringents weapon_rifle.");
+	RegAdminCmd("sm_tele",			CmdTele,		ADMFLAG_ROOT, "<#userid|name> [x y z vecctor pos]. Teleport specified targets to aim location or to the x y z origin vector specified. Place ? to ignore an XYZ vector and use the targets current value.");
+	RegAdminCmd("sm_tel",			CmdTeleport,	ADMFLAG_ROOT, "<vector pos> [vector ang]. Teleport yourself to the x y z vector specified. Place ? to ignore an XYZ vector and use the targets current value.");
 	RegAdminCmd("sm_range",			CmdRange,		ADMFLAG_ROOT, "[entity] Shows how far away an object is that you're aiming at, or optional arg to specify an entity index.");
 	RegAdminCmd("sm_near",			CmdNear,		ADMFLAG_ROOT, "Lists all nearby entities within the specified range. Usage sm_near: [range].");
 	RegAdminCmd("sm_dist",			CmdDist,		ADMFLAG_ROOT, "Enter twice to measure distance between the origins you stand on.");
@@ -460,8 +463,8 @@ public void OnPluginStart()
 	RegAdminCmd("sm_solid",			CmdSolid,		ADMFLAG_ROOT, "<flags>. Returns the SolidType_t flags from a flag value.");
 	RegAdminCmd("sm_solidf",		CmdSolidF,		ADMFLAG_ROOT, "<flags>. Returns the SolidFlags_t flags from a flag value.");
 	RegAdminCmd("sm_dmg",			CmdDmg,			ADMFLAG_ROOT, "<flags>. Returns the SDKHooks DamageType from a flag value.");
-	RegAdminCmd("sm_val",			CmdVal,			ADMFLAG_ROOT, "<bit value>. E.g: sm_val 1<<20. Returns: 1048576");
-	RegAdminCmd("sm_bit",			CmdBit,			ADMFLAG_ROOT, "<bit value>. E.g: sm_bit 1048577. Returns: (1<<0); (1<<20)");
+	RegAdminCmd("sm_val",			CmdVal,			ADMFLAG_ROOT, "<bit value>. e.g: sm_val 1<<20. Returns: 1048576");
+	RegAdminCmd("sm_bit",			CmdBit,			ADMFLAG_ROOT, "<bit value>. e.g: sm_bit 1048577. Returns: (1<<0); (1<<20)");
 	RegAdminCmd("sm_adm",			CmdAdm,			0, "Toggles between ROOT and BAN admin flags, for testing stuff without ROOT access. Or specified flags e.g. Usage: sm_adm BAN KICK");
 	RegAdminCmd("sm_hexcols",		CmdHexCol,		ADMFLAG_ROOT, "Print a list of hex colors to chat.");
 
@@ -1244,16 +1247,33 @@ Action CmdSetAng(int client, int args)
 
 	int target;
 	float vAng[3];
+	bool x, y, z;
+
 	GetCmdArg(2, arg1, sizeof(arg1));
-	vAng[0] = StringToFloat(arg1);
+	if( strcmp(arg1, "?") == 0 ) x = true;
+	else vAng[0] = StringToFloat(arg1);
+
 	GetCmdArg(3, arg1, sizeof(arg1));
-	vAng[1] = StringToFloat(arg1);
+	if( strcmp(arg1, "?") == 0 ) y = true;
+	else vAng[1] = StringToFloat(arg1);
+
 	GetCmdArg(4, arg1, sizeof(arg1));
-	vAng[2] = StringToFloat(arg1);
+	if( strcmp(arg1, "?") == 0 ) z = true;
+	else vAng[2] = StringToFloat(arg1);
 
 	for( int i = 0; i < target_count; i++ )
 	{
 		target = target_list[i];
+
+		if( x || y || z )
+		{
+			float vVec[3];
+			GetEntPropVector(target, Prop_Data, "m_angRotation", vVec);
+			if( x ) vAng[0] = vVec[0];
+			if( y ) vAng[1] = vVec[1];
+			if( z ) vAng[2] = vVec[2];
+		}
+
 		TeleportEntity(target, NULL_VECTOR, vAng, view_as<float>({ 0.0, 0.0, 0.0}));
 	}
 
@@ -1296,16 +1316,33 @@ Action CmdSetPos(int client, int args)
 
 	int target;
 	float vPos[3];
+	bool x, y, z;
+
 	GetCmdArg(2, arg1, sizeof(arg1));
-	vPos[0] = StringToFloat(arg1);
+	if( strcmp(arg1, "?") == 0 ) x = true;
+	else vPos[0] = StringToFloat(arg1);
+
 	GetCmdArg(3, arg1, sizeof(arg1));
-	vPos[1] = StringToFloat(arg1);
+	if( strcmp(arg1, "?") == 0 ) y = true;
+	else vPos[1] = StringToFloat(arg1);
+
 	GetCmdArg(4, arg1, sizeof(arg1));
-	vPos[2] = StringToFloat(arg1);
+	if( strcmp(arg1, "?") == 0 ) z = true;
+	else vPos[2] = StringToFloat(arg1);
 
 	for( int i = 0; i < target_count; i++ )
 	{
 		target = target_list[i];
+
+		if( x || y || z )
+		{
+			float vVec[3];
+			GetEntPropVector(target, Prop_Data, "m_vecAbsOrigin", vVec);
+			if( x ) vPos[0] = vVec[0];
+			if( y ) vPos[1] = vVec[1];
+			if( z ) vPos[2] = vVec[2];
+		}
+
 		TeleportEntity(target, vPos, NULL_VECTOR, view_as<float>({ 0.0, 0.0, 0.0}));
 	}
 
@@ -1396,31 +1433,82 @@ Action CmdTeleport(int client, int args)
 	char arg[16];
 	if( args == 6 )
 	{
+		bool x, y, z;
+
 		GetCmdArg(1, arg, sizeof(arg));
-		vPos[0] = StringToFloat(arg);
+		if( strcmp(arg, "?") == 0 ) x = true;
+		else vPos[0] = StringToFloat(arg);
+
 		GetCmdArg(2, arg, sizeof(arg));
-		vPos[1] = StringToFloat(arg);
+		if( strcmp(arg, "?") == 0 ) y = true;
+		else vPos[1] = StringToFloat(arg);
+
 		GetCmdArg(3, arg, sizeof(arg));
-		vPos[2] = StringToFloat(arg);
+		if( strcmp(arg, "?") == 0 ) z = true;
+		else vPos[2] = StringToFloat(arg);
+
+		if( x || y || z )
+		{
+			float vVec[3];
+			GetEntPropVector(client, Prop_Data, "m_vecAbsOrigin", vVec);
+			if( x ) vPos[0] = vVec[0];
+			if( y ) vPos[1] = vVec[1];
+			if( z ) vPos[2] = vVec[2];
+			x = false;
+			y = false;
+			z = false;
+		}
 
 		float vAng[3];
+
 		GetCmdArg(4, arg, sizeof(arg));
-		vAng[0] = StringToFloat(arg);
+		if( strcmp(arg, "?") == 0 ) x = true;
+		else vAng[0] = StringToFloat(arg);
+
 		GetCmdArg(5, arg, sizeof(arg));
-		vAng[1] = StringToFloat(arg);
+		if( strcmp(arg, "?") == 0 ) y = true;
+		else vAng[1] = StringToFloat(arg);
+
 		GetCmdArg(6, arg, sizeof(arg));
-		vAng[2] = StringToFloat(arg);
+		if( strcmp(arg, "?") == 0 ) z = true;
+		else vAng[2] = StringToFloat(arg);
+
+		if( x || y || z )
+		{
+			float vVec[3];
+			GetEntPropVector(client, Prop_Data, "m_angRotation", vVec);
+			if( x ) vAng[0] = vVec[0];
+			if( y ) vAng[1] = vVec[1];
+			if( z ) vAng[2] = vVec[2];
+		}
+
 		TeleportEntity(client, vPos, vAng, NULL_VECTOR);
 		return Plugin_Handled;
 	}
 	else if( args == 3 )
 	{
+		bool x, y, z;
+
 		GetCmdArg(1, arg, sizeof(arg));
-		vPos[0] = StringToFloat(arg);
+		if( strcmp(arg, "?") == 0 ) x = true;
+		else vPos[0] = StringToFloat(arg);
+
 		GetCmdArg(2, arg, sizeof(arg));
-		vPos[1] = StringToFloat(arg);
+		if( strcmp(arg, "?") == 0 ) y = true;
+		else vPos[1] = StringToFloat(arg);
+
 		GetCmdArg(3, arg, sizeof(arg));
-		vPos[2] = StringToFloat(arg);
+		if( strcmp(arg, "?") == 0 ) z = true;
+		else vPos[2] = StringToFloat(arg);
+
+		if( x || y || z )
+		{
+			float vVec[3];
+			GetEntPropVector(client, Prop_Data, "m_vecAbsOrigin", vVec);
+			if( x ) vPos[0] = vVec[0];
+			if( y ) vPos[1] = vVec[1];
+			if( z ) vPos[2] = vVec[2];
+		}
 	}
 	else if( args == 1 )
 	{
@@ -1477,16 +1565,21 @@ Action CmdTele(int client, int args)
 	}
 
 	float vPos[3];
+	bool x, y, z;
+
 	if( args == 4 )
 	{
 		GetCmdArg(2, arg1, sizeof(arg1));
-		vPos[0] = StringToFloat(arg1);
+		if( strcmp(arg1, "?") == 0 ) x = true;
+		else vPos[0] = StringToFloat(arg1);
 
 		GetCmdArg(3, arg1, sizeof(arg1));
-		vPos[1] = StringToFloat(arg1);
+		if( strcmp(arg1, "?") == 0 ) y = true;
+		else vPos[1] = StringToFloat(arg1);
 
 		GetCmdArg(4, arg1, sizeof(arg1));
-		vPos[2] = StringToFloat(arg1);
+		if( strcmp(arg1, "?") == 0 ) z = true;
+		else vPos[2] = StringToFloat(arg1);
 	} else {
 		SetTeleportEndPoint(client, vPos);
 	}
@@ -1495,6 +1588,15 @@ Action CmdTele(int client, int args)
 	for( int i = 0; i < target_count; i++ )
 	{
 		target = target_list[i];
+
+		if( x || y || z )
+		{
+			float vVec[3];
+			GetEntPropVector(target, Prop_Data, "m_vecAbsOrigin", vVec);
+			if( x ) vPos[0] = vVec[0];
+			if( y ) vPos[1] = vVec[1];
+			if( z ) vPos[2] = vVec[2];
+		}
 
 		TeleportEntity(target, vPos, NULL_VECTOR, NULL_VECTOR);
 	}
@@ -3086,7 +3188,7 @@ Action CmdVal(int client, int args)
 {
 	if( args != 1 )
 	{
-		ReplyToCommand(client, "Usage: sm_val <bit value>. E.g: sm_val 1<<20");
+		ReplyToCommand(client, "Usage: sm_val <bit value>. e.g: sm_val 1<<20");
 		return Plugin_Handled;
 	}
 
@@ -3097,7 +3199,7 @@ Action CmdVal(int client, int args)
 	int pos = SplitString(sArg, "<<", sTemp, sizeof(sTemp));
 	if( pos == -1 )
 	{
-		ReplyToCommand(client, "Usage: sm_val <bit value>. E.g: sm_val 1<<20");
+		ReplyToCommand(client, "Usage: sm_val <bit value>. e.g: sm_val 1<<20");
 		return Plugin_Handled;
 	}
 
@@ -3113,7 +3215,7 @@ Action CmdBit(int client, int args)
 {
 	if( args != 1 )
 	{
-		ReplyToCommand(client, "Usage: sm_bit <bit value>. E.g: sm_bit 1048576");
+		ReplyToCommand(client, "Usage: sm_bit <bit value>. e.g: sm_bit 1048576");
 		return Plugin_Handled;
 	}
 
