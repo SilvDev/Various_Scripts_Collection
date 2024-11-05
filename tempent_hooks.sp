@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.4"
+#define PLUGIN_VERSION 		"1.5"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.5 (05-Nov-2024)
+	- Increased string lengths to prevent truncating data being logged. Thanks to "Alienmario" for reporting.
 
 1.4 (28-Jan-2024)
 	- Fixed memory leak caused by clearing StringMap/ArrayList data instead of deleting.
@@ -60,7 +63,7 @@
 #define CONFIG_TE_LIST		"data/tempent_hooks.cfg"
 #define CONFIG_DUMP			"logs/tempent_hooks.log"
 
-#define LEN_CLASS			32 // Max TempEnt name string length
+#define LEN_CLASS			64 // Max TempEnt name string length - Seems to be 32 in some games and 64 in others maybe.
 
 
 ConVar g_hCvarFilter, g_hCvarListen, g_hCvarLogging;
@@ -352,7 +355,7 @@ Action Hooked_TempEnts(const char[] te_name, const int[] Players, int numClients
 		int type;
 		static float vVec[3];
 		static char temp[LEN_CLASS];
-		static char msg[512];
+		static char msg[1024];
 		msg[0] = 0;
 
 		for( int i = 0; i < aHand.Length; i += 2 )
