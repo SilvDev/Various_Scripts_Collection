@@ -1,6 +1,6 @@
 /*
 *	Reload Interrupt
-*	Copyright (C) 2022 Silvers
+*	Copyright (C) 2024 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.12"
+#define PLUGIN_VERSION 		"1.14"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,12 @@
 
 ========================================================================================
 	Change Log:
+
+1.14 (05-Nov-2024)
+	- Fixed the plugin not working in Left 4 Dead 1. Thanks to "ZBzibing" for reporting.
+
+1.13 (17-Jun-2024)
+	- Fixed shotguns losing ammo in L4D1 or clip size increasing.
 
 1.12 (03-Dec-2022)
 	- Fixed unknown sound errors in console. Thanks to "TBK Duy" for reporting.
@@ -95,6 +101,7 @@ int g_iLastClip[MAXPLAYERS+1];
 int g_iLastHook[MAXPLAYERS+1];
 int g_iWasShoot[MAXPLAYERS+1];
 int g_iAutoReload[MAXPLAYERS+1];
+float g_fFrames[MAXPLAYERS+1];
 
 StringMap g_hWeaponClasses;
 StringMap g_hWeaponAllowed;
@@ -660,7 +667,12 @@ void OnSwitchWeapon(int client, int weapon)
 		offset = GetEntData(weapon, g_iPrimaryAmmoType) * 4; // Thanks to "Root" or whoever for this method of not hard-coding offsets: https://github.com/zadroot/AmmoManager/blob/master/scripting/ammo_manager.sp
 		if( offset && (!g_bLeft4Dead2 || offset != 68) )
 		{
-			g_iAutoReload[client] = (offset == 28 || offset == 32) ? 3 : 1;
+			switch( g_bLeft4Dead2 )
+			{
+				case true: g_iAutoReload[client] = (offset == 28 || offset == 32) ? 3 : 1;
+				case false: g_iAutoReload[client] = offset == 24 ? 3 : 1;
+			}
+
 			g_iLastHook[client] = EntIndexToEntRef(weapon);
 			if( g_bLeft4Dead2 )
 				SDKHook(weapon, SDKHook_Reload, OnReload);
@@ -678,6 +690,10 @@ void OnSwitchWeapon(int client, int weapon)
 void OnReload(int weapon)
 {
 	int client = GetEntPropEnt(weapon, Prop_Send, "m_hOwner");
+	if( g_fFrames[client] == GetGameTime() )
+		return;
+	else
+		g_fFrames[client] = GetGameTime();
 
 	if( g_iAutoReload[client] == 3 ) // Shotguns don't store clip size, they don't reset to 0 on reload
 	{
