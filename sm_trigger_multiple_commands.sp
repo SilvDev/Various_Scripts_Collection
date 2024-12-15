@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION		"1.10"
+#define PLUGIN_VERSION		"1.11"
 #define DEBUG_LOGGING		false
 
 /*=======================================================================================
@@ -32,6 +32,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.11 (15-Dec-2024)
+	- Fixed delayed commands not always working. Thanks to "PVNDV" for fixing.
 
 1.10 (16-May-2024)
 	- Added the "Bots or Players activate" option to the edit menu.
@@ -2707,7 +2710,6 @@ void OnStartTouch(const char[] output, int caller, int activator, float delay)
 
 							return;
 						}
-
 					}
 
 					bool bot = IsFakeClient(activator);
@@ -2740,10 +2742,16 @@ void OnStartTouch(const char[] output, int caller, int activator, float delay)
 							executed = true;
 							if( g_fDelayTime[i] > 0.0 )
 							{
-								CreateTimer(g_fDelayTime[i], TimerExecuteCommand, GetClientUserId(activator) | (i << 7));
-							} else {
+								DataPack pack;
+							
+								CreateDataTimer(g_fDelayTime[i], TimerExecuteCommand, pack);
+								pack.WriteCell(GetClientUserId(activator));
+								pack.WriteCell(i);
+							}
+							else
+							{
 								ExecuteCommand(activator, i);
-
+								
 								#if DEBUG_LOGGING
 								LogData("===============");
 								LogData("[%d] Executing command (unlimited refires), Player: %d (%N)", i, i + 1, activator, activator);
@@ -2783,10 +2791,16 @@ void OnStartTouch(const char[] output, int caller, int activator, float delay)
 									executed = true;
 									if( g_fDelayTime[i] > 0.0 )
 									{
-										CreateTimer(g_fDelayTime[i], TimerExecuteCommand, GetClientUserId(activator) | (i << 7));
-									} else {
+										DataPack pack;
+									
+										CreateDataTimer(g_fDelayTime[i], TimerExecuteCommand, pack);
+										pack.WriteCell(GetClientUserId(activator));
+										pack.WriteCell(i);
+									} 
+									else 
+									{
 										ExecuteCommand(activator, i);
-
+										
 										#if DEBUG_LOGGING
 										LogData("===============");
 										LogData("[%d] Executing command (limited triggers %d of %d), index: %d. Player: %d (%N) [%s]", i, fired + 1, g_iRefireCount[i], i + 1, activator, activator, g_sCommand[i]);
@@ -2921,17 +2935,17 @@ void TriggerEvent(int type)
 	}
 }
 
-Action TimerExecuteCommand(Handle timer, int bits)
+Action TimerExecuteCommand(Handle timer, DataPack pack)
 {
-	int client = bits & 0x7F;
-	int index = bits >> 7;
+	pack.Reset();
 
-	client = GetClientOfUserId(client);
-
+	int client = GetClientOfUserId(pack.ReadCell());
+	
 	if( client && IsClientInGame(client) )
 	{
+		int index = pack.ReadCell();
 		ExecuteCommand(client, index);
-
+		
 		#if DEBUG_LOGGING
 		LogData("===============");
 		LogData("[%d] Executing command (delayed), Player: %d (%N)", index, client, client);
