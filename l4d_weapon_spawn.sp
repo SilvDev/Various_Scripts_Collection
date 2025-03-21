@@ -1,6 +1,6 @@
 /*
 *	Weapon Spawn
-*	Copyright (C) 2024 Silvers
+*	Copyright (C) 2025 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.15"
+#define PLUGIN_VERSION 		"1.16"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.16 (21-Mar-2025)
+	- Fixed the M60 spawning a Scout weapon when the "_count" cvar was not set to 1. Thanks to "Mizuki" for reporting.
 
 1.15 (25-Mar-2024)
 	- Changes to fix conflicts with the "ConVars Anomaly Fixer" plugin. Thanks to "komikoza" for reporting and testing.
@@ -671,7 +674,7 @@ void Event_PlayerUse(Event event, const char[] name, bool dontBroadcast)
 
 		int type;
 
-		if( strncmp(classname, "weapon_rifle_m60", 16) == 0 )				type = 16;
+		if( strncmp(classname, "weapon_rifle_m60", 16) == 0 )				type = 17;
 		else if( strncmp(classname, "weapon_grenade_launcher", 23) == 0 )	type = 18;
 		else if( strncmp(classname, "weapon_chainsaw", 15) == 0 )			type = 19;
 
@@ -954,7 +957,10 @@ void CreateSpawn(const float vOrigin[3], const float vAngles[3], int index = 0, 
 	// Save M60, Grenade Launcher and Chainsaw spawn counts
 	if( g_bLeft4Dead2 && iCount != 1 && (model == 17 || model == 18 || model == 19) )
 	{
-		g_iSpawns[iSpawnIndex][2] = respawn_count != -1 ? respawn_count : iCount;
+		if( iCount == 0 )
+			g_iSpawns[iSpawnIndex][2] = 999;
+		else
+			g_iSpawns[iSpawnIndex][2] = respawn_count != -1 ? respawn_count : iCount;
 	}
 
 	g_iSpawns[iSpawnIndex][0] = EntIndexToEntRef(entity_weapon);
