@@ -1,6 +1,6 @@
 /*
 *	Heartbeat (Revive Fix - Post Revive Options)
-*	Copyright (C) 2024 Silvers
+*	Copyright (C) 2025 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.16"
+#define PLUGIN_VERSION 		"1.17"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.17 (21-May-2025)
+	- Fixed client not in game errors. Thanks to "ioioio" for reporting.
 
 1.16 (21-Apr-2024)
 	- Fixed revive count increasing by 2 instead of 1 under certain circumstances. Thanks to "S.A.S" for reporting.
@@ -107,7 +110,7 @@
 #define DEBUG				0
 
 #if DEBUG
-// #include <left4dhooks>
+#include <left4dhooks>
 #endif
 
 
@@ -287,7 +290,7 @@ public void OnPluginStart()
 #if DEBUG
 Action CmdTempHealth(int client, int args)
 {
-	FindConVar("pain_pills_decay_rate").FloatValue = 0.0;
+	g_hCvarDecay.FloatValue = 0.0;
 
 	L4D_ReviveSurvivor(client);
 
@@ -828,7 +831,7 @@ void ResetSoundObs(int client)
 void OnFrameSound(int client)
 {
 	client = GetClientOfUserId(client);
-	if( client )
+	if( client && IsClientInGame(client) )
 	{
 		ResetSound(client);
 	}
@@ -843,7 +846,7 @@ void ResetSound(int client)
 Action TimerSound(Handle timer, int client)
 {
 	client = GetClientOfUserId(client);
-	if( client )
+	if( client && IsClientInGame(client) )
 	{
 		EmitSoundToClient(client, SOUND_HEART, SOUND_FROM_PLAYER, SNDCHAN_STATIC);
 	}
