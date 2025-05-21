@@ -1,6 +1,6 @@
 /*
 *	Glare
-*	Copyright (C) 2024 Silvers
+*	Copyright (C) 2025 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"2.15"
+#define PLUGIN_VERSION 		"2.16"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+2.16 (21-May-2025)
+	- Added checks to prevent creating Glare beams on clients who don't have access to the "sm_glare" command. Requested by "SotName".
 
 2.15 (10-Jan-2024)
 	- Fixed the saved color not restoring on connection when the cookies are loaded early. Thanks to "Voevoda" for reporting.
@@ -152,7 +155,7 @@
 
 
 ConVar g_hCvarAllow, g_hCvarAlpha, g_hCvarBots, g_hCvarColor, g_hCvarCustom, g_hCvarDefault, g_hCvarHalo, g_hCvarLength, g_hCvarMPGameMode, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarTransmit, g_hCvarWidth;
-int g_iCvarAlpha, g_iCvarBots, g_iCvarColor, g_iCvarCustom, g_iCvarDefault, g_iCvarLength, g_iCvarTransmit, g_iCvarWidth;
+int g_iCvarAlpha, g_iCvarBots, g_iCvarColor, g_iCvarCustom, g_iCvarDefault, g_iCvarLength, g_iCvarTransmit, g_iCvarWidth, g_iCommandCheck;
 bool g_bCvarAllow, g_bMapStarted, g_bLateLoad, g_bLeft4Dead2, g_bAttachments;
 float g_fCvarHalo;
 Handle g_hCookie;
@@ -375,6 +378,8 @@ public void OnClientCookiesCached(int client)
 {
 	if( g_iCvarCustom == 2 && !IsFakeClient(client) )
 	{
+		if( !HasClientAccess(client) ) return;
+
 		char sCookie[10];
 		GetClientCookie(client, g_hCookie, sCookie, sizeof(sCookie));
 
@@ -422,7 +427,14 @@ Action CmdGlare(int client, int args)
 	{
 		ReplyToCommand(client, "Command can only be used %s", IsDedicatedServer() ? "in game on a dedicated server." : "in chat on a Listen server.");
 	}
-	else if( args == 0 )
+
+	if( !HasClientAccess(client) )
+	{
+		ReplyToCommand(client, "[SM] %T.", "No Access", client);
+		return Plugin_Handled;
+	}
+
+	if( args == 0 )
 	{
 		g_hMenu.Display(client, 0);
 	}
@@ -612,6 +624,7 @@ public void OnMapStart()
 public void OnMapEnd()
 {
 	g_bMapStarted = false;
+	g_iCommandCheck = 0;
 	OnPluginEnd();
 }
 
@@ -1169,6 +1182,8 @@ Action TimerCreate(Handle timer, int client)
 
 	if( IsClientInGame(client) )
 	{
+		if( !IsFakeClient(client) && !HasClientAccess(client) ) return Plugin_Continue;
+
 		CreateBeam(client);
 	}
 
@@ -1261,4 +1276,22 @@ bool IsValidEntRef(int entity)
 	if( entity && EntRefToEntIndex(entity) != INVALID_ENT_REFERENCE )
 		return true;
 	return false;
+}
+
+bool HasClientAccess(int client)
+{
+	if( g_iCommandCheck == 0 ) // Prevent constantly checking clients for access if no override is found on each map change
+	{
+		int flags;
+		GetCommandOverride("sm_glare", Override_Command, flags);
+
+		if( flags )
+			g_iCommandCheck = 1;
+		else
+			g_iCommandCheck = 2;
+	}
+
+	if( g_iCommandCheck == 2 ) return true;
+
+	return CheckCommandAccess(client, "sm_glare", 0);
 }
