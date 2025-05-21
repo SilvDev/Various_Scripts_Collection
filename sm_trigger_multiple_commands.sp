@@ -1,6 +1,6 @@
 /*
 *	Trigger Multiple Commands
-*	Copyright (C) 2024 Silvers
+*	Copyright (C) 2025 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION		"1.11"
+#define PLUGIN_VERSION		"1.12"
 #define DEBUG_LOGGING		false
 
 /*=======================================================================================
@@ -32,6 +32,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.12 (21-May-2025)
+	- Fixed delayed commands triggering after a round restart or map change. Thanks to "Tighty-Whitey" for reporting.
 
 1.11 (15-Dec-2024)
 	- Fixed delayed commands not always working. Thanks to "PVNDV" for fixing.
@@ -128,6 +131,7 @@ int g_iChance[MAX_ENTITIES], g_iCmdData[MAX_ENTITIES], g_iCmdTrig[MAX_ENTITIES],
 bool g_bStopEnd[MAX_ENTITIES];
 char g_sCommand[MAX_ENTITIES][CMD_MAX_LENGTH], g_sMaterialBeam[PLATFORM_MAX_PATH], g_sMaterialHalo[PLATFORM_MAX_PATH], g_sModelBox[PLATFORM_MAX_PATH];
 float g_fDelayTime[MAX_ENTITIES], g_fRefireTime[MAX_ENTITIES];
+ArrayList g_hDelayedTimers;
 
 enum
 {
@@ -293,6 +297,7 @@ public void OnPluginStart()
 	g_hCvarHalo.AddChangeHook(ConVarChanged_Cvars);
 	g_hCvarRefire.AddChangeHook(ConVarChanged_Cvars);
 
+	g_hDelayedTimers = new ArrayList();
 
 	char sTemp[64];
 
@@ -699,6 +704,8 @@ void ResetPlugin()
 
 		delete g_hTimerEnable[i];
 	}
+
+	DeleteTimers();
 }
 
 
@@ -2743,15 +2750,17 @@ void OnStartTouch(const char[] output, int caller, int activator, float delay)
 							if( g_fDelayTime[i] > 0.0 )
 							{
 								DataPack pack;
-							
-								CreateDataTimer(g_fDelayTime[i], TimerExecuteCommand, pack);
+
+								Handle timer = CreateDataTimer(g_fDelayTime[i], TimerExecuteCommand, pack);
+								g_hDelayedTimers.Push(timer);
+
 								pack.WriteCell(GetClientUserId(activator));
 								pack.WriteCell(i);
 							}
 							else
 							{
 								ExecuteCommand(activator, i);
-								
+
 								#if DEBUG_LOGGING
 								LogData("===============");
 								LogData("[%d] Executing command (unlimited refires), Player: %d (%N)", i, i + 1, activator, activator);
@@ -2792,15 +2801,17 @@ void OnStartTouch(const char[] output, int caller, int activator, float delay)
 									if( g_fDelayTime[i] > 0.0 )
 									{
 										DataPack pack;
-									
-										CreateDataTimer(g_fDelayTime[i], TimerExecuteCommand, pack);
+
+										Handle timer = CreateDataTimer(g_fDelayTime[i], TimerExecuteCommand, pack);
+										g_hDelayedTimers.Push(timer);
+
 										pack.WriteCell(GetClientUserId(activator));
 										pack.WriteCell(i);
 									} 
 									else 
 									{
 										ExecuteCommand(activator, i);
-										
+
 										#if DEBUG_LOGGING
 										LogData("===============");
 										LogData("[%d] Executing command (limited triggers %d of %d), index: %d. Player: %d (%N) [%s]", i, fired + 1, g_iRefireCount[i], i + 1, activator, activator, g_sCommand[i]);
@@ -2935,17 +2946,35 @@ void TriggerEvent(int type)
 	}
 }
 
+void DeleteTimers()
+{
+	int length = g_hDelayedTimers.Length;
+	Handle aTimer;
+
+	for( int i = 0; i < length; i++ )
+	{
+		aTimer = g_hDelayedTimers.Get(i);
+		delete aTimer;
+	}
+
+	delete g_hDelayedTimers;
+	g_hDelayedTimers = new ArrayList();
+}
+
 Action TimerExecuteCommand(Handle timer, DataPack pack)
 {
+	int x = g_hDelayedTimers.FindValue(timer);
+	if( x != -1 ) g_hDelayedTimers.Erase(x);
+
 	pack.Reset();
 
 	int client = GetClientOfUserId(pack.ReadCell());
-	
+
 	if( client && IsClientInGame(client) )
 	{
 		int index = pack.ReadCell();
 		ExecuteCommand(client, index);
-		
+
 		#if DEBUG_LOGGING
 		LogData("===============");
 		LogData("[%d] Executing command (delayed), Player: %d (%N)", index, client, client);
