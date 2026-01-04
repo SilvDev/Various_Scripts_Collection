@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.14"
+#define PLUGIN_VERSION 		"1.15"
 
 /*======================================================================================
 	Plugin Info:
@@ -1727,4 +1727,5 @@ bool IsPinned(int client)
 		GetEntPropEnt(client, Prop_Send, "m_tongueOwner") > 0 )
 		return true;
 	return false;
+
 }
