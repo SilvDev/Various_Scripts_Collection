@@ -1,6 +1,6 @@
 /*
 *	Healing Cola
-*	Copyright (C) 2022 Silvers
+*	Copyright (C) 2026 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.15 (04-Jan-2026)
+	- Replaced "SortIntegers" and "Sort_Random" with "SortCustom" to truly randomize spawn selection. Thanks to "Tighty-Whitey" for reporting.
 
 1.14 (03-Oct-2022)
 	- Added cvar "l4d2_cola_time" to control how often to heal someone holding a gnome.
@@ -913,7 +916,7 @@ void LoadColas()
 		for( int i = 1; i <= iCount; i++ )
 			iIndexes[i-1] = i;
 
-		SortIntegers(iIndexes, iCount, Sort_Random);
+		SortCustom(iIndexes, iCount);
 		iCount = iRandom;
 	}
 
@@ -1652,6 +1655,19 @@ void HealPlayer(int client)
 	FakeClientCommand(client, "give health");
 	SetUserFlagBits(client, bits);
 	SetCommandFlags("give", flags);
+}
+
+void SortCustom(int [] arr, int count)
+{
+	int x, temp;
+
+	for( int i = count - 1; i > 0; i-- )
+	{
+		x = RoundToFloor(GetURandomFloat() * (i + 1));
+		temp = arr[i];
+		arr[i] = arr[x];
+		arr[x] = temp;
+	}
 }
 
 
