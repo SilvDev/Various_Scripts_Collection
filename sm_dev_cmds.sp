@@ -32,7 +32,7 @@
 ========================================================================================
 	Change Log:
 
-1.53 (29-Jan-2026)
+1.53 (17-Feb-2026)
 	- L4D/2: Added command "sm_temp" to set temporary health on a player.
 	- Fixed throwing errors for games which have no "m_iHammerID". Thanks to "caxanga334" for reporting.
 
@@ -5367,3 +5367,4 @@ void LogCustom(const char[] format, any ...)
 	FlushFile(file);
 	delete file;
 }
+
