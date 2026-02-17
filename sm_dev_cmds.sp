@@ -1,6 +1,6 @@
 /*
 *	Dev Cmds
-*	Copyright (C) 2024 Silvers
+*	Copyright (C) 2026 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.52"
+#define PLUGIN_VERSION 		"1.53"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,10 @@
 
 ========================================================================================
 	Change Log:
+
+1.53 (29-Jan-2026)
+	- L4D/2: Added command "sm_temp" to set temporary health on a player.
+	- Fixed throwing errors for games which have no "m_iHammerID". Thanks to "caxanga334" for reporting.
 
 1.52 (22-Sep-2024)
 	- Changed commands "sm_setang", "sm_setpos", "sm_tele" and "sm_tel" to allow placing "?" in any given XYZ vector to ignore and use the current targets value. Requested by "Tonblader".
@@ -494,6 +498,7 @@ public void OnPluginStart()
 		RegAdminCmd("sm_lobby",			CmdLobby,		0,	"Starts a vote return to lobby.");
 		RegAdminCmd("sm_ledge",			CmdLedge,		ADMFLAG_ROOT, "Enables/Disables ledge hanging.");
 		RegAdminCmd("sm_spit",			CmdSpit,		ADMFLAG_ROOT, "[#userid|name] Toggles spitter goo dribble on self (with no args) or specified targets.");
+		RegAdminCmd("sm_temp",			CmdTemp,		ADMFLAG_ROOT, "<#userid|name> <amount> Set temporary health on a client.");
 
 		RegAdminCmd("sm_alloff",		CmdAll,			ADMFLAG_ROOT, "Toggles - AI director on/off, z_common_limit, sb_hold.");
 		RegAdminCmd("sm_director",		CmdDirector,	ADMFLAG_ROOT, "Toggles - AI director on/off.");
@@ -2042,8 +2047,9 @@ Action CmdEnt(int client, int args)
 		char sModel[128];
 		GetEntPropString(entity, Prop_Data, "m_ModelName", sModel, sizeof(sModel));
 
-		int iHammerID;
-		iHammerID = GetEntProp(entity, Prop_Data, "m_iHammerID");
+		int iHammerID = -1;
+		if( HasEntProp(entity, Prop_Data, "m_iHammerID") )
+			iHammerID = GetEntProp(entity, Prop_Data, "m_iHammerID");
 
 		float vPos[3];
 		GetEntPropVector(entity, Prop_Data, "m_vecOrigin", vPos);
@@ -2090,8 +2096,9 @@ Action CmdEntE(int client, int args)
 		char sModel[128];
 		GetEntPropString(entity, Prop_Data, "m_ModelName", sModel, sizeof(sModel));
 
-		int iHammerID;
-		iHammerID = GetEntProp(entity, Prop_Data, "m_iHammerID");
+		int iHammerID = -1;
+		if( HasEntProp(entity, Prop_Data, "m_iHammerID") )
+			iHammerID = GetEntProp(entity, Prop_Data, "m_iHammerID");
 
 		float vPos[3];
 		GetEntPropVector(entity, Prop_Data, "m_vecOrigin", vPos);
@@ -3071,6 +3078,7 @@ Action CmdDamage(int client, int args)
 		if( client ) PrintToChat(client, "\x04[Damage Info]\x01 enabled!");
 		else ReplyToCommand(client, "[Damage Info] enabled!");
 	}
+
 	g_bDamage = !g_bDamage;
 	return Plugin_Handled;
 }
@@ -3095,7 +3103,7 @@ Action CmdSolid(int client, int args)
 		case view_as<int>(SOLID_BBOX):							sTemp = "SOLID_BBOX = 2";
 		case view_as<int>(SOLID_OBB):							sTemp = "SOLID_OBB = 3";
 		case view_as<int>(SOLID_OBB_YAW):						sTemp = "SOLID_OBB_YAW = 4";
-		case view_as<int>(SOLID_CUSTOM):						sTemp = "SOLID_CUSTOM = 5";
+		case view_as<int>(SOLID_CUSTOM):							sTemp = "SOLID_CUSTOM = 5";
 		case view_as<int>(SOLID_VPHYSICS):						sTemp = "SOLID_VPHYSICS = 6";
 	}
 
@@ -3116,11 +3124,11 @@ Action CmdSolidF(int client, int args)
 	int flags = StringToInt(sTemp);
 
 	sTemp[0] = 0;
-	if( flags & view_as<int>(FSOLID_CUSTOMRAYTEST) )			StrCat(sTemp, sizeof(sTemp), "FSOLID_CUSTOMRAYTEST = 0x0001; ");
-	if( flags & view_as<int>(FSOLID_CUSTOMBOXTEST) )			StrCat(sTemp, sizeof(sTemp), "FSOLID_CUSTOMBOXTEST = 0x0002; ");
-	if( flags & view_as<int>(FSOLID_NOT_SOLID) )				StrCat(sTemp, sizeof(sTemp), "FSOLID_NOT_SOLID = 0x0004; ");
+	if( flags & view_as<int>(FSOLID_CUSTOMRAYTEST) )				StrCat(sTemp, sizeof(sTemp), "FSOLID_CUSTOMRAYTEST = 0x0001; ");
+	if( flags & view_as<int>(FSOLID_CUSTOMBOXTEST) )				StrCat(sTemp, sizeof(sTemp), "FSOLID_CUSTOMBOXTEST = 0x0002; ");
+	if( flags & view_as<int>(FSOLID_NOT_SOLID) )					StrCat(sTemp, sizeof(sTemp), "FSOLID_NOT_SOLID = 0x0004; ");
 	if( flags & view_as<int>(FSOLID_TRIGGER) )					StrCat(sTemp, sizeof(sTemp), "FSOLID_TRIGGER = 0x0008; ");
-	if( flags & view_as<int>(FSOLID_NOT_STANDABLE) )			StrCat(sTemp, sizeof(sTemp), "FSOLID_NOT_STANDABLE = 0x0010; ");
+	if( flags & view_as<int>(FSOLID_NOT_STANDABLE) )				StrCat(sTemp, sizeof(sTemp), "FSOLID_NOT_STANDABLE = 0x0010; ");
 	if( flags & view_as<int>(FSOLID_VOLUME_CONTENTS) )			StrCat(sTemp, sizeof(sTemp), "FSOLID_VOLUME_CONTENTS = 0x0020; ");
 	if( flags & view_as<int>(FSOLID_FORCE_WORLD_ALIGNED) )		StrCat(sTemp, sizeof(sTemp), "FSOLID_FORCE_WORLD_ALIGNED = 0x0040; ");
 	if( flags & view_as<int>(FSOLID_USE_TRIGGER_BOUNDS) )		StrCat(sTemp, sizeof(sTemp), "FSOLID_USE_TRIGGER_BOUNDS = 0x0080; ");
@@ -4552,6 +4560,50 @@ Action CmdSpit(int client, int args)
 				PrintToChat(client, "[Spit] %s for %N", g_iLedge[target] ? "Removed" : "Added", target);
 			}
 		}
+	}
+
+	return Plugin_Handled;
+}
+
+Action CmdTemp(int client, int args)
+{
+	if( args != 2 )
+	{
+		ReplyToCommand(client, "Usage: sm_temp <#userid|name> <amount>");
+		return Plugin_Handled;
+	}
+
+	char sTemp[32];
+	GetCmdArg(1, sTemp, sizeof(sTemp));
+
+	char target_name[MAX_TARGET_LENGTH];
+	int target_list[MAXPLAYERS], target_count;
+	bool tn_is_ml;
+
+	if( (target_count = ProcessTargetString(
+		sTemp,
+		client,
+		target_list,
+		MAXPLAYERS,
+		0,
+		target_name,
+		sizeof(target_name),
+		tn_is_ml)) <= 0)
+	{
+		ReplyToTargetError(client, target_count);
+		return Plugin_Handled;
+	}
+
+	GetCmdArg(2, sTemp, sizeof(sTemp));
+	float health = StringToFloat(sTemp);
+
+	int target;
+	for( int i = 0; i < target_count; i++ )
+	{
+		target = target_list[i];
+
+		SetEntPropFloat(target, Prop_Send, "m_healthBuffer", health);
+		SetEntPropFloat(target, Prop_Send, "m_healthBufferTime", GetGameTime());
 	}
 
 	return Plugin_Handled;
