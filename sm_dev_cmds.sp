@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.53"
+#define PLUGIN_VERSION 		"1.54"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.54 (14-Mar-2026)
+	- Added command "sm_setdmg" to apply specific damage to an entity.
 
 1.53 (17-Feb-2026)
 	- L4D/2: Added command "sm_temp" to set temporary health on a player.
@@ -467,6 +470,7 @@ public void OnPluginStart()
 	RegAdminCmd("sm_solid",			CmdSolid,		ADMFLAG_ROOT, "<flags>. Returns the SolidType_t flags from a flag value.");
 	RegAdminCmd("sm_solidf",		CmdSolidF,		ADMFLAG_ROOT, "<flags>. Returns the SolidFlags_t flags from a flag value.");
 	RegAdminCmd("sm_dmg",			CmdDmg,			ADMFLAG_ROOT, "<flags>. Returns the SDKHooks DamageType from a flag value.");
+	RegAdminCmd("sm_setdmg",		CmdSetDmg,		ADMFLAG_ROOT, "<target index> <damage amount> [damage type enum] [inflictor index]. Deal damage to an entity");
 	RegAdminCmd("sm_val",			CmdVal,			ADMFLAG_ROOT, "<bit value>. e.g: sm_val 1<<20. Returns: 1048576");
 	RegAdminCmd("sm_bit",			CmdBit,			ADMFLAG_ROOT, "<bit value>. e.g: sm_bit 1048577. Returns: (1<<0); (1<<20)");
 	RegAdminCmd("sm_adm",			CmdAdm,			0, "Toggles between ROOT and BAN admin flags, for testing stuff without ROOT access. Or specified flags e.g. Usage: sm_adm BAN KICK");
@@ -2371,7 +2375,7 @@ Action CmdFindName(int client, int args)
 	{
 		if( IsValidEntity(i) )
 		{
-			if( i < 2048 || EntIndexToEntRef(i) != -1 )
+			if( i <= 2048 || EntIndexToEntRef(i) != -1 )
 			{
 				GetEntPropString(i, Prop_Data, "m_iName", sName, sizeof(sName));
 				if( StrContains(sName, sFind, false) != -1 )
@@ -2506,7 +2510,7 @@ Action CmdColli(int client, int args)
 		GetCmdArg(1 ,sArg, sizeof(sArg));
 
 		entity = StringToInt(sArg);
-		if( entity <= 0 || entity >= 2048 || !IsValidEntity(entity) )
+		if( entity <= 0 || entity > 2048 || !IsValidEntity(entity) )
 		{
 			ReplyToCommand(client, "[SM] sm_collision: Invalid entity specified.");
 			return Plugin_Handled;
@@ -2557,7 +2561,7 @@ Action CmdMoveType(int client, int args)
 		GetCmdArg(2 ,sArg, sizeof(sArg));
 
 		entity = StringToInt(sArg);
-		if( entity <= 0 || entity >= 2048 || !IsValidEntity(entity) )
+		if( entity <= 0 || entity > 2048 || !IsValidEntity(entity) )
 		{
 			ReplyToCommand(client, "[SM] sm_collision: Invalid entity specified.");
 			return Plugin_Handled;
@@ -2797,7 +2801,7 @@ void GetAttachments(int client, int target)
 {
 	char classname[64];
 
-	for( int i = 1; i < 2048; i++ )
+	for( int i = 1; i <= 2048; i++ )
 	{
 		if( IsValidEntity(i) && HasEntProp(i, Prop_Send, "moveparent") && GetEntPropEnt(i, Prop_Send, "moveparent") == target )
 		{
@@ -3189,6 +3193,40 @@ Action CmdDmg(int client, int args)
 	if( sTemp[0] ) sTemp[strlen(sTemp) - 2] = 0; // Clear last "; "
 
 	ReplyToCommand(client, "Dmg Flags %d = %s", flags, sTemp);
+	return Plugin_Handled;
+}
+
+Action CmdSetDmg(int client, int args)
+{
+	if( args < 2 )
+	{
+		ReplyToCommand(client, "Usage: sm_setdmg <target index> <damage amount> [damage type enum] [inflictor index]");
+		return Plugin_Handled;
+	}
+
+	char sArg[16];
+	GetCmdArg(1, sArg, sizeof(sArg));
+	int target = StringToInt(sArg);
+
+	GetCmdArg(2, sArg, sizeof(sArg));
+	float damage = StringToFloat(sArg);
+
+	int type = DMG_GENERIC;
+	if( args >= 3 )
+	{
+		GetCmdArg(3, sArg, sizeof(sArg));
+		type = StringToInt(sArg);
+	}
+
+	int inflictor;
+	if( args == 4 )
+	{
+		GetCmdArg(4, sArg, sizeof(sArg));
+		inflictor = StringToInt(sArg);
+	}
+
+	SDKHooks_TakeDamage(target, inflictor, inflictor, damage, type);
+
 	return Plugin_Handled;
 }
 
@@ -5367,4 +5405,3 @@ void LogCustom(const char[] format, any ...)
 	FlushFile(file);
 	delete file;
 }
-
