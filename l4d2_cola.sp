@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.15"
+#define PLUGIN_VERSION 		"1.16"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.16 (14-Mar-2026)
+	- Fixed typo in cvar description.
 
 1.15 (04-Jan-2026)
 	- Replaced "SortIntegers" and "Sort_Random" with "SortCustom" to truly randomize spawn selection. Thanks to "Tighty-Whitey" for reporting.
@@ -192,7 +195,7 @@ public void OnPluginStart()
 	g_hCvarFieldRefreshTime =		CreateConVar(	"l4d2_cola_healing_field_refresh_time",			"1.5",			"0=Off. Interval in seconds, for the healing field trigger the heal and beacon again.", CVAR_FLAGS, true, 0.0 );
 	g_hCvarFieldHealAmount =		CreateConVar(	"l4d2_cola_healing_field_heal_amount",			"2.0",			"Heal amount from being inside the healing field.", CVAR_FLAGS, true, 0.0 );
 	g_hCvarFieldHealAmountIncap =	CreateConVar(	"l4d2_cola_healing_field_heal_amount_incap",	"2.0",			"Heal amount for incapped players from being inside the healing field.", CVAR_FLAGS, true, 0.0 );
-	g_hCvarFieldHealSelf =			CreateConVar(	"l4d2_cola_healing_field_self",					"0",			"0=Only healing others. 1=Heal £ and others.", CVAR_FLAGS );
+	g_hCvarFieldHealSelf =			CreateConVar(	"l4d2_cola_healing_field_self",					"0",			"0=Only healing others. 1=Heal self and others.", CVAR_FLAGS );
 	g_hCvarFieldBeacon =			CreateConVar(	"l4d2_cola_healing_field_heal_beacon",			"1",			"0=Off. 1=Generates a beacon.", CVAR_FLAGS, true, 0.0, true, 1.0 );
 	g_hCvarFieldColor =				CreateConVar(	"l4d2_cola_healing_field_color",				"0 255 0",		"Healing field color. Three values between 0-255 separated by spaces. RGB: Red Green Blue.\nUse \"random\" to generate random colors.", CVAR_FLAGS );
 	g_hCvarFieldStartRadius =		CreateConVar(	"l4d2_cola_healing_field_start_radius",			"100.0",		"Healing field start radius.", CVAR_FLAGS, true, 0.0 );
@@ -1727,5 +1730,4 @@ bool IsPinned(int client)
 		GetEntPropEnt(client, Prop_Send, "m_tongueOwner") > 0 )
 		return true;
 	return false;
-
 }
