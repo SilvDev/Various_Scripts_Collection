@@ -26,7 +26,7 @@
 *	Name	:	[L4D & L4D2] Witch Stumble Bug Fix
 *	Author	:	SilverShot
 *	Descrp	:	Prevents the Witch from sometimes infinite stumbling when hit by an explosion.
-*	Link	:	https://forums.alliedmods.net/showthread.php?t=337808
+*	Link	:	https://forums.alliedmods.net/showthread.php?t=352393
 *	Plugins	:	https://sourcemod.net/plugins.php?exact=exact&sortby=title&search=1&author=Silvers
 
 ========================================================================================
@@ -76,7 +76,7 @@ public Plugin myinfo =
 	author = "SilverShot",
 	description = "Prevents the Witch from sometimes infinite stumbling when hit by an explosion.",
 	version = PLUGIN_VERSION,
-	url = "https://forums.alliedmods.net/showthread.php?t=337808"
+	url = "https://forums.alliedmods.net/showthread.php?t=352393"
 }
 
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
