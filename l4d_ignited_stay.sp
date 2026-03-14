@@ -1,6 +1,6 @@
 /*
 *	Throwables Stay Ignited
-*	Copyright (C) 2022 Silvers
+*	Copyright (C) 2026 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.9"
+#define PLUGIN_VERSION 		"1.10"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,10 @@
 
 ========================================================================================
 	Change Log:
+
+1.10 (14-Mar-2026)
+	- Fixed the Witch and possibly other entities being deleted when ignited. Thanks to "Iizuka07" for reporting.
+	- This resolves the conflict with "Ignite Canister" plugin by "Dragokas".
 
 1.9 (28-Dec-2022)
 	- Fixed not respawning Scavenge gascans under certain conditions. Thanks to "thewintersoldier97" for reporting.
@@ -97,15 +101,15 @@ ConVar g_hCvarAllow, g_hCvarModes, g_hCvarModesOff, g_hCvarModesTog, g_hCvarMPGa
 bool g_bCvarAllow, g_bMapStarted, g_bLeft4Dead2, g_bRemovingItem, g_bBlockGrab;
 int g_iCvarOxygen, g_iCvarTypes, g_iDroppingItem;
 float g_fCvarRespawn, g_fCvarTimeF, g_fCvarTimeG, g_fCvarTimeP, g_fCvarTimeO;
-float g_fFireTime[2048];
-int g_iLastClient[2048];
+float g_fFireTime[2048 + 1];
+int g_iLastClient[2048 + 1];
 int g_iHolding2[MAXPLAYERS+1];
 int g_iHolding1[MAXPLAYERS+1];
 int g_iOxygen[MAXPLAYERS+1];
 int g_iFlamed;		// Last entity on fire when dropped/grabbed - tracking entity changes
 int g_iSpawned;		// Last oxygen tank damaged when dropped - tracking entity changes
 Handle g_hTimerReflame[MAXPLAYERS+1];
-int g_iScavenge[2048];
+int g_iScavenge[2048 + 1];
 int g_iPlayerSpawn, g_iRoundStart;
 
 
@@ -484,7 +488,7 @@ Action OnPlayerDamage(int client, int &attacker, int &inflictor, float &damage, 
 			int weapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
 			if( weapon != -1 )
 			{
-				char classname[32];
+				static char classname[32];
 				GetEdictClassname(weapon, classname, sizeof(classname));
 				if(
 					strcmp(classname[7], "gascan") == 0 ||
@@ -512,7 +516,7 @@ Action TimerReflame(Handle timer, int client)
 		int weapon = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
 		if( weapon != -1 )
 		{
-			char classname[32];
+			static char classname[32];
 			GetEdictClassname(weapon, classname, sizeof(classname));
 			if(
 				strcmp(classname[7], "gascan") == 0 ||
@@ -697,7 +701,7 @@ void OnNextFrameSpawnFire(int entity)
 		GetEdictClassname(attached, sTemp, sizeof(sTemp));
 
 		// Gascan - L4D2 uses the weapon_gascan entity, L4D1 uses prop_physics, but we'll check both anyway
-		if( strcmp(sTemp[7], "gascan") == 0 )
+		if( strcmp(sTemp, "weapon_gascan") == 0 )
 		{
 			SetEntPropFloat(entity, Prop_Data, "m_flLifetime", GetGameTime() + g_fCvarTimeG);
 
@@ -1189,7 +1193,7 @@ Action TimerStart(Handle timer)
 {
 	g_iFlamed = 0;
 
-	for( int i = 0; i < 2048; i++ )
+	for( int i = 0; i <= 2048; i++ )
 	{
 		g_iScavenge[i] = 0;
 	}
