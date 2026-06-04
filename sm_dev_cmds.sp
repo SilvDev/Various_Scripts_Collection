@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.54"
+#define PLUGIN_VERSION 		"1.55"
 
 /*=======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.55 (06-Jun-2026)
+	- Added commands "sm_addy" and "sm_addye" to get the address of an entity.
 
 1.54 (14-Mar-2026)
 	- Added command "sm_setdmg" to apply specific damage to an entity.
@@ -447,6 +450,8 @@ public void OnPluginStart()
 	RegAdminCmd("sm_delents",		CmdDelEnts,		ADMFLAG_ROOT, "<classname> Delete all the entities of a specific classname.");
 	RegAdminCmd("sm_ent",			CmdEnt,			ADMFLAG_ROOT, "Displays info about the entity your crosshair is over.");
 	RegAdminCmd("sm_ente",			CmdEntE,		ADMFLAG_ROOT, "<entity>. Displays info about the entity you specify.");
+	RegAdminCmd("sm_addy",			CmdAddy,		ADMFLAG_ROOT, "Displays the entity address for the entity your crosshair is over.");
+	RegAdminCmd("sm_addye",			CmdAddyE,		ADMFLAG_ROOT, "<entity>. Displays the entity address for the entity you specify.");
 	RegAdminCmd("sm_vertex",		CmdVertex,		ADMFLAG_ROOT, "[entity]. Displays vMaxs and vMins bounding box about the specified entity or aimed at entity.");
 	RegAdminCmd("sm_box",			CmdBox,			ADMFLAG_ROOT, "[entity]. Displays a beam box around the specified entity or aimed at entity for 10 seconds.");
 	RegAdminCmd("sm_find",			CmdFind,		ADMFLAG_ROOT, "<classname> List entity indexes from the given classname.");
@@ -470,7 +475,7 @@ public void OnPluginStart()
 	RegAdminCmd("sm_solid",			CmdSolid,		ADMFLAG_ROOT, "<flags>. Returns the SolidType_t flags from a flag value.");
 	RegAdminCmd("sm_solidf",		CmdSolidF,		ADMFLAG_ROOT, "<flags>. Returns the SolidFlags_t flags from a flag value.");
 	RegAdminCmd("sm_dmg",			CmdDmg,			ADMFLAG_ROOT, "<flags>. Returns the SDKHooks DamageType from a flag value.");
-	RegAdminCmd("sm_setdmg",		CmdSetDmg,		ADMFLAG_ROOT, "<target index> <damage amount> [damage type enum] [inflictor index]. Deal damage to an entity");
+	RegAdminCmd("sm_setdmg",		CmdSetDmg,		ADMFLAG_ROOT, "<target index> <damage amount> [damage type enum] [inflictor index]. Deal damage to an entity.");
 	RegAdminCmd("sm_val",			CmdVal,			ADMFLAG_ROOT, "<bit value>. e.g: sm_val 1<<20. Returns: 1048576");
 	RegAdminCmd("sm_bit",			CmdBit,			ADMFLAG_ROOT, "<bit value>. e.g: sm_bit 1048577. Returns: (1<<0); (1<<20)");
 	RegAdminCmd("sm_adm",			CmdAdm,			0, "Toggles between ROOT and BAN admin flags, for testing stuff without ROOT access. Or specified flags e.g. Usage: sm_adm BAN KICK");
@@ -2069,11 +2074,11 @@ Action CmdEnt(int client, int args)
 
 Action CmdEntE(int client, int args)
 {
-	char sTemp[32];
 	int entity;
 
 	if( args == 1 )
 	{
+		char sTemp[32];
 		GetCmdArg(1, sTemp, sizeof(sTemp));
 		entity = StringToInt(sTemp);
 
@@ -2114,6 +2119,61 @@ Action CmdEntE(int client, int args)
 			PrintToChat(client, "\x05%d \x01Class: \x05%s \x01Targetname: \x05%s \x01Model: \x05%s \x01HammerID: \x05%d \x01Position: \x05%.2f %.2f %.2f \x01Angles: \x05%.2f %.2f %.2f", entity, sClass, sName, sModel, iHammerID, vPos[0], vPos[1], vPos[2], vAng[0], vAng[1], vAng[2]);
 		else
 			ReplyToCommand(client, "\x05%d \x01Class: \x05%s \x01Targetname: \x05%s \x01Model: \x05%s \x01HammerID: \x05%d \x01Position: \x05%.2f %.2f %.2f \x01Angles: \x05%.2f %.2f %.2f", entity, sClass, sName, sModel, iHammerID, vPos[0], vPos[1], vPos[2], vAng[0], vAng[1], vAng[2]);
+	} else {
+		ReplyToCommand(client, "[SM] Invalid Entity %d", entity);
+	}
+
+	return Plugin_Handled;
+}
+
+Action CmdAddy(int client, int args)
+{
+	if( !client )
+	{
+		ReplyToCommand(client, "Command can only be used %s", IsDedicatedServer() ? "in game on a dedicated server." : "in chat on a Listen server.");
+		return Plugin_Handled;
+	}
+
+	int entity = GetClientAimTarget(client, false);
+	if( entity > 0 )
+	{
+		PrintToChat(client, "\x05%d \x01Address: \x05%d", entity, GetEntityAddress(entity));
+	}
+
+	return Plugin_Handled;
+}
+
+Action CmdAddyE(int client, int args)
+{
+	int entity;
+
+	if( args == 1 )
+	{
+		char sTemp[32];
+
+		GetCmdArg(1, sTemp, sizeof(sTemp));
+		entity = StringToInt(sTemp);
+
+		if( (entity < -1 && EntRefToEntIndex(entity) == INVALID_ENT_REFERENCE) || (entity >= MaxClients && IsValidEntity(entity) == false) )
+		{
+			ReplyToCommand(client, "[SM] Invalid Entity %d", entity);
+			return Plugin_Handled;
+		}
+	}
+
+	if( client && args == 0 )
+	{
+		entity = GetClientAimTarget(client, false);
+		if( entity == -1 )
+			return Plugin_Handled;
+	}
+
+	if( IsValidEntity(entity) )
+	{
+		if( client )
+			PrintToChat(client, "\x05%d \x01Address: \x05%d", entity, GetEntityAddress(entity));
+		else
+			ReplyToCommand(client, "\x05%d \x01Address: \x05%d", entity, GetEntityAddress(entity));
 	} else {
 		ReplyToCommand(client, "[SM] Invalid Entity %d", entity);
 	}
