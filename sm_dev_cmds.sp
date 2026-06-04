@@ -32,7 +32,7 @@
 ========================================================================================
 	Change Log:
 
-1.55 (06-Jun-2026)
+1.55 (04-Jun-2026)
 	- Added commands "sm_addy" and "sm_addye" to get the address of an entity.
 
 1.54 (14-Mar-2026)
