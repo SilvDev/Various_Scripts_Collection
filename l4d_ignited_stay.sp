@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"1.10"
+#define PLUGIN_VERSION 		"1.11"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.11 (18-Jun-2026)
+	- Update for SourceMod 1.12 compatibility to fix errors/warnings.
 
 1.10 (14-Mar-2026)
 	- Fixed the Witch and possibly other entities being deleted when ignited. Thanks to "Iizuka07" for reporting.
@@ -83,6 +86,7 @@
 
 #define CVAR_FLAGS			FCVAR_NOTIFY
 #define DEBUGGING			0
+#define DEBUG_CMDS			0
 
 #define MODEL_GASCAN		"models/props_junk/gascan001a.mdl"
 #define MODEL_CRATE			"models/props_junk/explosive_box001.mdl"
@@ -184,9 +188,11 @@ public void OnPluginStart()
 	// ====================
 	// Test commands
 	// ====================
-	// RegAdminCmd("sm_flame",		CmdFlame,	ADMFLAG_ROOT, "Ignites the currently held gascan.");
-	// RegAdminCmd("sm_flameme",	CmdFlameMe,	ADMFLAG_ROOT, "Ignites the player for testing.");
-	// RegAdminCmd("sm_ignites",	CmdIgnite,	ADMFLAG_ROOT, "Ignites the entity aimed at.");
+	#if DEBUG_CMDS
+	RegAdminCmd("sm_flame",		CmdFlame,	ADMFLAG_ROOT, "Ignites the currently held gascan.");
+	RegAdminCmd("sm_flameme",	CmdFlameMe,	ADMFLAG_ROOT, "Ignites the player for testing.");
+	RegAdminCmd("sm_ignites",	CmdIgnite,	ADMFLAG_ROOT, "Ignites the entity aimed at.");
+	#endif
 }
 
 
@@ -194,13 +200,14 @@ public void OnPluginStart()
 // ====================================================================================================
 //					COMMANDS
 // ====================================================================================================
-stock Action CmdFlameMe(int client, int args)
+	#if DEBUG_CMDS
+Action CmdFlameMe(int client, int args)
 {
 	SDKHooks_TakeDamage(client, 0, 0, 1.0, DMG_BURN);
 	return Plugin_Handled;
 }
 
-stock Action CmdIgnite(int client, int args)
+Action CmdIgnite(int client, int args)
 {
 	int entity = GetClientAimTarget(client, false);
 	if( entity != -1 )
@@ -208,7 +215,7 @@ stock Action CmdIgnite(int client, int args)
 	return Plugin_Handled;
 }
 
-stock Action CmdFlame(int client, int args)
+Action CmdFlame(int client, int args)
 {
 	g_iFlamed = 0;
 
@@ -244,6 +251,7 @@ stock Action CmdFlame(int client, int args)
 
 	return Plugin_Handled;
 }
+#endif
 
 
 
