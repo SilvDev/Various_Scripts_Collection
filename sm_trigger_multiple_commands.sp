@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION		"1.13"
+#define PLUGIN_VERSION		"1.14"
 #define DEBUG_LOGGING		false
 
 /*=======================================================================================
@@ -32,6 +32,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.14 (29-Sep-2026)
+	- Fixed invalid entity errors. Thanks to "sonic155" for reporting.
 
 1.13 (01-Jul-2025)
 	- Truncated menu entries to prevent overflowing the menu text and not displaying "previous", "next" and "exit" options.
@@ -2599,64 +2602,68 @@ void OnStartTouch(const char[] output, int caller, int activator, float delay)
 					// All inside trigger
 					if( data & ALL_TRIGGER_ALIVE || data & ALL_TRIGGER_T1 || data & ALL_TRIGGER_T2 )
 					{
-						float vMaxs[3], vMins[3], vPos[3];
-						float v1[3], v2[3];
-						// float vLoc[3];
-						GetEntPropVector(g_iSelectedTrig, Prop_Send, "m_vecOrigin", vPos);
-						GetEntPropVector(g_iSelectedTrig, Prop_Send, "m_vecMaxs", vMaxs);
-						GetEntPropVector(g_iSelectedTrig, Prop_Send, "m_vecMins", vMins);
-						AddVectors(vPos, vMins, v1);
-						AddVectors(vPos, vMaxs, v2);
-
-						for( int x = 1; x <= MaxClients; x++ )
+						if( IsValidEntRef(g_iSelectedTrig) )
 						{
-							if( IsClientInGame(x) && IsPlayerAlive(x) )
+							float vMaxs[3], vMins[3], vPos[3];
+							float v1[3], v2[3];
+							// float vLoc[3];
+
+							GetEntPropVector(g_iSelectedTrig, Prop_Send, "m_vecOrigin", vPos);
+							GetEntPropVector(g_iSelectedTrig, Prop_Send, "m_vecMaxs", vMaxs);
+							GetEntPropVector(g_iSelectedTrig, Prop_Send, "m_vecMins", vMins);
+							AddVectors(vPos, vMins, v1);
+							AddVectors(vPos, vMaxs, v2);
+
+							for( int x = 1; x <= MaxClients; x++ )
 							{
-								if( data & ALLOW_BOTS == ALLOW_BOTS && !IsFakeClient(x) ) continue;
-								if( data & ALLOW_REAL == ALLOW_REAL && IsFakeClient(x) ) continue;
-
-								/* This should never actually happen, no need for this code here, was using to verify the trigger
-								if( !g_iInside[caller][x] )
+								if( IsClientInGame(x) && IsPlayerAlive(x) )
 								{
-									GetClientAbsOrigin(x, vLoc);
-									vLoc[2] += 1.0;
+									if( data & ALLOW_BOTS == ALLOW_BOTS && !IsFakeClient(x) ) continue;
+									if( data & ALLOW_REAL == ALLOW_REAL && IsFakeClient(x) ) continue;
 
-									if( vLoc[0] > v1[0] && vLoc[1] > v1[1] && vLoc[2] > v1[2] && vLoc[0] < v2[0] && vLoc[1] < v2[1] && vLoc[2] < v2[2] )
+									/* This should never actually happen, no need for this code here, was using to verify the trigger
+									if( !g_iInside[caller][x] )
+									{
+										GetClientAbsOrigin(x, vLoc);
+										vLoc[2] += 1.0;
+
+										if( vLoc[0] > v1[0] && vLoc[1] > v1[1] && vLoc[2] > v1[2] && vLoc[0] < v2[0] && vLoc[1] < v2[1] && vLoc[2] < v2[2] )
+										{
+											#if DEBUG_LOGGING
+											LogData("[%d] Not inside, but within vector. %d (%N) (T=%d)", i, x, x, GetClientTeam(x));
+											#endif
+
+											g_iInside[caller][x] = callref;
+										}
+									}
+									// */
+
+									if( data & ALL_TRIGGER_ALIVE && !g_iInside[caller][x] )
 									{
 										#if DEBUG_LOGGING
-										LogData("[%d] Not inside, but within vector. %d (%N) (T=%d)", i, x, x, GetClientTeam(x));
+										LogData("[%d] Required all inside alive. Player is not: %d (%N) (T=%d)", i, x, x, GetClientTeam(x));
 										#endif
 
-										g_iInside[caller][x] = callref;
+										return;
 									}
-								}
-								// */
 
-								if( data & ALL_TRIGGER_ALIVE && !g_iInside[caller][x] )
-								{
-									#if DEBUG_LOGGING
-									LogData("[%d] Required all inside alive. Player is not: %d (%N) (T=%d)", i, x, x, GetClientTeam(x));
-									#endif
+									if( data & ALL_TRIGGER_T1 && !g_iInside[caller][x] && GetClientTeam(x) == 2 )
+									{
+										#if DEBUG_LOGGING
+										LogData("[%d] Required all inside Team 2. Player is not: %d (%N) (T=%d)", i, x, x, GetClientTeam(x));
+										#endif
 
-									return;
-								}
+										return;
+									}
 
-								if( data & ALL_TRIGGER_T1 && !g_iInside[caller][x] && GetClientTeam(x) == 2 )
-								{
-									#if DEBUG_LOGGING
-									LogData("[%d] Required all inside Team 2. Player is not: %d (%N) (T=%d)", i, x, x, GetClientTeam(x));
-									#endif
+									if( data & ALL_TRIGGER_T2 && !g_iInside[caller][x] && GetClientTeam(x) == 3 )
+									{
+										#if DEBUG_LOGGING
+										LogData("[%d] Required all inside Team 3. Player is not: %d (%N) (T=%d)", i, x, x, GetClientTeam(x));
+										#endif
 
-									return;
-								}
-
-								if( data & ALL_TRIGGER_T2 && !g_iInside[caller][x] && GetClientTeam(x) == 3 )
-								{
-									#if DEBUG_LOGGING
-									LogData("[%d] Required all inside Team 3. Player is not: %d (%N) (T=%d)", i, x, x, GetClientTeam(x));
-									#endif
-
-									return;
+										return;
+									}
 								}
 							}
 						}
