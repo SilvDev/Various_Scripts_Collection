@@ -1,6 +1,6 @@
 /*
 *	Stumble - Grenade Launcher
-*	Copyright (C) 2022 Silvers
+*	Copyright (C) 2026 Silvers
 *
 *	This program is free software: you can redistribute it and/or modify
 *	it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION 		"2.4"
+#define PLUGIN_VERSION 		"2.5"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+2.5 (29-Sep-2026)
+	- Fixed double hooking players. Thanks to "HarryPotter" for reporting.
 
 2.4 (25-Aug-2022)
 	- Added cvar "l4d2_si_stumble_multiplier" to multiply against the damage received from the Grenade Launcher projectile.
@@ -361,7 +364,12 @@ void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 {
 	int client = GetClientOfUserId(event.GetInt("userid"));
-	if( client ) HookClient(client);
+
+	if( client )
+	{
+		SDKUnhook(client, SDKHook_OnTakeDamageAlive, OnTakeDamage);
+		HookClient(client);
+	}
 }
 
 void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
