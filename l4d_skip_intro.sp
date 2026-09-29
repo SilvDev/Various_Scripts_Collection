@@ -18,7 +18,7 @@
 
 
 
-#define PLUGIN_VERSION		"1.13"
+#define PLUGIN_VERSION		"1.14"
 
 /*======================================================================================
 	Plugin Info:
@@ -31,6 +31,9 @@
 
 ========================================================================================
 	Change Log:
+
+1.14 (29-Sep-2026)
+	- Added 3rd party support for the map "A Forgotten Place". Thanks to "Llaneli3" for providing the code.
 
 1.13 (10-Apr-2022)
 	- Fixed the "l4d_skip_intro_modes_tog" cvar always turning off the plugin. Thanks to "Thefollors" for reporting.
@@ -167,7 +170,7 @@ public void OnMapEnd()
 	g_bMapStarted = false;
 }
 
-public void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
+void ConVarChanged_Allow(Handle convar, const char[] oldValue, const char[] newValue)
 {
 	IsAllowed();
 }
@@ -246,7 +249,7 @@ bool IsAllowedGameMode()
 	return true;
 }
 
-public void OnGamemode(const char[] output, int caller, int activator, float delay)
+void OnGamemode(const char[] output, int caller, int activator, float delay)
 {
 	if( strcmp(output, "OnCoop") == 0 )
 		g_iCurrentMode = 1;
@@ -263,7 +266,7 @@ public void OnGamemode(const char[] output, int caller, int activator, float del
 // ====================================================================================================
 //					EVENTS
 // ====================================================================================================
-public void Event_NoDraw(Event event, const char[] name, bool dontBroadcast)
+void Event_NoDraw(Event event, const char[] name, bool dontBroadcast)
 {
 	if( g_bCvarAllow && (!g_bLeft4DHooks || L4D_IsFirstMapInScenario()) )
 	{
@@ -285,15 +288,52 @@ public void Event_NoDraw(Event event, const char[] name, bool dontBroadcast)
 	}
 }
 
-public Action TimerStart(Handle timer)
+Action TimerStart(Handle timer)
 {
 	char buffer[128]; // 128 should be long enough, 3rd party maps could be longer than Valves ~52 chars (including OnUser1 below)?
-
 	char director[32];
+
+	char sMap[64];
+	GetCurrentMap(sMap, sizeof(sMap));
+	bool isSymbyosys = (strcmp(sMap, "symbyosys_intro") == 0);
+
+	if( isSymbyosys )
+	{
+		int ent = -1;
+		char entName[128];
+
+		while( (ent = FindEntityByClassname(ent, "point_viewcontrol_multiplayer")) != -1 )
+		{
+			GetEntPropString(ent, Prop_Data, "m_iName", entName, sizeof(entName));
+			if( StrContains(entName, "intro_camera", false) != -1 )
+			{
+				AcceptEntityInput(ent, "Disable");
+				AcceptEntityInput(ent, "Kill");
+			}
+		}
+
+		ent = -1;
+		while( (ent = FindEntityByClassname(ent, "func_tracktrain")) != -1 )
+		{
+			GetEntPropString(ent, Prop_Data, "m_iName", entName, sizeof(entName));
+			if( StrContains(entName, "tractrain", false) != -1 )
+			{
+				AcceptEntityInput(ent, "Stop");
+				AcceptEntityInput(ent, "Kill");
+			}
+		}
+	}
+
 	int entity = FindEntityByClassname(-1, "info_director"); // Every map should have a director, but apparently some still throw -1 error.
 	if( entity != -1 )
 	{
 		GetEntPropString(entity, Prop_Data, "m_iName", director, sizeof(director));
+
+		if( isSymbyosys )
+		{
+			AcceptEntityInput(entity, "FinishIntro");
+			AcceptEntityInput(entity, "ReleaseSurvivorPositions");
+		}
 
 		for( int i = 0; i < 2; i++ )
 		{
@@ -329,6 +369,19 @@ public Action TimerStart(Handle timer)
 				// STOP SCENE
 				SetVariantString("!self");
 				AcceptEntityInput(entity, "StartMovement");
+				/* Forgot why this was changed...
+				static int iOffs_m_bActive = -1;
+				if( iOffs_m_bActive == -1 )
+				{
+					iOffs_m_bActive = FindDataMapInfo(entity, "m_iszScriptId") + 72;
+				}
+
+				if( iOffs_m_bActive != -1 && GetEntData(entity, iOffs_m_bActive, 1) )
+				{
+					SetVariantString("!self");
+					AcceptEntityInput(entity, "StartMovement");
+				}
+				*/
 
 				// RemoveEntity(entity); // Kill works good, but maybe some 3rd party maps use this for other scenes, so better to not kill.. especially if no left4dhooks and checking every map.
 			}
